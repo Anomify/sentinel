@@ -217,7 +217,8 @@ def competitor(cid: str):
         ps = insights.posts(con, 3650, cid, limit=100)
         vis = insights.visibility(c, con)
         mods = {r["module"]: r["n"] for r in db.rows(con.execute(
-            "SELECT module, COUNT(*) n FROM facts WHERE competitor=? AND removed_at IS NULL GROUP BY module", (cid,)))}
+            "SELECT module, COUNT(*) n FROM facts WHERE competitor=? AND removed_at IS NULL "
+            "AND kind NOT IN ('site_page','txt','page_id','third_party','spf','gtm_tag','cookies','publish') GROUP BY module", (cid,)))}
         scan = db.get_meta(con, f"scan:{cid}")
         launch = db.get_meta(con, f"launch:{cid}")
         rep = con.execute("SELECT created_at FROM reports WHERE competitor=? ORDER BY id DESC LIMIT 1", (cid,)).fetchone()

@@ -28,6 +28,7 @@ from .fetch import Fetcher
 log = logging.getLogger(__name__)
 MODULE = "subdomains"
 MAX_SHOTS_PER_RUN = 25  # page fetches per run (politeness budget)
+MAX_HOSTS = 400         # hostnames resolved per competitor per run (newest certificates first)
 
 HOSTING_CNAME = [
     (r"proxy-ssl\.webflow\.com|\.webflow\.io$|cdn\.webflow\.com", "Webflow"),
@@ -111,12 +112,18 @@ def ct_names(domain: str) -> tuple[dict[str, str], str]:
         except Exception as e:
             log.info("crt.sh attempt %d failed for %s: %s", attempt + 1, domain, e)
             time.sleep(4 * (attempt + 1))
+    after, pages = None, 0
     try:
-        j = guard.get_json(f"https://api.certspotter.com/v1/issuances?domain={domain}&include_subdomains=true&expand=dns_names",
-                           timeout=40, respect_robots=False)
-        for c in j:
-            for n in c.get("dns_names", []):
-                add(n, (c.get("not_before") or "")[:10])
+        while pages < (1 if "crt.sh" in sources else 4):  # paginate only when crt.sh is unavailable (free-tier rate limit)
+            url = f"https://api.certspotter.com/v1/issuances?domain={domain}&include_subdomains=true&expand=dns_names"
+            j = guard.get_json(url + (f"&after={after}" if after else ""), timeout=40, respect_robots=False)
+            for c in j:
+                for n in c.get("dns_names", []):
+                    add(n, (c.get("not_before") or "")[:10])
+            pages += 1
+            if not j or len(j) < 50:
+                break
+            after = j[-1]["id"]
         sources.append("Cert Spotter")
     except Exception as e:
         log.info("Cert Spotter failed for %s: %s", domain, e)
@@ -177,6 +184,12 @@ def run_one(con, cfg: Config, comp: Entity, fetcher: Fetcher | None, shots_left:
     if not names:
         return {"error": f"no CT results ({source})"}
     prev = {f["key"]: f for f in facts.active(con, comp.id, MODULE, "subdomain")}
+    truncated = 0
+    if len(names) > MAX_HOSTS:
+        # Huge CT histories (e.g. hyperscaler subdomains): keep hosts we already track + the newest certificates.
+        keep = set(prev) | {h for h, _ in sorted(names.items(), key=lambda kv: kv[1] or "", reverse=True)[:MAX_HOSTS]}
+        truncated = len(names) - len(keep)
+        names = {h: d for h, d in names.items() if h in keep}
     obs: list[Fact] = []
     page_ids: dict[str, dict] = {}
     for host in sorted(names):
@@ -226,10 +239,19 @@ def run_one(con, cfg: Config, comp: Entity, fetcher: Fetcher | None, shots_left:
     hosting = Counter(f.value.get("hosting") for f in obs if f.kind == "subdomain")
     for k, v in page_ids.items():
         obs.append(Fact("page_id", k, k, v, facts.CONFIRMED, [ev(f"https://{v['hosts'][0]}/", "tracking ID on subdomain page")]))
+    # CT logs are append-only history: a hostname never genuinely disappears from them, and how much each
+    # source returns varies run to run. So known hosts are always carried forward (no false removals);
+    # real decommissioning shows up as the host no longer resolving.
+    if True:
+        seen = {f.key for f in obs}
+        for kind in ("subdomain", "wildcard"):
+            for f in facts.active(con, comp.id, MODULE, kind):
+                if f["key"] not in seen:
+                    obs.append(Fact(kind, f["key"], f["label"], f["value"], f["confidence"], f["evidence"] or []))
     stats = facts.sync(con, comp.id, MODULE, obs, ["subdomain", "wildcard", "page_id"], RULES)
     facts.metric(con, comp.id, MODULE, "subdomains", datetime.now(timezone.utc).strftime("%Y-%m"),
                  sum(1 for f in obs if f.kind == "subdomain"))
-    stats.update(source=source, hosting=dict(hosting.most_common(8)))
+    stats.update(source=source, hosting=dict(hosting.most_common(8)), truncated=truncated)
     return stats
 
 
@@ -268,11 +290,22 @@ def _sub_so_what(f: Fact) -> str | None:
     return None
 
 
+def _recent_cert(f: Fact, days: int = 30) -> bool:
+    """Only alert on hosts whose first certificate is recent; an old host newly observed is not news."""
+    fc = f.value.get("first_cert")
+    if not fc:
+        return True
+    try:
+        return (datetime.now(timezone.utc) - datetime.fromisoformat(fc).replace(tzinfo=timezone.utc)).days <= days
+    except ValueError:
+        return True
+
+
 RULES = {
-    "subdomain": Rule(severity="medium", severity_fn=_sub_sev, so_what=_sub_so_what,
+    "subdomain": Rule(severity="medium", severity_fn=_sub_sev, so_what=_sub_so_what, alert_if=_recent_cert, on_remove=False,
                       title_add=lambda f: f"New subdomain: {f.key}" + (f" ({f.value.get('hosting')})" if f.value.get("hosting") not in (None, "Unknown") else ""),
                       title_remove=lambda r: f"Subdomain gone from CT/DNS: {r['key']}"),
-    "wildcard": Rule(severity="medium", title_add=lambda f: f"New wildcard certificate: {f.key}",
+    "wildcard": Rule(severity="medium", alert_if=_recent_cert, on_remove=False, title_add=lambda f: f"New wildcard certificate: {f.key}",
                      so_what=lambda f: "Wildcard certs usually mean a new environment or multi-tenant service."),
     "page_id": Rule(on_add=False, on_remove=False),
 }

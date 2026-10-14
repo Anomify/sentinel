@@ -68,8 +68,9 @@ const HIDE_KINDS = new Set(["txt", "page_id", "site_page", "spf"]);
 export function CompetitorDetailPage() {
   const { id = "" } = useParams();
   const e = useEntity(id);
-  const [tab, setTab] = useState<TabId>("signals");
+  const [picked, setTab] = useState<TabId | null>(null);
   const { data } = useApi<any>(`/api/competitors/${id}`);
+  const tab: TabId = picked ?? (data && !data.events.length ? "stack" : "signals");
   if (!e) return <Empty title="Competitor not found" />;
   const counts: Record<string, number> = data?.modules ?? {};
   return (

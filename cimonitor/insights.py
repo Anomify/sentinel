@@ -249,7 +249,8 @@ def radar_view(cfg: Config, con) -> dict:
                     "repos": [{"name": f["label"], **f["value"], "first_seen": f["first_seen"]} for f in
                               sorted(facts.active(con, c.id, "radar", "repo"), key=lambda f: f["value"].get("pushed_at") or "", reverse=True)[:12]],
                     "campaign_subdomains": [{"host": f["key"], "first_seen": f["first_seen"], **{k: f["value"].get(k) for k in ("hosting", "title", "screenshot", "first_cert")}}
-                                            for f in facts.active(con, c.id, "subdomains", "subdomain") if f["value"].get("kind") == "campaign / product"]})
+                                            for f in facts.active(con, c.id, "subdomains", "subdomain") if f["value"].get("kind") == "campaign / product"
+                                            and not (f["value"].get("private") or f["value"].get("internal") or "not contacted" in (f["value"].get("note") or ""))]})
     out.sort(key=lambda r: -r["launch"].get("probability", 0))
     return {"competitors": out}
 

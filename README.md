@@ -4,6 +4,10 @@
 
 ![Deep dive](docs/deep-dive.png)
 
+<p><img src="docs/stack.png" width="49%" alt="GTM stack"> <img src="docs/infrastructure.png" width="49%" alt="Infrastructure"></p>
+
+Validated against a manual HiddenLayer teardown: see [docs/VALIDATION-hiddenlayer.md](docs/VALIDATION-hiddenlayer.md).
+
 ## What it does
 
 | # | Module | Replaces | Public source | Example finding (live, HiddenLayer) |
@@ -11,7 +15,7 @@
 | 1 | **GTM stack fingerprinting** | Wappalyzer, BuiltWith, DevTools | Headless Chromium network capture, **before and after cookie consent**; 120+ tool signatures mapped to GTM categories | Warmly, LiveIntent and an identity-resolution pixel fire *before* consent → **sales-led** motion |
 | 2 | **Tag manager & conversion forensics** | Manual GTM inspection | The public `gtm.js` container: tags, triggers, IDs, server-side GTM | `book_demo_form` (GA4) fires on `hs_form_submission`; sGTM on `atxgtm.` |
 | 3 | **DNS & email infrastructure** | MXToolbox | DNS-over-HTTPS: TXT, SPF, MX, DMARC, DKIM; 60+ verification decoders | Anthropic, OpenAI, Cursor, Pendo and Docker verified; **Mindmatrix** (partner platform) authorised in SPF |
-| 4 | **Subdomains & certificates** | Subdomain finders | crt.sh + Cert Spotter CT logs, hosting classification, screenshots | `ai-costs`, `hackathon` ("AWS Clash of Agents"); `intel`/`predator` resolve to private IPs (recorded, never contacted) |
+| 4 | **Subdomains & certificates** | Subdomain finders | crt.sh + Cert Spotter CT logs, hosting classification, screenshots | `ai-costs`, `hackathon` ("AWS Clash of Agents"); 22 internal or private names recorded but never contacted |
 | 5 | **Pre-launch radar** | Manual staging checks | Sitemaps (prod vs staging), Webflow "Last Published" stamps, GitHub API, **launch probability** | `hiddenlayer-stg.webflow.io` exists. Its robots.txt disallows crawling, so only its existence is recorded |
 | 6 | **Hiring intelligence** | LinkedIn Jobs browsing | Greenhouse / Lever / Ashby public APIs; function, seniority, region, tech; **firsts** | 15 roles, 87% go-to-market; federal and UK solutions architects |
 | 7 | **Partners, channel & money** | Crunchbase trawling | Partner pages, marketplace links, Google News RSS; funding, investors, ARR claims | Series B $100M (Sep 2026); AWS Marketplace; reseller programme |
@@ -119,7 +123,7 @@ web/                       React 19 · Vite · Tailwind v4 · Motion · cmdk, se
 
 ```bash
 make dev                                             # API :8000 + hot-reload UI :5173
-pytest -q                                            # 27 tests
+pytest -q                                            # 30 tests
 TEST_DATABASE_URL=postgresql://… pytest -q           # also exercises the Postgres backend
 ```
 

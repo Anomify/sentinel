@@ -198,3 +198,17 @@ def test_postgres_backend(monkeypatch):
         assert [r["title"] for r in db.rows(con.execute("SELECT title FROM events ORDER BY id"))] == ["New tool: B", "Tool removed: A"]
         db.set_meta(con, "k", {"v": 1}); db.set_meta(con, "k", {"v": 2})
         assert db.get_meta(con, "k") == {"v": 2}
+
+
+def test_subdomain_alerts_only_for_recent_certificates_and_never_removed():
+    from datetime import datetime, timedelta, timezone
+    from cimonitor import db, facts
+    from cimonitor.collectors.subdomains import RULES
+    recent = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+    with db.connect() as con:
+        facts.sync(con, "x", "subdomains", [facts.Fact("subdomain", "www.x.com", "www.x.com", {"first_cert": "2022-01-01"})], ["subdomain"], RULES)
+        facts.sync(con, "x", "subdomains", [
+            facts.Fact("subdomain", "old.x.com", "old.x.com", {"first_cert": "2023-05-01", "kind": "campaign / product"}),
+            facts.Fact("subdomain", "launch.x.com", "launch.x.com", {"first_cert": recent, "kind": "campaign / product"})], ["subdomain"], RULES)
+        titles = [r["title"] for r in db.rows(con.execute("SELECT title FROM events"))]
+    assert titles == ["New subdomain: launch.x.com"]  # old host recorded silently; www absence not a removal alert

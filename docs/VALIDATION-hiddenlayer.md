@@ -11,7 +11,7 @@ Sentinel ran a full scan of `hiddenlayer.com` on **14 October 2026**: every modu
 | `book_demo_form` conversion | GTM container `GTM-PZG4BT6S`: GA4 event **`book_demo_form`** fires on the HubSpot form listener `hs_form_submission` | 2 | confirmed |
 | Warmly + HubSpot + demo-only → sales-led | **Sales-led**, from Warmly, LiveIntent, an identity-resolution pixel, HubSpot, a "Book a demo" CTA and no self-serve path | 1 | inferred |
 | LinkedIn Ads question | **No LinkedIn Insight Tag** on the homepage or demo page, before or after consent. The LinkedIn Ad Library can't be automated (robots.txt), so a manual-check deep link is provided | 1 + 8 | confirmed (tag) |
-| Internal hostnames | 18 internal hostnames recorded (vault, argocd, temporal, logging, splunk…). `intel` and `predator` **resolve to private IPs**. None were contacted | 4 | confirmed |
+| Internal hostnames | 36 hostnames found in certificate transparency, 22 of them recorded without being contacted: 16 internal-tooling names (vault, argocd, temporal, logging, splunk…), `intel` and `predator`, which **resolve to private IPs**, and 4 other names that aren't clearly public | 4 | confirmed |
 
 Sentinel also found these, which the brief didn't list:
 
@@ -27,6 +27,10 @@ Sentinel also found these, which the brief didn't list:
 - **Call tracking.** No CallRail or Invoca script loaded on the pages captured. If the manual finding came from another page, add that URL to the competitor's `pages:` list.
 - **"Mindmatrix verified".** Sentinel found Mindmatrix in the SPF record rather than as a TXT verification token. The conclusion is the same: a channel-enablement platform is sending email as them.
 
-## Guardrail audit for this scan
+## Guardrail audit
 
-83 fetches were allowed and 5 declined by policy: robots.txt and LinkedIn. Every decision is shown on the Coverage page.
+Across the final scan of all six competitors, **114 hostnames were flagged record-only, and none of them appear in the fetch log**. 17 requests were declined by policy: robots.txt on staging sites, and LinkedIn's Ad Library. Every decision is shown on the Coverage page.
+
+## Change-detection stability
+
+Repeat runs of DNS, the stack/GTM capture and certificate transparency against HiddenLayer produced **zero spurious alerts**. Certificate-transparency coverage varies between runs (crt.sh is often overloaded), so known hosts are carried forward, and "new subdomain" alerts fire only for certificates issued in the last 30 days.

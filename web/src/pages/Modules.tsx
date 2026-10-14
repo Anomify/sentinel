@@ -208,9 +208,9 @@ function RadarCard({ r }: { r: any }) {
             {r.staging_pages.length > 0 && <div className="mt-1 text-ink">{r.staging_pages.length} pre-launch pages: {r.staging_pages.slice(0, 4).map((p: any) => p.path).join(", ")}</div>}
           </div>
           <div><div className="eyebrow mb-2">Campaign subdomains</div>
-            <div className="text-ink-2">{r.campaign_subdomains.slice(0, 6).map((s: any) => s.host.split(".")[0]).join(", ") || "—"}</div></div>
+            <div className="text-ink-2">{[...new Set(r.campaign_subdomains.map((s: any) => s.host.split(".")[0]))].slice(0, 8).join(", ") || "—"}</div></div>
           <div><div className="eyebrow mb-2">Release cadence</div>
-            <div className="text-ink-2">{r.publishes.length ? `${r.publishes.length} publishes recorded · last ${r.publishes[r.publishes.length - 1].replace("T", " ")}` : "Not yet observed"}</div></div>
+            <div className="text-ink-2">{r.publishes.length ? `${r.publishes.length} publish${r.publishes.length === 1 ? "" : "es"} recorded · last ${r.publishes[r.publishes.length - 1].replace("T", " ")}` : "Not yet observed"}</div></div>
           {r.repos.length > 0 && <div><div className="eyebrow mb-2">Repos</div><div className="text-ink-2">{r.repos.slice(0, 4).map((x: any) => x.name.split("/")[1]).join(", ")}</div></div>}
         </div>
       </div>

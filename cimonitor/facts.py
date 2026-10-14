@@ -49,6 +49,7 @@ class Rule:
     title_remove: Callable[[dict], str] | None = None
     so_what: Callable[[Fact], str | None] | None = None
     severity_fn: Callable[[Fact], str] | None = None
+    alert_if: Callable[[Fact], bool] | None = None   # extra gate on "added" alerts (fact is still recorded)
 
 
 KIND_TITLE = {"mx": "Mail routing", "dmarc": "DMARC policy", "ns": "Nameservers", "motion": "GTM motion", "funnel": "Funnel",
@@ -114,7 +115,7 @@ def sync(con, competitor: str, module: str, observed: list[Fact], kinds: list[st
                                          "label": f.label, "value": f.value, "confidence": f.confidence,
                                          "evidence": f.evidence, "first_seen": now, "last_seen": now})
             added += 1
-            if rule.on_add and not first_run:
+            if rule.on_add and not first_run and (rule.alert_if is None or rule.alert_if(f)):
                 sev = rule.severity_fn(f) if rule.severity_fn else rule.severity
                 emit(con, competitor, module, f"{kind}_added", sev,
                      rule.title_add(f) if rule.title_add else f"New {kind.replace('_', ' ')}: {f.label}",
