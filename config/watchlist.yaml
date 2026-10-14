@@ -7,9 +7,9 @@
 
 # Your own brand — used for AI-search share-of-voice ("are WE in the answer?").
 brand:
-  name: "Your Company"            # ← change me
+  name: "Hyperfence"            # ← change me
   aliases: []                     # e.g. ["YourCo", "YourProduct"]
-  domains: ["example.com"]        # ← change me (used to match AI citations)
+  domains: ["https://hyperfence.io"]        # ← change me (used to match AI citations)
   color: "#9085e9"
 
 # Terms whose frequency on competitor pages signals a messaging pivot.
