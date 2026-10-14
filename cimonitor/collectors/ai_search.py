@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlparse
@@ -73,9 +74,58 @@ def ask_claude(model: str, q: str) -> tuple[str, list[dict]]:
     return "".join(text), cites
 
 
+def ask_gemini(model: str, q: str) -> tuple[str, list[dict]]:
+    """Gemini with Google Search grounding; grounding chunks are the cited sources."""
+    r = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        params={"key": os.environ["GEMINI_API_KEY"]},
+        json={"systemInstruction": {"parts": [{"text": SYSTEM}]}, "contents": [{"role": "user", "parts": [{"text": q}]}],
+              "tools": [{"google_search": {}}]},
+        timeout=180,
+    )
+    r.raise_for_status()
+    cand = (r.json().get("candidates") or [{}])[0]
+    text = "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", []))
+    chunks = (cand.get("groundingMetadata") or {}).get("groundingChunks") or []
+    # grounding URIs are redirect links; the title carries the source domain
+    cites = [{"url": c["web"].get("uri"), "title": c["web"].get("title")} for c in chunks if c.get("web")]
+    for c in cites:
+        t = c.get("title") or ""
+        if re.fullmatch(r"[\w.-]+\.[a-z]{2,}", t):
+            c["domain"] = t
+    return text, cites
+
+
+def ask_google_aio(model: str, q: str) -> tuple[str, list[dict]]:
+    """Google AI Overviews via SerpAPI (Google has no official AIO API)."""
+    j = requests.get("https://serpapi.com/search.json", params={"engine": "google", "q": q, "hl": "en", "gl": "us",
+                                                                 "api_key": os.environ["SERPAPI_API_KEY"]}, timeout=90).json()
+    aio = j.get("ai_overview") or {}
+    if aio.get("page_token") and not aio.get("text_blocks"):
+        aio = requests.get("https://serpapi.com/search.json", params={"engine": "google_ai_overview", "page_token": aio["page_token"],
+                                                                     "api_key": os.environ["SERPAPI_API_KEY"]}, timeout=90).json().get("ai_overview") or {}
+    if not aio:
+        return "[No AI Overview shown for this query]", []
+
+    def flatten(blocks):
+        out = []
+        for b in blocks or []:
+            if b.get("snippet"):
+                out.append(b["snippet"])
+            for li in b.get("list") or []:
+                out.append("- " + (li.get("title", "") + " " + li.get("snippet", "")).strip())
+            out += flatten(b.get("text_blocks"))
+        return out
+    text = "\n".join(flatten(aio.get("text_blocks")))
+    cites = [{"url": r.get("link"), "title": r.get("title")} for r in aio.get("references") or []]
+    return text, cites
+
+
 ENGINES = {
     "perplexity": (ask_perplexity, "PERPLEXITY_API_KEY"),
     "openai": (ask_openai, "OPENAI_API_KEY"),
+    "gemini": (ask_gemini, "GEMINI_API_KEY"),
+    "google_aio": (ask_google_aio, "SERPAPI_API_KEY"),
     "claude": (ask_claude, "ANTHROPIC_API_KEY"),
 }
 
@@ -95,7 +145,7 @@ def score(cfg: Config, answer: str, cites: list[dict]) -> dict:
     for e in cfg.entities:
         m = e.mention_regex().search(answer or "")
         doms = [c["url"] for c in cites if c.get("url") and
-                any(urlparse(c["url"]).netloc.endswith(d) for d in e.domains)]
+                any((c.get("domain") or urlparse(c["url"]).netloc).endswith(d) for d in e.domains)]
         found.append({"id": e.id, "pos": m.start() if m else None, "count": len(e.mention_regex().findall(answer or "")),
                       "cited": len(doms)})
     ranked = sorted((f for f in found if f["pos"] is not None), key=lambda f: f["pos"])
@@ -119,9 +169,13 @@ def _one(cfg, run_id, engine, model, q: Question) -> dict:
         if c["url"] and c["url"] not in seen:
             seen.add(c["url"])
             uniq.append(c)
+    acc = None
+    if not err and (mentions.get("__brand__") or {}).get("mentioned"):
+        from .. import llm
+        acc = llm.judge_accuracy(cfg, q.text, answer)
     return {"run_id": run_id, "run_at": db.now(), "engine": engine, "model": model, "question_id": q.id,
             "question": q.text, "answer": answer, "citations": uniq, "mentions": mentions,
-            "brand_rank": (mentions.get("__brand__") or {}).get("rank"), "error": err}
+            "brand_rank": (mentions.get("__brand__") or {}).get("rank"), "error": err, "accuracy": acc}
 
 
 def run(cfg: Config, limit: int | None = None) -> dict:

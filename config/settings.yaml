@@ -1,10 +1,18 @@
 # Runtime settings. Secrets come from environment variables (see .env.example).
 
-schedule:              # used by `sentinel daemon` (cron/GitHub Actions can call the CLI instead)
-  pages:  "every 6h"
-  feeds:  "every 3h"
-  ai:     "weekly mon 06:00"
-  digest: "weekly mon 08:00"
+schedule:              # used by `sentinel daemon` / `sentinel serve` (cron or GitHub Actions can call the CLI instead)
+  pages:      "every 6h"          # Module 9: page/pricing/messaging diffs
+  feeds:      "every 3h"          # content engine
+  subdomains: "every 1h"          # Module 4: certificate transparency (near-real-time)
+  dns:        "daily 05:10"       # Module 3: TXT/SPF/MX/DMARC/DKIM
+  stack:      "daily 05:40"       # Modules 1+2: stack fingerprint + GTM container
+  radar:      "daily 06:20"       # Module 5: staging, sitemaps, publishes, GitHub, launch score
+  hiring:     "daily 06:50"       # Module 6: job boards
+  money:      "daily 07:20"       # Module 7: partners, marketplaces, funding, press
+  ads:        "daily 07:35"       # Module 8: ad libraries + pixel cross-check
+  ai:         "daily 04:30"       # Module 10: AI-search visibility
+  deepdive:   "daily 08:00"       # intelligence layer: regenerate every competitor deep dive
+  digest:     "weekly mon 08:30"
 
 fetch:
   renderer: auto       # auto | playwright | http   (auto = Playwright when installed)

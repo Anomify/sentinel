@@ -1,4 +1,4 @@
-"""Job runner + a tiny built-in scheduler (no Celery, no Redis)."""
+"""Job runner + a tiny built-in scheduler (no Celery, no Redis). Workspace-aware."""
 from __future__ import annotations
 
 import json
@@ -9,46 +9,106 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
-from . import config, db, digest
-from .collectors import ai_search, feeds, pages
+from . import config, db, digest, tenancy
 
 log = logging.getLogger(__name__)
+
+
+def _c():
+    from .collectors import ads, ai_search, dns_infra, feeds, hiring, money, pages, radar, stack, subdomains
+    return locals()
+
+
+def _deepdive(cfg, **kw):
+    from .intel import deepdive
+    return deepdive.run(cfg, kw.get("competitor"))
+
+
 JOBS = {
-    "pages": lambda cfg, **kw: pages.run(cfg, kw.get("competitor")),
-    "feeds": lambda cfg, **kw: feeds.run(cfg, kw.get("competitor")),
-    "ai": lambda cfg, **kw: ai_search.run(cfg, kw.get("limit")),
+    "pages": lambda cfg, **kw: _c()["pages"].run(cfg, kw.get("competitor")),
+    "feeds": lambda cfg, **kw: _c()["feeds"].run(cfg, kw.get("competitor")),
+    "stack": lambda cfg, **kw: _c()["stack"].run(cfg, kw.get("competitor")),
+    "dns": lambda cfg, **kw: _c()["dns_infra"].run(cfg, kw.get("competitor")),
+    "subdomains": lambda cfg, **kw: _c()["subdomains"].run(cfg, kw.get("competitor")),
+    "radar": lambda cfg, **kw: _c()["radar"].run(cfg, kw.get("competitor")),
+    "hiring": lambda cfg, **kw: _c()["hiring"].run(cfg, kw.get("competitor")),
+    "money": lambda cfg, **kw: _c()["money"].run(cfg, kw.get("competitor")),
+    "ads": lambda cfg, **kw: _c()["ads"].run(cfg, kw.get("competitor")),
+    "ai": lambda cfg, **kw: _c()["ai_search"].run(cfg, kw.get("limit")),
+    "deepdive": _deepdive,
     "digest": lambda cfg, **kw: digest.run(cfg, deliver=kw.get("deliver", True)),
 }
+# Order for a full scan of one competitor (deep dive): dependencies first.
+FULL_SCAN = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "hiring", "money", "ads", "deepdive"]
+LABELS = {"pages": "Pages & pricing", "feeds": "Content", "stack": "GTM stack + tag manager", "dns": "DNS & email",
+          "subdomains": "Subdomains & certificates", "radar": "Pre-launch radar", "hiring": "Hiring", "money": "Partners & money",
+          "ads": "Ads", "ai": "AI visibility", "deepdive": "Deep dive", "digest": "Digest", "scan": "Full scan"}
+
 _lock = threading.Lock()
-running: dict[str, str] = {}
+_running: dict[tuple[str, str], str] = {}
+
+
+def running(ws: str | None = None) -> dict[str, str]:
+    ws = ws or tenancy.current()
+    return {j: t for (w, j), t in _running.items() if w == ws}
 
 
 def run_job(name: str, **kw) -> dict:
-    cfg = config.load()
+    ws = tenancy.current()
+    tag = f"{name}:{kw['competitor']}" if kw.get("competitor") and name == "scan" else name
     with _lock:
-        if name in running:
+        if (ws, tag) in _running:
             return {"status": "already_running"}
-        running[name] = db.now()
-    with db.connect() as con:
-        rid = db.insert(con, "runs", {"job": name, "started_at": db.now(), "status": "running"})
+        _running[(ws, tag)] = db.now()
     try:
-        stats = JOBS[name](cfg, **kw)
-        status, err = "ok", None
-    except Exception as e:
-        log.exception("job %s failed", name)
-        stats, status, err = {}, "error", "".join(traceback.format_exception_only(e)).strip()
+        cfg = config.load()
+        with db.connect() as con:
+            rid = db.insert(con, "runs", {"job": tag, "started_at": db.now(), "status": "running"})
+        try:
+            stats = full_scan(cfg, kw["competitor"]) if name == "scan" else JOBS[name](cfg, **kw)
+            status, err = "ok", None
+        except Exception as e:
+            log.exception("job %s failed", name)
+            stats, status, err = {}, "error", "".join(traceback.format_exception_only(e)).strip()
+        slim = stats if isinstance(stats, dict) else {"result": stats}
+        slim = {k: v for k, v in slim.items() if k != "results"}
+        with db.connect() as con:
+            con.execute("UPDATE runs SET finished_at=?, status=?, stats=?, error=? WHERE id=?",
+                        (db.now(), status, json.dumps(slim, default=str)[:20000], err, rid))
+        return {"job": tag, "status": status, "error": err, **slim}
     finally:
         with _lock:
-            running.pop(name, None)
-    slim = {k: v for k, v in stats.items() if k != "results"}
+            _running.pop((ws, tag), None)
+
+
+def full_scan(cfg, competitor: str) -> dict:
+    """Every module for one competitor, with step progress (drives the deep-dive UI)."""
+    out = {}
+    for i, step in enumerate(FULL_SCAN):
+        with db.connect() as con:
+            db.set_meta(con, f"scan:{competitor}", {"step": step, "label": LABELS[step], "index": i, "total": len(FULL_SCAN),
+                                                     "started": out.get("_started") or db.now(), "done": False})
+        out.setdefault("_started", db.now())
+        try:
+            r = JOBS[step](config.load(), competitor=competitor)
+            out[step] = r.get(competitor, r) if isinstance(r, dict) else r
+        except Exception as e:
+            log.exception("scan step %s failed", step)
+            out[step] = {"error": str(e)[:200]}
     with db.connect() as con:
-        con.execute("UPDATE runs SET finished_at=?, status=?, stats=?, error=? WHERE id=?",
-                    (db.now(), status, json.dumps(slim), err, rid))
-    return {"job": name, "status": status, "error": err, **slim}
+        db.set_meta(con, f"scan:{competitor}", {"step": "done", "label": "Complete", "index": len(FULL_SCAN),
+                                                 "total": len(FULL_SCAN), "done": True, "finished": db.now()})
+    return {k: (v if isinstance(v, (str, int)) else {kk: vv for kk, vv in v.items() if not isinstance(vv, (list, dict))})
+            for k, v in out.items() if not k.startswith("_")}
 
 
 def run_async(name: str, **kw) -> None:
-    threading.Thread(target=run_job, args=(name,), kwargs=kw, daemon=True).start()
+    ws = tenancy.current()
+
+    def go():
+        with tenancy.use(ws):
+            run_job(name, **kw)
+    threading.Thread(target=go, daemon=True).start()
 
 
 # ── schedule parsing: "every 6h" | "every 30m" | "daily 07:00" | "weekly mon 08:00" ──
@@ -71,24 +131,36 @@ def next_due(spec: str, last: datetime | None, now: datetime) -> datetime:
     raise ValueError(f"bad schedule: {spec}")
 
 
+def tick() -> None:
+    """One scheduler pass over every workspace."""
+    for w in tenancy.list_workspaces():
+        with tenancy.use(w["slug"]):
+            cfg = config.load()
+            now = datetime.now()
+            with db.connect() as con:
+                last_runs = db.get_meta(con, "last_scheduled", {})
+            for job, spec in (cfg.settings.get("schedule") or {}).items():
+                if job not in JOBS:
+                    continue
+                last = datetime.fromisoformat(last_runs[job]) if job in last_runs else None
+                try:
+                    if next_due(spec, last, now) <= now:
+                        log.info("[%s] scheduler → %s", w["slug"], job)
+                        last_runs[job] = now.isoformat()
+                        with db.connect() as con:
+                            db.set_meta(con, "last_scheduled", last_runs)
+                        run_job(job)
+                except ValueError as e:
+                    log.error("%s", e)
+
+
 def daemon(poll_s: int = 60) -> None:
     log.info("scheduler started")
     while True:
-        cfg = config.load()
-        now = datetime.now()
-        with db.connect() as con:
-            last_runs = db.get_meta(con, "last_scheduled", {})
-        for job, spec in (cfg.settings.get("schedule") or {}).items():
-            last = datetime.fromisoformat(last_runs[job]) if job in last_runs else None
-            try:
-                if next_due(spec, last, now) <= now:
-                    log.info("scheduler → %s", job)
-                    last_runs[job] = now.isoformat()
-                    with db.connect() as con:
-                        db.set_meta(con, "last_scheduled", last_runs)
-                    run_job(job)
-            except ValueError as e:
-                log.error("%s", e)
+        try:
+            tick()
+        except Exception:
+            log.exception("scheduler tick failed")
         time.sleep(poll_s)
 
 
@@ -97,12 +169,13 @@ def schedule_status(cfg) -> list[dict]:
     with db.connect() as con:
         last_runs = db.get_meta(con, "last_scheduled", {})
     out = []
+    r = running()
     for job, spec in (cfg.settings.get("schedule") or {}).items():
         last = datetime.fromisoformat(last_runs[job]) if job in last_runs else None
         try:
             nxt = next_due(spec, last, now)
         except ValueError:
             nxt = None
-        out.append({"job": job, "spec": spec, "last": last.isoformat() if last else None,
-                    "next": nxt.isoformat() if nxt else None, "running": job in running})
+        out.append({"job": job, "label": LABELS.get(job, job), "spec": spec, "last": last.isoformat() if last else None,
+                    "next": nxt.isoformat() if nxt else None, "running": job in r})
     return out

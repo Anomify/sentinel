@@ -108,7 +108,7 @@ export function StackedBars({ data, series, height = 180, fmtDate }: {
         )}
         {hover != null && data[hover] && (
           <Tooltip x={pad.l + hover * step + step / 2} y={y(totals[hover])} containerW={W}>
-            <div className="font-medium text-ink mb-1">{fmtDate(data[hover].date)}</div>
+            <div className=" text-ink mb-1">{fmtDate(data[hover].date)}</div>
             {vis.filter((s) => Number(data[hover][s.id]) > 0).map((s) => (
               <div key={s.id} className="flex items-center justify-between gap-4 text-ink-2">
                 <span className="inline-flex items-center gap-1.5"><EntityDot color={s.color} size={7} />{s.name}</span>
@@ -190,9 +190,9 @@ export function LineChart({ data, series, height = 220, emphasize, fmtX, fmtY = 
         )}
         {hover != null && data[hover] && (
           <Tooltip x={x(hover)} y={pad.t + 8} containerW={W}>
-            <div className="font-medium text-ink mb-1">{fmtX(data[hover].date)}</div>
+            <div className=" text-ink mb-1">{fmtX(data[hover].date)}</div>
             {[...vis].sort((a, b) => (Number(data[hover][b.id]) || 0) - (Number(data[hover][a.id]) || 0)).map((s) => (
-              <div key={s.id} className={cx("flex items-center justify-between gap-4", s.id === emphasize ? "text-ink font-medium" : "text-ink-2")}>
+              <div key={s.id} className={cx("flex items-center justify-between gap-4", s.id === emphasize ? "text-ink" : "text-ink-2")}>
                 <span className="inline-flex items-center gap-1.5"><EntityDot color={s.color} size={7} />{s.is_brand ? `${s.name} (you)` : s.name}</span>
                 <span className="tnum text-ink">{fmtY(Number(data[hover][s.id]) || 0)}</span>
               </div>
@@ -232,10 +232,10 @@ export function BarList({ rows, fmt = (v) => `${Math.round(v * 100)}%`, max: max
       {rows.map((r, i) => (
         <div key={r.id} className="group">
           <div className="flex items-baseline justify-between gap-3 text-[12.5px] mb-1">
-            <span className={cx("truncate", r.strong ? "text-ink font-medium" : "text-ink-2")}>{r.label}</span>
+            <span className={cx("truncate", r.strong ? "text-ink" : "text-ink-2")}>{r.label}</span>
             <span className="flex items-baseline gap-2 shrink-0">
               {r.sub && <span className="text-[11px] text-ink-3">{r.sub}</span>}
-              <span className="tnum text-ink font-medium">{fmt(r.value)}</span>
+              <span className="tnum text-ink">{fmt(r.value)}</span>
             </span>
           </div>
           <div className="h-1.5 rounded-full bg-sunken overflow-hidden ring-1 ring-inset ring-line">

@@ -103,3 +103,65 @@ def write_brief(cfg, facts: dict) -> dict | None:
     except Exception as e:
         log.warning("brief failed: %s", e)
         return None
+
+
+ACCURACY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdict": {"type": "string", "enum": ["accurate", "partly_accurate", "inaccurate", "outdated"]},
+        "score": {"type": "number", "description": "0-1 accuracy of what the answer says about the brand"},
+        "issues": {"type": "array", "items": {"type": "string"}, "description": "Each wrong/outdated/missing claim, one line each"},
+        "framing": {"type": "string", "description": "How the brand is positioned in this answer, one sentence"},
+    },
+    "required": ["verdict", "score", "issues", "framing"],
+    "additionalProperties": False,
+}
+
+
+def judge_accuracy(cfg, question: str, answer: str) -> dict | None:
+    """Narrative accuracy: does the AI answer describe the brand correctly, per the brand's own facts?"""
+    facts_ = cfg.brand.profile.get("facts") or []
+    if not available() or not facts_:
+        return None
+    a = cfg.settings.get("analysis", {})
+    system = (f"You audit what AI search engines say about {cfg.brand.name}. Compare the answer ONLY against the "
+              "ground-truth facts provided. Flag claims that contradict them, are outdated, or omit a key "
+              "differentiator the question invites. Do not judge competitors.")
+    prompt = ("Ground-truth facts:\n" + "\n".join(f"- {f}" for f in facts_) +
+              f"\n\nQuestion asked: {question}\n\nAnswer given:\n{answer[:12000]}")
+    try:
+        return _json_call(a.get("model", "claude-opus-5-5"), system, prompt, ACCURACY_SCHEMA, "low")
+    except Exception as e:
+        log.warning("accuracy judge failed: %s", e)
+        return None
+
+
+VSUS_SCHEMA = {
+    "type": "object",
+    "properties": {"items": {"type": "array", "items": {"type": "object", "properties": {
+        "id": {"type": "string"}, "vs_us": {"type": "string", "description": "Recommended response for our team, 1-2 sentences, concrete"},
+    }, "required": ["id", "vs_us"], "additionalProperties": False}}},
+    "required": ["items"],
+    "additionalProperties": False,
+}
+
+
+def vs_us(cfg, competitor: str, findings: list[dict]) -> dict[str, str]:
+    """For each finding, a recommended response ("Vs. us") in the brand's voice."""
+    if not available() or not findings:
+        return {}
+    a = cfg.settings.get("analysis", {})
+    p = cfg.brand.profile
+    system = (f"You are the competitive strategist at {cfg.brand.name}. For each competitor finding, write the "
+              "recommended response for our product marketing / sales team: what to do, say or change. Be specific "
+              "and practical; reference our strengths when relevant; never invent facts about us. "
+              f"Our positioning: {p.get('positioning', 'n/a')}. Our strengths: {', '.join(p.get('strengths', [])) or 'n/a'}. "
+              f"Our ICP: {p.get('icp', 'n/a')}.")
+    prompt = f"Competitor: {competitor}\nFindings (JSON):\n" + json.dumps(
+        [{"id": f["id"], "section": f["section"], "finding": f["title"], "detail": f.get("detail", "")} for f in findings])[:30000]
+    try:
+        out = _json_call(a.get("model", "claude-opus-5-5"), system, prompt, VSUS_SCHEMA, a.get("effort", "low"))
+        return {i["id"]: i["vs_us"] for i in (out or {}).get("items", [])}
+    except Exception as e:
+        log.warning("vs-us failed: %s", e)
+        return {}

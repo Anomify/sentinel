@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { Activity, Search } from "lucide-react";
 import { useApi } from "../lib/api";
-import type { Change } from "../lib/types";
-import { ChangeDrawer, ChangeRow, catLabel } from "../components/change";
+import type { SignalEvent } from "../lib/types";
+import { EventDrawer, EventRow, moduleLabel } from "../components/signal";
 import { Card, Chip, EntityDot, Empty, PageHeader, Segmented, Skeleton, useMeta } from "../components/ui";
 
 const SEVS = ["critical", "high", "medium", "low"] as const;
@@ -10,85 +10,75 @@ const SEVS = ["critical", "high", "medium", "low"] as const;
 export default function Signals() {
   const meta = useMeta();
   const [days, setDays] = useState(30);
-  const { data } = useApi<Change[]>(`/api/changes?days=${days}`);
+  const { data } = useApi<SignalEvent[]>(`/api/events?days=${days}`);
   const [comp, setComp] = useState<string | null>(null);
+  const [mod, setMod] = useState<string | null>(null);
   const [minSev, setMinSev] = useState<"all" | "high">("all");
-  const [cat, setCat] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [hideReviewed, setHideReviewed] = useState(false);
+  const [unread, setUnread] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
 
-  const rows = useMemo(() => (data ?? []).filter((c) =>
-    c.severity !== "noise" &&
-    (!comp || c.competitor === comp) &&
-    (minSev === "all" || c.severity === "critical" || c.severity === "high") &&
-    (!cat || c.category === cat) &&
-    (!hideReviewed || !c.acknowledged) &&
-    (!q || `${c.headline} ${c.summary} ${c.so_what ?? ""} ${c.url}`.toLowerCase().includes(q.toLowerCase()))), [data, comp, minSev, cat, q, hideReviewed]);
-
+  const rows = useMemo(() => (data ?? []).filter((e) =>
+    (!comp || e.competitor === comp) && (!mod || moduleLabel(meta, e.module) === mod) &&
+    (minSev === "all" || e.severity === "critical" || e.severity === "high") && (!unread || !e.acknowledged) &&
+    (!q || `${e.title} ${e.detail ?? ""} ${e.so_what ?? ""}`.toLowerCase().includes(q.toLowerCase()))), [data, comp, mod, minSev, q, unread, meta]);
   const groups = useMemo(() => {
-    const g = new Map<string, Change[]>();
-    for (const c of rows) {
-      const k = new Date(c.detected_at).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
-      g.set(k, [...(g.get(k) ?? []), c]);
+    const g = new Map<string, SignalEvent[]>();
+    for (const e of rows) {
+      const k = new Date(e.detected_at).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+      g.set(k, [...(g.get(k) ?? []), e]);
     }
     return [...g.entries()];
   }, [rows]);
-
-  const cats = useMemo(() => Array.from(new Set((data ?? []).map((c) => c.category))), [data]);
-  const counts = useMemo(() => Object.fromEntries(SEVS.map((s) => [s, (data ?? []).filter((c) => c.severity === s).length])), [data]);
+  const modules = useMemo(() => Array.from(new Set((data ?? []).map((e) => moduleLabel(meta, e.module)))).sort(), [data, meta]);
+  const counts = useMemo(() => Object.fromEntries(SEVS.map((s) => [s, (data ?? []).filter((e) => e.severity === s).length])), [data]);
 
   return (
     <div>
-      <PageHeader title="Signals" sub="Every meaningful change to competitor homepages, product and pricing pages, scored for impact and explained."
+      <PageHeader title="Signals" sub="Every change Sentinel detects across stack, tracking, DNS, certificates, staging, hiring, partners, ads, positioning and AI search — scored, labelled and evidenced."
         right={<Segmented value={days} onChange={setDays} options={[{ value: 7, label: "7d" }, { value: 30, label: "30d" }, { value: 90, label: "90d" }, { value: 365, label: "1y" }]} />} />
-
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card className="mb-5 grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
         {SEVS.map((s) => (
-          <Card key={s} className="px-4 py-3">
-            <div className="flex items-center gap-1.5 text-[11.5px] capitalize text-ink-3">
-              <span className={`size-1.5 rounded-full ${s === "critical" ? "bg-crit" : s === "high" ? "bg-high" : s === "medium" ? "bg-med" : "bg-low"}`} />{s}
-            </div>
-            <div className="mt-1 text-[22px] font-semibold tnum text-ink">{counts[s] ?? 0}</div>
-          </Card>
+          <div key={s} className="px-6 py-4">
+            <div className="eyebrow">{s}</div>
+            <div className="mt-1.5 text-[26px] leading-none tracking-[-0.02em] tnum text-ink">{counts[s] ?? 0}</div>
+          </div>
         ))}
-      </div>
-
+      </Card>
       <Card className="overflow-hidden">
-        <div className="flex flex-col gap-3 border-b border-line p-4">
+        <div className="space-y-3 border-b border-line p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex h-8 min-w-56 flex-1 items-center gap-2 rounded-lg bg-sunken px-3 ring-1 ring-inset ring-line focus-within:ring-accent/40">
+            <div className="flex h-9 min-w-56 flex-1 items-center gap-2 rounded-full bg-sunken px-4">
               <Search size={14} className="text-ink-3" />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter signals…" className="flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3" />
             </div>
             <Segmented value={minSev} onChange={setMinSev} options={[{ value: "all", label: "All" }, { value: "high", label: "High+" }]} />
-            <Chip active={hideReviewed} onClick={() => setHideReviewed((v) => !v)}>Unreviewed only</Chip>
+            <Chip active={unread} onClick={() => setUnread((v) => !v)}>Unreviewed</Chip>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <Chip active={!comp} onClick={() => setComp(null)}>All competitors</Chip>
             {meta.entities.filter((e) => !e.is_brand).map((e) => (
               <Chip key={e.id} active={comp === e.id} onClick={() => setComp(comp === e.id ? null : e.id)}><EntityDot color={e.color} size={7} />{e.name}</Chip>
             ))}
-            <span className="mx-1 w-px self-stretch bg-line" />
-            {cats.map((c) => <Chip key={c} active={cat === c} onClick={() => setCat(cat === c ? null : c)}>{catLabel(c)}</Chip>)}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Chip active={!mod} onClick={() => setMod(null)}>All modules</Chip>
+            {modules.map((m) => <Chip key={m} active={mod === m} onClick={() => setMod(mod === m ? null : m)}>{m}</Chip>)}
           </div>
         </div>
-        {!data ? (
-          <div className="space-y-3 p-5">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)}</div>
-        ) : rows.length === 0 ? (
-          <Empty icon={<Activity size={18} />} title={data.length ? "Nothing matches these filters" : "No signals yet"}>
-            {data.length ? "Try widening the time range or clearing filters." : "Sentinel records a baseline on the first scan and reports changes from then on."}
-          </Empty>
-        ) : (
-          groups.map(([label, items]) => (
+        {!data ? <div className="space-y-3 p-6">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-14" />)}</div>
+          : rows.length === 0 ? (
+            <Empty icon={<Activity size={16} />} title={data.length ? "Nothing matches these filters" : "No signals yet"}>
+              {data.length ? "Widen the time range or clear filters." : "Each module records a baseline on its first run; changes alert from the second run."}
+            </Empty>
+          ) : groups.map(([label, items]) => (
             <div key={label}>
-              <div className="sticky top-14 z-10 border-b border-line bg-elev/90 px-5 py-2 text-[11.5px] font-medium text-ink-3 backdrop-blur">{label}</div>
-              <div className="divide-y divide-line">{items.map((c) => <ChangeRow key={c.id} c={c} onOpen={setOpen} active={open === c.id} />)}</div>
+              <div className="sticky top-16 z-10 border-b border-line bg-elev/95 px-6 py-2 text-[11.5px] text-ink-3 backdrop-blur">{label}</div>
+              <div className="divide-y divide-line">{items.map((e) => <EventRow key={e.id} e={e} onOpen={setOpen} active={open === e.id} />)}</div>
             </div>
-          ))
-        )}
+          ))}
       </Card>
-      <ChangeDrawer id={open} onClose={() => setOpen(null)} />
+      <EventDrawer id={open} onClose={() => setOpen(null)} />
     </div>
   );
 }

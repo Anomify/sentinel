@@ -1,2 +1,2 @@
-"""Sentinel — competitive intelligence monitor."""
-__version__ = "1.0.0"
+"""Sentinel — GTM-stack & competitive intelligence."""
+__version__ = "2.0.0"

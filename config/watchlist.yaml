@@ -9,8 +9,14 @@
 brand:
   name: "Hyperfence"            # ← change me
   aliases: []                     # e.g. ["YourCo", "YourProduct"]
-  domains: ["https://hyperfence.io"]        # ← change me (used to match AI citations)
-  color: "#9085e9"
+  domains: ["hyperfence.io"]       # used to match AI citations (bare hostname)
+  color: "#6250d6"
+  # Used to write the "Vs. us" recommendation on every finding, and to grade the
+  # narrative accuracy of AI-search answers about you. Plain sentences work best.
+  positioning: "The AI security platform for enterprises deploying agents and LLM apps."   # ← change me
+  icp: "CISOs and AI platform leaders at regulated enterprises"                          # ← change me
+  strengths: []          # e.g. ["Fastest time-to-value", "Deployed in customer VPC", "SOC 2 Type II"]
+  facts: []              # ground truth for AI-answer accuracy, e.g. ["We offer a free tier", "We are SOC 2 Type II certified"]
 
 # Terms whose frequency on competitor pages signals a messaging pivot.
 watch_terms:
@@ -38,7 +44,7 @@ competitors:
   - id: hiddenlayer
     name: HiddenLayer
     tier: primary                 # primary | secondary | platform
-    color: "#3987e5"
+    color: "#2a78d6"
     aliases: ["Hidden Layer", "AISec Platform"]
     domains: ["hiddenlayer.com"]
     pages:
@@ -59,7 +65,7 @@ competitors:
   - id: alice
     name: Alice (WonderFence)
     tier: primary
-    color: "#d95926"
+    color: "#eb6834"
     aliases: ["Alice", "WonderFence", "ActiveFence", "Active Fence"]
     domains: ["alice.io", "activefence.com"]
     pages:
@@ -71,7 +77,7 @@ competitors:
   - id: lakera
     name: Lakera
     tier: secondary
-    color: "#199e70"
+    color: "#1baf7a"
     aliases: ["Lakera Guard", "Lakera Red", "Gandalf"]
     domains: ["lakera.ai"]
     pages:
@@ -84,7 +90,7 @@ competitors:
   - id: aws-bedrock
     name: AWS Bedrock Guardrails
     tier: platform
-    color: "#c98500"
+    color: "#eda100"
     aliases: ["Bedrock Guardrails", "Amazon Bedrock Guardrails"]
     domains: ["aws.amazon.com"]
     pages:
@@ -97,7 +103,7 @@ competitors:
   - id: google-model-armor
     name: Google Model Armor
     tier: platform
-    color: "#d55181"
+    color: "#e87ba4"
     aliases: ["Model Armor", "Security Command Center AI Protection"]
     domains: ["cloud.google.com"]
     pages:

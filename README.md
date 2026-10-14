@@ -1,105 +1,128 @@
-# Sentinel: competitive intelligence monitor
+# Sentinel
 
-Sentinel watches your competitors, tells you what changed and why it matters, and checks whether AI search recommends you or them.
+**GTM-stack intelligence with change detection.** Crayon and Klue track what competitors *say*. Sentinel also tracks what they *do*: their stack, tracking, email and DNS infrastructure, subdomains, staging sites, hiring, partners, ads and AI-search presence. It snapshots all of it on a schedule, diffs it over time, and writes an always-current teardown in which every finding has a recommended response.
 
-![Overview](docs/overview.png)
+![Deep dive](docs/deep-dive.png)
 
-| | |
-|---|---|
-| **Page-change detection** | Snapshots competitor homepages, product and pricing pages (JS-rendered with Playwright). It diffs them and pulls out structured signals: hero headline, meta positioning, CTAs, prices, and how often your watch-terms appear ("agentic", "MCP", "free trial"…). Each change is scored for severity, and pricing moves are flagged as critical. |
-| **"So what" analysis** | With an Anthropic key, Claude reads every diff and writes a headline, why it matters to *you*, and a concrete battlecard/launch action. Cosmetic changes are filtered out as noise. |
-| **Content intake** | Reads RSS/Atom feeds and, for sites without a feed (HiddenLayer, Lakera), scrapes their blog listing pages. Posts are tagged by theme, and a heatmap shows which narratives each competitor is pushing. |
-| **AI-search visibility** | Asks Perplexity, ChatGPT (and optionally Claude) your 20 target questions. Records who is mentioned, in what position, and which domains get cited. Tracks share of voice over time and lists the gaps: questions where a competitor appears and you don't. |
-| **Live battlecards** | Rebuilt from the latest snapshots on every scan. Copy as Markdown into your battlecard doc. |
-| **Weekly digest** | An email/Slack brief covering a TL;DR, what moved, new content, AI share of voice and gaps, with a link back to the dashboard. |
+## What it does
 
-<p>
-  <img src="docs/signal.png" width="49%" alt="Signal detail with AI analysis and diff">
-  <img src="docs/ai-visibility.png" width="49%" alt="AI visibility">
-</p>
+| # | Module | Replaces | Public source | Example finding (live, HiddenLayer) |
+|---|---|---|---|---|
+| 1 | **GTM stack fingerprinting** | Wappalyzer, BuiltWith, DevTools | Headless Chromium network capture, **before and after cookie consent**; 120+ tool signatures mapped to GTM categories | Warmly, LiveIntent and an identity-resolution pixel fire *before* consent → **sales-led** motion |
+| 2 | **Tag manager & conversion forensics** | Manual GTM inspection | The public `gtm.js` container: tags, triggers, IDs, server-side GTM | `book_demo_form` (GA4) fires on `hs_form_submission`; sGTM on `atxgtm.` |
+| 3 | **DNS & email infrastructure** | MXToolbox | DNS-over-HTTPS: TXT, SPF, MX, DMARC, DKIM; 60+ verification decoders | Anthropic, OpenAI, Cursor, Pendo and Docker verified; **Mindmatrix** (partner platform) authorised in SPF |
+| 4 | **Subdomains & certificates** | Subdomain finders | crt.sh + Cert Spotter CT logs, hosting classification, screenshots | `ai-costs`, `hackathon` ("AWS Clash of Agents"); `intel`/`predator` resolve to private IPs (recorded, never contacted) |
+| 5 | **Pre-launch radar** | Manual staging checks | Sitemaps (prod vs staging), Webflow "Last Published" stamps, GitHub API, **launch probability** | `hiddenlayer-stg.webflow.io` exists. Its robots.txt disallows crawling, so only its existence is recorded |
+| 6 | **Hiring intelligence** | LinkedIn Jobs browsing | Greenhouse / Lever / Ashby public APIs; function, seniority, region, tech; **firsts** | 15 roles, 87% go-to-market; federal and UK solutions architects |
+| 7 | **Partners, channel & money** | Crunchbase trawling | Partner pages, marketplace links, Google News RSS; funding, investors, ARR claims | Series B $100M (Sep 2026); AWS Marketplace; reseller programme |
+| 8 | **Ads intelligence** | Ad library browsing | Google Ads Transparency (official BigQuery dataset), Meta Ad Library API, **cross-checked against pixels** | Google Ads tag live; **no LinkedIn Insight Tag** (answers the LinkedIn ads question) |
+| 9 | **Positioning & content** | Crayon / Klue | Page/pricing diffs; H1s, CTAs, personas (buyer hierarchy), industries, use cases; content cadence | Buyer hierarchy and its shifts over time |
+| 10 | **AI search visibility** | Manual prompting | ChatGPT, Perplexity, Gemini, Google AI Overviews (+ Claude), run daily | Share of answers, position, cited sources, **source gaps**, **narrative accuracy** |
+
+### The intelligence layer
+
+- **Deep dive in minutes.** Enter a domain and every module runs (a full scan of HiddenLayer took about 6 minutes). Sentinel writes the teardown and keeps it current.
+- **"Vs. us" on every material finding.** Claude writes it from your positioning and strengths when `ANTHROPIC_API_KEY` is set; otherwise rule-based responses are used.
+- **Evidence trail.** Every claim carries its source URL, timestamp, collection method and, where relevant, a screenshot.
+- **Confidence labels.** *Confirmed* means directly observed. *Likely* means strong indirect evidence. *Inferred* means Sentinel derived it from other signals.
+- **Method tracker.** A competitor × method coverage matrix, mirroring a hand-built research table.
+- **Change alerts.** Every module writes to one fact store, and adds, removals and changes become scored alerts in a single feed and in the weekly email/Slack digest. Each module's first run is a silent baseline, so day one isn't 300 "new" alerts.
+
+### Guardrails (enforced in code; see `cimonitor/guard.py`)
+
+- **Passive and public only.** GET requests only. No logins and no form submissions (partner application forms are *detected*, never submitted).
+- **robots.txt respected** for every page fetched; anything disallowed is skipped and logged.
+- **Rate limited** per host.
+- **Private addresses are never contacted.** Hostnames that name internal systems (vault, argocd, sso, logging…) are recorded from CT/DNS only, *even when they resolve publicly*.
+- **No port scanning** (default ports only).
+- **Official APIs first**: CT logs, DNS-over-HTTPS, job-board APIs, ad-library APIs. LinkedIn's Ad Library prohibits automated access, so Sentinel provides a deep link instead of scraping it.
+- **Audit log.** Every fetch decision (allowed or declined) is shown on the Coverage page.
 
 ## Quick start
 
 ```bash
-make install            # Python package + Playwright Chromium + dashboard deps
-cp .env.example .env    # add keys (all optional; see below)
-make serve              # → http://localhost:8000  (dashboard + API + scheduler)
+make install                 # Python package, Playwright Chromium, dashboard deps
+cp .env.example .env         # every key is optional
+make serve                   # http://localhost:8000: dashboard + API + scheduler
+sentinel scan acme.com       # or "Deep dives → Analyse" in the UI
 ```
 
-To look around before real data builds up:
+With **no keys at all**, Modules 1–7 and 9 run on free public sources. Keys add AI-search engines (10), Claude analysis ("Vs. us", the "so what" on each change, and the brief), ad libraries (8), and digest delivery.
 
-```bash
-make demo               # illustrative sample data in data/demo.db, shown with a "Demo workspace" banner
-```
-
-On its first scan, Sentinel records a **baseline** for every page. Changes show up from the second scan onward. Kick one off from **Run now** in the UI, or run `sentinel pages`.
+`make demo` loads illustrative sample data into a separate `demo.db`, shown under a "Demo workspace" banner.
 
 ## Configure
 
-Everything lives in version-controlled YAML in `config/`:
-
 | File | What |
 |---|---|
-| `watchlist.yaml` | **Your brand** (name + domains, used for AI share of voice). Also competitors, their pages (`homepage`/`product`/`pricing`, with an optional `focus` regex for huge pricing pages), feeds (`rss` or `listing` + `link_pattern`), watch-terms, and ignore patterns. Pre-filled with HiddenLayer, Alice/WonderFence, Lakera, AWS Bedrock Guardrails, Google Model Armor and Azure AI Content Safety. All URLs were verified live. |
-| `questions.yaml` | **Your 20 target questions** (placeholders included; replace them) and which engines/models to use. |
-| `settings.yaml` | Schedule, fetch behaviour, analysis model, digest options. |
-
-Environment variables (`.env`):
-
-| Variable | Enables |
-|---|---|
-| `PERPLEXITY_API_KEY`, `OPENAI_API_KEY` | AI-search visibility tracking |
-| `ANTHROPIC_API_KEY` | Claude change analysis + AI-written weekly brief (optionally a third search engine) |
-| `SLACK_WEBHOOK_URL` | Slack digest (Block Kit) |
-| `SMTP_HOST` `SMTP_PORT` `SMTP_USER` `SMTP_PASS` `DIGEST_FROM` `DIGEST_TO` | Email digest |
-| `SENTINEL_TOKEN` | Requires a token to open the dashboard/API (set this when hosting publicly) |
-
-With no keys at all, page monitoring, feeds, heuristic severity scoring and the template digest all still work.
+| `config/watchlist.yaml` | **Your brand**: name, domains, positioning, ICP, strengths, and `facts` (used to grade AI-answer accuracy). Also competitors, their pages and feeds, and optional `staging`, `github`, `ats`, `partner_pages`, `marketplaces` and `ads`. Most of these are auto-discovered. Domains added from the UI are stored in the database. |
+| `config/questions.yaml` | Your **20 target questions** (replace the placeholders) and the engines/models to use. |
+| `config/settings.yaml` | Per-module schedule (CT hourly, DNS/stack/radar/hiring daily, AI daily, digest weekly), analysis model, digest. |
 
 ## Run it
 
-**Always-on (recommended):** `docker compose up -d`. This runs the dashboard, API and built-in scheduler, with the database on a volume. The default schedule is pages every 6h, feeds every 3h, and AI visibility + digest on Monday mornings.
+- **Docker (recommended):** `docker compose up -d` starts Sentinel and Postgres 16, with the built-in scheduler, evidence screenshots on a volume, and the config mounted.
+- **Zero infrastructure:** `.github/workflows/monitor.yml` runs every module on GitHub Actions and keeps the database on a `sentinel-data` branch.
+- **Cron:** `sentinel run && sentinel digest`.
 
-**Zero infrastructure:** `.github/workflows/monitor.yml` runs the collectors on GitHub Actions and keeps the SQLite DB on a `sentinel-data` branch. Add your keys as repository secrets. To browse the data, download `sentinel.db` from that branch into `data/` and run `sentinel serve`.
+### Storage and multi-tenancy
 
-**Cron:** `sentinel run && sentinel digest`.
+- **SQLite by default; Postgres via `DATABASE_URL`.** Every observation keeps its first-seen, last-seen and removed-at timestamps, so the full change history is preserved.
+- **Workspaces.** Each tenant has its own config and database (a Postgres schema per workspace) and its own access token:
+
+  ```bash
+  sentinel workspace acme "Acme Corp"
+  ```
+
+  The dashboard's workspace switcher and the `X-Workspace` API header select between them. `SENTINEL_TOKEN` is the admin token.
 
 ## CLI
 
 ```
-sentinel pages [--competitor ID]   snapshot pages, detect changes
-sentinel feeds [--competitor ID]   pull blog/RSS feeds
-sentinel ai [--limit N]            AI-search visibility run (use --limit 2 for a cheap smoke test)
-sentinel digest [--no-send]        build (and deliver) the weekly digest
-sentinel run                       pages + feeds + ai
-sentinel serve [--no-scheduler]    dashboard + API (+ scheduler)
-sentinel daemon                    scheduler only
-sentinel demo [--clear]            illustrative sample data in a separate demo.db
+sentinel stack|dns|subdomains|radar|hiring|money|ads|pages|feeds [--competitor ID]
+sentinel ai [--limit N]                 AI-search visibility
+sentinel deepdive [--competitor ID]     regenerate deep dives
+sentinel scan <id-or-domain>            every module for one target, then its deep dive
+sentinel run                            everything, then exit (cron/CI)
+sentinel digest [--no-send]
+sentinel serve [--no-scheduler] | daemon
+sentinel workspace <slug> <name>
+sentinel -w <workspace> …               run any command in a workspace
 ```
 
-API docs: `http://localhost:8000/api/docs`. Battlecard Markdown: `GET /api/battlecard/{competitor}`.
+API docs are at `/api/docs`.
 
 ## Architecture
 
 ```
 cimonitor/
-  collectors/fetch.py      Playwright (JS-rendered) with HTTP fallback, one browser per run
-  collectors/pages.py      extract → hash → diff → structured signal delta → severity (+ Claude analysis)
-  collectors/feeds.py      RSS/Atom + listing-page scraping, theme tagging
-  collectors/ai_search.py  Perplexity / OpenAI Responses (web_search) / Claude (web_search) → mention ranking
-  insights.py              read models shared by API + digest (share of voice, gaps, heat, timeline)
-  digest.py                one payload → HTML email + Slack Block Kit → SMTP / webhook
-  jobs.py                  job runner + tiny cron-like scheduler ("every 6h", "weekly mon 08:00")
-  api.py                   FastAPI + static SPA
-web/                       React 19 + Vite + Tailwind v4 + Motion + cmdk; hand-built SVG charts
-config/                    YAML watchlist, questions, settings
+  guard.py                 guardrails: robots.txt, rate limits, private/internal refusal, audit log
+  facts.py                 fact store → change events (confidence + evidence on everything)
+  signatures.py            120+ tool signatures, tracking-ID patterns
+  collectors/
+    fetch.py               Playwright behind the guardrails: pre/post-consent capture, screenshots
+    stack.py  gtm.py       Modules 1–2 (+ motion classifier, sister-site ID linking)
+    dns_infra.py dnsq.py   Module 3 (DNS-over-HTTPS)
+    subdomains.py          Module 4
+    radar.py               Module 5 (+ launch probability)
+    hiring.py              Module 6
+    money.py  ads.py       Modules 7–8
+    pages.py  feeds.py     Module 9
+    ai_search.py           Module 10 (Perplexity, ChatGPT, Gemini, AI Overviews, Claude)
+  intel/deepdive.py        auto-generated deep dive with Vs. us
+  intel/coverage.py        method tracker
+  insights.py digest.py jobs.py api.py tenancy.py db.py (SQLite | Postgres)
+web/                       React 19 · Vite · Tailwind v4 · Motion · cmdk, set in Alpha Lyrae
 ```
-
-Storage is a single SQLite file (`data/sentinel.db`): snapshots, changes, posts, AI results, digests and runs.
 
 ## Develop
 
 ```bash
-make dev     # API on :8000, hot-reloading UI on :5173
-make test    # pytest
+make dev                                             # API :8000 + hot-reload UI :5173
+pytest -q                                            # 27 tests
+TEST_DATABASE_URL=postgresql://… pytest -q           # also exercises the Postgres backend
 ```
+
+---
+
+Typeface: **Alpha Lyrae** by Fontfabric, under the SIL Open Font License 1.1 (`web/public/fonts/AlphaLyrae-OFL.md`).

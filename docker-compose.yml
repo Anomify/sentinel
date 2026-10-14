@@ -3,7 +3,17 @@ services:
     build: .
     ports: ["8000:8000"]
     env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://sentinel:sentinel@db:5432/sentinel}
     volumes:
-      - ./data:/data
-      - ./config:/app/config   # edit the watchlist without rebuilding
+      - ./data:/data                # evidence screenshots, workspaces, SQLite (if no Postgres)
+      - ./config:/app/config        # edit the watchlist without rebuilding
+    depends_on: [db]
     restart: unless-stopped
+  db:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: sentinel, POSTGRES_PASSWORD: sentinel, POSTGRES_DB: sentinel }
+    volumes: [pgdata:/var/lib/postgresql/data]
+    restart: unless-stopped
+volumes:
+  pgdata:

@@ -7,51 +7,85 @@ import logging
 import os
 import threading
 
-from . import config, jobs
+from . import config, jobs, tenancy
+
+MODULE_HELP = {
+    "pages": "Module 9 · snapshot pages & pricing, detect positioning changes",
+    "feeds": "Content engine · pull blog/RSS feeds",
+    "stack": "Modules 1+2 · stack fingerprint (pre/post consent) + GTM container forensics",
+    "dns": "Module 3 · TXT/SPF/MX/DMARC/DKIM",
+    "subdomains": "Module 4 · certificate transparency + hosting + screenshots",
+    "radar": "Module 5 · staging, sitemaps, publishes, GitHub, launch probability",
+    "hiring": "Module 6 · Greenhouse/Lever/Ashby",
+    "money": "Module 7 · partners, marketplaces, funding, press",
+    "ads": "Module 8 · ad libraries + pixel cross-check",
+    "ai": "Module 10 · AI-search visibility",
+    "deepdive": "Intelligence layer · regenerate deep dives",
+    "digest": "Build & deliver the weekly digest",
+}
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser("sentinel", description="Competitive intelligence monitor")
+    p = argparse.ArgumentParser("sentinel", description="Competitive & GTM-stack intelligence")
+    p.add_argument("--workspace", "-w", default=os.environ.get("SENTINEL_WORKSPACE", tenancy.DEFAULT))
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name, help_ in [("pages", "snapshot competitor pages & detect changes"), ("feeds", "pull blog/RSS feeds"),
-                        ("ai", "run AI-search visibility questions"), ("digest", "build & deliver the weekly digest")]:
+    for name, help_ in MODULE_HELP.items():
         s = sub.add_parser(name, help=help_)
-        if name in ("pages", "feeds"):
+        if name not in ("ai", "digest"):
             s.add_argument("--competitor")
         if name == "ai":
             s.add_argument("--limit", type=int, help="only the first N questions (cheap smoke test)")
         if name == "digest":
             s.add_argument("--no-send", action="store_true", help="build and store, but don't deliver")
-    sub.add_parser("run", help="pages + feeds (+ ai if keys present), then exit")
-    sv = sub.add_parser("serve", help="web dashboard + API")
+    sc = sub.add_parser("scan", help="every module for one competitor (id or domain), then its deep dive")
+    sc.add_argument("target")
+    sub.add_parser("run", help="every module for every competitor, then exit (for cron / CI)")
+    sv = sub.add_parser("serve", help="web dashboard + API (+ scheduler)")
     sv.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
-    sv.add_argument("--no-scheduler", action="store_true", help="don't run scheduled jobs in-process")
+    sv.add_argument("--no-scheduler", action="store_true")
     sub.add_parser("daemon", help="scheduler only (no web)")
-    d = sub.add_parser("demo", help="load realistic demo data so you can explore the UI")
-    d.add_argument("--clear", action="store_true", help="remove demo data")
+    ws = sub.add_parser("workspace", help="create a workspace (multi-tenant)")
+    ws.add_argument("slug")
+    ws.add_argument("name")
+    d = sub.add_parser("demo", help="load illustrative demo data (separate demo.db)")
+    d.add_argument("--clear", action="store_true")
     a = p.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-5s %(message)s", datefmt="%H:%M:%S")
-    if a.cmd in ("pages", "feeds"):
-        out = jobs.run_job(a.cmd, competitor=a.competitor)
-    elif a.cmd == "ai":
-        out = jobs.run_job("ai", limit=a.limit)
-    elif a.cmd == "digest":
-        out = jobs.run_job("digest", deliver=not a.no_send)
-    elif a.cmd == "run":
-        out = [jobs.run_job("pages"), jobs.run_job("feeds"), jobs.run_job("ai")]
-    elif a.cmd == "daemon":
-        return jobs.daemon()
-    elif a.cmd == "demo":
-        from . import demo
-        out = demo.clear() if a.clear else demo.seed(config.load())
-    elif a.cmd == "serve":
-        import uvicorn
-        if not a.no_scheduler:
-            threading.Thread(target=jobs.daemon, daemon=True).start()
-        uvicorn.run("cimonitor.api:app", host=a.host, port=a.port, log_level="info")
-        return
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    with tenancy.use(a.workspace):
+        if a.cmd in MODULE_HELP:
+            kw = {"competitor": getattr(a, "competitor", None), "limit": getattr(a, "limit", None)}
+            if a.cmd == "digest":
+                kw = {"deliver": not a.no_send}
+            out = jobs.run_job(a.cmd, **{k: v for k, v in kw.items() if v is not None})
+        elif a.cmd == "scan":
+            cfg = config.load()
+            comp = cfg.competitor(a.target) or next((c for c in cfg.competitors if a.target.removeprefix("www.") in
+                                                     [d.removeprefix("www.") for d in c.domains]), None)
+            if not comp:
+                from .api import TargetIn, add_target
+                comp_id = add_target(TargetIn(domain=a.target))["id"]
+            else:
+                comp_id = comp.id
+            out = jobs.run_job("scan", competitor=comp_id)
+        elif a.cmd == "run":
+            order = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "hiring", "money", "ads", "ai", "deepdive"]
+            out = [jobs.run_job(j) for j in order]
+        elif a.cmd == "daemon":
+            return jobs.daemon()
+        elif a.cmd == "workspace":
+            out = {"slug": a.slug, "token": tenancy.create(a.slug, a.name), "note": "store this token; it is shown once"}
+        elif a.cmd == "demo":
+            from . import demo
+            out = demo.clear() if a.clear else demo.seed(config.load())
+        elif a.cmd == "serve":
+            import uvicorn
+            if not a.no_scheduler:
+                threading.Thread(target=jobs.daemon, daemon=True).start()
+            uvicorn.run("cimonitor.api:app", host=a.host, port=a.port, log_level="info")
+            return
     print(json.dumps(out, indent=2, default=str))
 
 

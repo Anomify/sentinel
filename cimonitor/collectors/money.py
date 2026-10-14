@@ -1,0 +1,250 @@
+"""Module 7 — Partners, channel & money.
+
+  • Partner pages: partner names (logo grids/links) tracked over time → partner count series.
+  • Marketplace listings (AWS, Azure, GCP, Databricks, Snowflake…): discovered from links
+    on their own site plus configured listing URLs.
+  • Partner programme / reseller signals (programme pages, "become a partner" forms — detected, never submitted).
+  • Press & funding via Google News RSS: rounds, investors, ARR / growth claims extracted.
+"""
+from __future__ import annotations
+
+import logging
+import re
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from urllib.parse import quote_plus, urljoin, urlparse
+
+from bs4 import BeautifulSoup
+
+from .. import db, facts, guard
+from ..config import Config, Entity
+from ..facts import Fact, Rule, ev
+
+log = logging.getLogger(__name__)
+MODULE = "money"
+
+MARKETPLACES = [
+    (r"aws\.amazon\.com/marketplace/(pp|seller-profile)", "AWS Marketplace"),
+    (r"azuremarketplace\.microsoft\.com|appsource\.microsoft\.com|marketplace\.microsoft\.com", "Microsoft Azure Marketplace"),
+    (r"console\.cloud\.google\.com/marketplace|cloud\.google\.com/marketplace", "Google Cloud Marketplace"),
+    (r"marketplace\.databricks\.com|databricks\.com/.*marketplace", "Databricks Marketplace"),
+    (r"app\.snowflake\.com/marketplace|snowflake\.com/.*marketplace", "Snowflake Marketplace"),
+    (r"marketplace\.redhat\.com|catalog\.redhat\.com", "Red Hat Marketplace"),
+    (r"splunkbase\.splunk\.com", "Splunkbase"), (r"store\.servicenow\.com", "ServiceNow Store"),
+    (r"crowdstrike\.com/marketplace|marketplace\.crowdstrike", "CrowdStrike Marketplace"),
+    (r"hub\.docker\.com/r/", "Docker Hub"), (r"huggingface\.co/", "Hugging Face"),
+    (r"oracle\.com/.*marketplace|cloudmarketplace\.oracle", "Oracle Cloud Marketplace"),
+    (r"carahsoft\.com", "Carahsoft (public-sector reseller)"),
+]
+MKT_RX = [(re.compile(p, re.I), n) for p, n in MARKETPLACES]
+PARTNER_PATH = re.compile(r"/(partners?|partner-program|alliances?|integrations?|ecosystem|resellers?|channel)(/|$)", re.I)
+PROGRAM_TEXT = re.compile(r"(become a partner|partner program|reseller|channel partner|mssp|msp program|referral partner|deal registration)", re.I)
+GENERIC = re.compile(r"^(logo|image|img|icon|partner|partners|customer|arrow|close|menu|button|background|hero|graphic|"
+                     r"vector|frame|group|rectangle|ellipse|untitled|\d+|[a-f0-9-]{12,})$", re.I)
+
+FUNDING_RX = re.compile(
+    r"(?:raises|raised|secures|secured|closes|closed|lands|announces|bags|nabs)\s+(?:a\s+)?\$?\s?(\d+(?:\.\d+)?)\s*(m|million|b|billion|bn)\b"
+    r"(?:[^.]{0,60}?(series\s+[a-f]\d?|seed|pre-seed|growth|strategic))?", re.I)
+SERIES_RX = re.compile(r"\b(series\s+[a-f]\d?|seed round|pre-seed|growth round)\b", re.I)
+LEAD_RX = re.compile(r"led by ([A-Z][\w&.'\- ]{2,60}?)(?:,| and | with |\.|$| to | as )")
+ARR_RX = [
+    re.compile(r"\$\s?(\d+(?:\.\d+)?)\s?(m|million|b|billion)\s+(?:in\s+)?(arr|annual recurring revenue|revenue run[- ]rate)", re.I),
+    re.compile(r"(\d+(?:\.\d+)?)\s?x\s+(arr|revenue|growth|year[- ]over[- ]year)", re.I),
+    re.compile(r"(arr|revenue)\s+(?:grew|growth of|increased|up)\s+(\d+(?:\.\d+)?\s?(?:%|x))", re.I),
+]
+ACQ_RX = re.compile(r"\b(acquires|acquired by|to acquire|acquisition of|merges with)\b", re.I)
+
+
+def _home_links(comp: Entity) -> tuple[list[str], str]:
+    base = f"https://{comp.domain}/"
+    try:
+        r = guard.get(base)
+        soup = BeautifulSoup(r.text, "html.parser")
+        return [urljoin(r.url, a["href"]) for a in soup.find_all("a", href=True)], r.text
+    except Exception:
+        return [], ""
+
+
+SKIP_HOSTS = re.compile(r"(linkedin|twitter|x\.com|facebook|youtube|instagram|github|google|apple|bit\.ly|t\.co|medium|"
+                        r"webflow|hubspot|hubspotusercontent[\w-]*|hsforms|cookieyes|vimeo|wistia|calendly|greenhouse|lever|ashby)\.", re.I)
+ICONISH = re.compile(r"^[A-Z][a-z]+(?:[A-Z][a-z]+){0,2}$")  # "ShieldCheck", "ArrowRight" (UI icon sets)
+
+
+def partner_names(html: str, page_url: str = "") -> list[str]:
+    """Names from logo alts, logo filenames and outbound partner links (alt text is often missing)."""
+    soup = BeautifulSoup(html, "html.parser")
+    names, trusted = set(), set()
+    own = (urlparse(page_url).hostname or "").removeprefix("www.")
+    for img in soup.find_all("img"):
+        alt = re.sub(r"\s*(logo|icon|image)\s*$", "", (img.get("alt") or "").strip(), flags=re.I)
+        alt = re.sub(r"^(logo of|logo)\s+", "", alt, flags=re.I).strip(" -|")
+        if 2 <= len(alt) <= 40 and not GENERIC.match(alt) and not re.search(r"\.(png|svg|jpe?g|webp)$", alt, re.I):
+            trusted.add(alt)
+            continue
+        src = img.get("src") or ""
+        stem = re.sub(r"%20", " ", src.rsplit("/", 1)[-1])
+        stem = re.sub(r"^[a-f0-9]{20,}_", "", stem)
+        stem = re.sub(r"\.(png|svg|jpe?g|webp|avif)$", "", stem, flags=re.I)
+        yr = re.match(r"^([A-Za-z][A-Za-z0-9]{2,20})[_-](?:19|20)\d\d\b", stem)
+        if yr:
+            trusted.add(yr.group(1))
+            continue
+        m = re.match(r"(?i)(?:logo[-_ ]?)?([a-z0-9][a-z0-9 &.+-]{1,30}?)[-_ ]?(?:logo|wordmark)(?:[-_ ].*)?$", stem)
+        if m and not GENERIC.match(m.group(1)) and m.group(1).lower() not in ("main", "site", "footer", "header", own.split(".")[0]):
+            n = m.group(1).replace("-", " ").replace("_", " ").strip()
+            trusted.add(n if any(c.isupper() for c in n[1:]) else n.title())
+    for a in soup.find_all("a", href=True):
+        h = (urlparse(a["href"]).hostname or "").removeprefix("www.")
+        if h and own and not h.endswith(own) and not SKIP_HOSTS.search(h + ".") and (a.find("img") or len(a.get_text(strip=True)) < 30):
+            label = a.get_text(" ", strip=True)
+            names.add(label if 2 <= len(label) <= 30 and not GENERIC.match(label) else h.split(".")[-2].title())
+    names = {n for n in names if not ICONISH.match(n.replace(" ", "")) or len(n.split()) > 1 or n.isupper()}
+    return sorted(trusted | {n for n in names if n.lower() not in {t.lower() for t in trusted}})
+
+
+def news(comp: Entity) -> list[dict]:
+    q = comp.news_query or f'"{re.sub(r"[()]", "", comp.name.split("(")[0]).strip()}"'
+    url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl=en-US&gl=US&ceid=US:en"
+    r = guard.get(url, respect_robots=False)
+    root = ET.fromstring(r.content)
+    out = []
+    for it in root.iter("item"):
+        title = (it.findtext("title") or "").strip()
+        link = (it.findtext("link") or "").strip()
+        src = (it.find("source").text if it.find("source") is not None else "") or ""
+        try:
+            pub = parsedate_to_datetime(it.findtext("pubDate") or "").isoformat()
+        except (TypeError, ValueError):
+            pub = None
+        desc = BeautifulSoup(it.findtext("description") or "", "html.parser").get_text(" ")
+        out.append({"title": title, "url": link, "source": src, "published": pub, "text": f"{title}. {desc}", "feed": url})
+    return out
+
+
+def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], list[Fact], list[Fact]]:
+    rounds, arr, acq = {}, {}, {}
+    for n in items:
+        t = n["text"]
+        if not names_rx.search(t):
+            continue
+        e = [ev(n["url"], f"news coverage ({n['source'] or 'Google News'})", n["title"][:140])]
+        m = FUNDING_RX.search(t)
+        if m:
+            amt = float(m.group(1)) * (1000 if m.group(2).lower().startswith("b") else 1)
+            series = (m.group(3) or (SERIES_RX.search(t).group(1) if SERIES_RX.search(t) else "") or "").title()
+            key = f"{series or 'round'}:{amt:g}M"
+            lead = LEAD_RX.search(t)
+            r = rounds.setdefault(key, {"amount_musd": amt, "series": series or None, "investors": set(), "date": n["published"],
+                                        "sources": [], "evidence": []})
+            if lead:
+                r["investors"].add(lead.group(1).strip())
+            r["sources"].append(n["source"])
+            r["evidence"] += e
+            if n["published"] and (not r["date"] or n["published"] < r["date"]):
+                r["date"] = n["published"]
+        for rx in ARR_RX:
+            mm = rx.search(t)
+            if mm:
+                claim = mm.group(0).strip()
+                arr.setdefault(claim.lower(), {"claim": claim, "headline": n["title"], "date": n["published"], "evidence": e})
+        if ACQ_RX.search(t):
+            acq.setdefault(n["title"][:120], {"headline": n["title"], "date": n["published"], "evidence": e})
+    merged: dict[str, dict] = {}
+    for k, v in sorted(rounds.items(), key=lambda kv: kv[1]["series"] is None):
+        twin = next((mk for mk, mv in merged.items() if mv["amount_musd"] == v["amount_musd"] and
+                     abs((datetime.fromisoformat(mv["date"] or "2000-01-01T00:00:00+00:00") -
+                          datetime.fromisoformat(v["date"] or "2000-01-01T00:00:00+00:00")).days) < 120), None)
+        if twin:
+            merged[twin]["investors"] |= v["investors"]; merged[twin]["sources"] += v["sources"]; merged[twin]["evidence"] += v["evidence"]
+        else:
+            merged[k] = v
+    rounds = merged
+    fr = [Fact("funding", k, f"{v['series'] or 'Funding'} · ${v['amount_musd']:g}M", {
+        "amount_musd": v["amount_musd"], "series": v["series"], "investors": sorted(v["investors"]), "date": v["date"],
+        "sources": sorted(set(filter(None, v["sources"])))[:6]},
+        facts.CONFIRMED if len(set(v["sources"])) >= 2 else facts.LIKELY, v["evidence"][:4]) for k, v in rounds.items()]
+    ar = [Fact("arr_claim", k[:150], v["claim"], {"headline": v["headline"], "date": v["date"]}, facts.LIKELY, v["evidence"]) for k, v in arr.items()]
+    aq = [Fact("m_and_a", k, v["headline"], {"date": v["date"]}, facts.LIKELY, v["evidence"]) for k, v in acq.items()]
+    return fr, ar, aq
+
+
+RULES = {
+    "partner": Rule(severity="medium", title_add=lambda f: f"New partner listed: {f.label}", title_remove=lambda r: f"Partner removed: {r['label']}"),
+    "marketplace": Rule(severity="high", title_add=lambda f: f"New marketplace listing: {f.label}",
+                        so_what=lambda f: "Marketplace listings let buyers burn committed cloud spend — a big enterprise procurement accelerator."),
+    "partner_program": Rule(severity="high", title_add=lambda f: f"Partner programme signal: {f.label}",
+                            so_what=lambda f: "A formal channel/reseller motion is being built."),
+    "press": Rule(severity="low", on_remove=False, title_add=lambda f: f"In the news: {f.label}"),
+    "funding": Rule(severity="critical", on_remove=False, title_add=lambda f: f"Funding: {f.label}",
+                    so_what=lambda f: "Fresh capital usually means hiring sprees, bigger launches and aggressive pricing in the next 2–3 quarters."),
+    "arr_claim": Rule(severity="high", on_remove=False, title_add=lambda f: f"Growth claim: {f.label}"),
+    "m_and_a": Rule(severity="critical", on_remove=False, title_add=lambda f: f"M&A: {f.label}"),
+}
+
+
+def run_one(con, comp: Entity) -> dict:
+    obs: list[Fact] = []
+    links, home_html = _home_links(comp)
+    own = comp.domain.removeprefix("www.")
+    ppages = list(comp.partner_pages) + [u for u in links if (urlparse(u).hostname or "").endswith(own) and PARTNER_PATH.search(urlparse(u).path)]
+    ppages = list(dict.fromkeys(u.split("#")[0].rstrip("/") for u in ppages))[:4]
+    mkt_links = [u for u in links if any(rx.search(u) for rx, _ in MKT_RX)] + list(comp.marketplaces)
+    names_all: set[str] = set()
+    for pu in ppages:
+        try:
+            r = guard.get(pu)
+        except Exception:
+            continue
+        if not r.ok:
+            continue
+        for n in partner_names(r.text, pu):
+            names_all.add(n)
+            obs.append(Fact("partner", n.lower(), n, {"page": pu}, facts.LIKELY, [ev(pu, "partner page logo/link extraction")]))
+        soup = BeautifulSoup(r.text, "html.parser")
+        mkt_links += [urljoin(pu, a["href"]) for a in soup.find_all("a", href=True) if any(rx.search(a["href"]) for rx, _ in MKT_RX)]
+        for m in set(PROGRAM_TEXT.findall(soup.get_text(" "))):
+            obs.append(Fact("partner_program", m.lower(), m.title(), {"page": pu}, facts.CONFIRMED, [ev(pu, "partner page copy")]))
+        if soup.find("form") and re.search(r"partner|reseller", pu, re.I):
+            obs.append(Fact("partner_program", "application form", "Partner application form", {"page": pu}, facts.CONFIRMED,
+                            [ev(pu, "form detected on partner page (not submitted)")]))
+    for u in dict.fromkeys(mkt_links):
+        name = next(n for rx, n in MKT_RX if rx.search(u))
+        obs.append(Fact("marketplace", u.split("?")[0], name, {"platform": name, "url": u}, facts.CONFIRMED,
+                        [ev(u, "link from their own site / configured listing")]))
+    try:
+        items = news(comp)
+    except Exception as e:
+        log.info("news failed for %s: %s", comp.id, e)
+        items = []
+    rx = comp.mention_regex()
+    for n in items[:60]:
+        if rx.search(n["title"]):
+            obs.append(Fact("press", n["url"][:300], n["title"][:200], {"source": n["source"], "published": n["published"]},
+                            facts.CONFIRMED, [ev(n["url"], "Google News RSS")]))
+    fr, ar, aq = extract_money(items, rx)
+    obs += fr + ar + aq
+    kinds = ["partner", "marketplace", "partner_program", "funding", "arr_claim", "m_and_a"]
+    if items:
+        kinds.append("press")
+    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES)
+    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    facts.metric(con, comp.id, MODULE, "partners", month, len(names_all))
+    facts.metric(con, comp.id, MODULE, "marketplaces", month, len({f.label for f in obs if f.kind == "marketplace"}))
+    stats.update(partner_pages=ppages, partners=len(names_all), news=len(items), funding=len(fr))
+    return stats
+
+
+def run(cfg: Config, only: str | None = None) -> dict:
+    out = {}
+    for comp in cfg.competitors:
+        if only and comp.id != only:
+            continue
+        try:
+            with db.connect() as con:
+                out[comp.id] = run_one(con, comp)
+        except Exception as e:
+            log.exception("money failed for %s", comp.id)
+            out[comp.id] = {"error": str(e)[:200]}
+        log.info("money %-20s %s", comp.id, out[comp.id])
+    return out

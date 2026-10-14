@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-const TOKEN_KEY = "sentinel-token";
+const WS_KEY = "sentinel-ws";
+const tokenKey = (ws: string) => `sentinel-token:${ws}`;
 const cache = new Map<string, unknown>();
 let version = 0;
 const listeners = new Set<() => void>();
 
-export function getToken() {
-  try { return localStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; }
+const read = (k: string) => { try { return localStorage.getItem(k) || ""; } catch { return ""; } };
+const write = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } };
+
+export const workspace = () => read(WS_KEY) || "default";
+export function setWorkspace(ws: string) {
+  write(WS_KEY, ws);
+  cache.clear();
+  invalidate();
 }
+export const getToken = () => read(tokenKey(workspace())) || read("sentinel-token");
 export function setToken(t: string) {
-  try { localStorage.setItem(TOKEN_KEY, t); } catch { /* storage unavailable */ }
+  write(tokenKey(workspace()), t);
   invalidate();
 }
 
@@ -17,9 +25,16 @@ export class AuthError extends Error {}
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const t = getToken();
-  const res = await fetch(path, { ...init, headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}), ...init?.headers } });
+  const res = await fetch(path, {
+    ...init,
+    headers: { "X-Workspace": workspace(), ...(t ? { Authorization: `Bearer ${t}` } : {}), ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers },
+  });
   if (res.status === 401) throw new AuthError("unauthorized");
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try { msg = (await res.json()).detail ?? msg; } catch { /* not json */ }
+    throw new Error(msg);
+  }
   const ct = res.headers.get("content-type") || "";
   return (ct.includes("json") ? res.json() : res.text()) as Promise<T>;
 }
@@ -31,25 +46,31 @@ export function invalidate() {
 }
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
 
-export function useApi<T>(path: string | null) {
+export function useApi<T>(path: string | null, opts: { poll?: number } = {}) {
   const v = useSyncExternalStore(subscribe, () => version);
-  const [data, setData] = useState<T | undefined>(() => (path ? (cache.get(path) as T) : undefined));
+  const key = path ? `${workspace()}|${path}` : null;
+  const [data, setData] = useState<T | undefined>(() => (key ? (cache.get(key) as T) : undefined));
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(!data);
-  const current = useRef(path);
-  current.current = path;
+  const current = useRef(key);
+  current.current = key;
 
   const load = useCallback(() => {
-    if (!path) return;
-    if (cache.has(path)) setData(cache.get(path) as T);
-    setLoading(!cache.has(path));
+    if (!path || !key) return;
+    if (cache.has(key)) setData(cache.get(key) as T);
+    setLoading(!cache.has(key));
     api<T>(path)
-      .then((d) => { cache.set(path, d); if (current.current === path) { setData(d); setError(null); } })
-      .catch((e) => current.current === path && setError(e))
-      .finally(() => current.current === path && setLoading(false));
-  }, [path]);
+      .then((d) => { cache.set(key, d); if (current.current === key) { setData(d); setError(null); } })
+      .catch((e) => current.current === key && setError(e))
+      .finally(() => current.current === key && setLoading(false));
+  }, [path, key]);
 
   useEffect(load, [load, v]);
+  useEffect(() => {
+    if (!opts.poll) return;
+    const t = window.setInterval(load, opts.poll);
+    return () => window.clearInterval(t);
+  }, [load, opts.poll]);
   return { data, error, loading, reload: load };
 }
 

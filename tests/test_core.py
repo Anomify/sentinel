@@ -1,16 +1,4 @@
-import os
 from datetime import datetime
-
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def tmp_data(tmp_path, monkeypatch):
-    monkeypatch.setenv("SENTINEL_DEMO", "")
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    import cimonitor.db as db
-    monkeypatch.setattr(db, "DATA_DIR", tmp_path)
-    yield
 
 
 def cfg():
@@ -30,7 +18,7 @@ class FakeFetcher:
     def __init__(self, html):
         self.html = html
 
-    def get(self, url, render=True):
+    def get(self, url, render=True, screenshot=None):
         from cimonitor.collectors.fetch import Fetched
         return Fetched(url, 200, self.html)
 

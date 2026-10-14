@@ -1,7 +1,7 @@
 export type Severity = "critical" | "high" | "medium" | "low" | "noise";
 
 export interface Entity {
-  id: string; name: string; color: string; tier: string; domains: string[]; aliases: string[]; is_brand: boolean;
+  id: string; name: string; color: string; tier: string; domains: string[]; aliases: string[]; is_brand: boolean; source?: string;
   pages: { kind: string; url: string; focus?: string | null }[];
   feeds: { type: string; url: string; filter?: string | null; link_pattern?: string | null }[];
 }
@@ -18,6 +18,11 @@ export interface Meta {
   demo: boolean;
   counts: Record<string, number>;
   auth: boolean;
+  workspace: string;
+  workspaces: { slug: string; name: string }[];
+  backend: string;
+  policy: { title: string; detail: string }[];
+  modules: Record<string, string>;
 }
 
 export interface Change {
@@ -28,8 +33,8 @@ export interface Change {
 }
 
 export interface ChangeDetail extends Change {
-  before: { fetched_at: string; title: string; meta: string } | null;
-  after: { fetched_at: string; title: string; meta: string } | null;
+  before: { fetched_at: string; title: string; meta: string; screenshot?: string } | null;
+  after: { fetched_at: string; title: string; meta: string; screenshot?: string } | null;
   diff: { t: "eq" | "add" | "del" | "gap"; s: string }[];
 }
 
@@ -44,14 +49,16 @@ export interface Overview {
   days: number;
   kpis: {
     changes: number; critical: number; pricing: number; posts: number; changes_prev: number;
-    ai_share: number | null; ai_share_prev: number | null; ai_gaps: number; pages: number; feeds: number; questions: number;
+    ai_share: number | null; ai_share_prev: number | null; ai_gaps: number; pages: number; feeds: number; questions: number; launch_max: number; facts: number;
   };
   competitors: {
     id: string; name: string; color: string; tier: string; changes: number; critical: number; posts: number;
-    heat: number; heat_delta: number; last_checked: string | null; ai_share: number | null; latest: Change | null;
+    heat: number; heat_delta: number; ai_share: number | null; latest: SignalEvent | null; launch: number; modules: Record<string, number>;
   }[];
   timeline: ({ date: string } & Record<string, number | string>)[];
-  top_changes: Change[];
+  top_events: SignalEvent[];
+  by_module: Record<string, number>;
+  launch: Record<string, Launch>;
   recent_posts: Post[];
   share: Share[];
   last_run: { job: string; finished_at: string; status: string } | null;
@@ -66,6 +73,8 @@ export interface Visibility {
   matrix: { id: string; text: string; category: string; cells: Record<string, Record<string, number | null>> }[];
   trend: ({ run_id: string; date: string } & Record<string, number | string>)[];
   citations: { domain: string; count: number }[];
+  source_gaps: { domain: string; count: number }[];
+  accuracy: { score: number; n: number; verdicts: Record<string, number>; issues: string[] } | null;
   gaps: { id: string; text: string; category: string; competitors: string[] }[];
 }
 
@@ -77,3 +86,27 @@ export interface AiAnswer {
 }
 
 export interface Run { id: number; job: string; started_at: string; finished_at: string | null; status: string; stats: any; error: string | null }
+
+export interface Evidence { url?: string | null; observed_at?: string; method?: string; note?: string; screenshot?: string }
+
+export interface SignalEvent {
+  id: number; competitor: string; module: string; kind: string; severity: Severity; title: string; detail: string | null;
+  so_what: string | null; confidence: string; evidence: Evidence[]; data: Record<string, any>; detected_at: string;
+  acknowledged: number; change_id: number | null; change?: ChangeDetail;
+}
+
+export interface Fact {
+  id: number; competitor: string; module: string; kind: string; key: string; label: string; value: Record<string, any>;
+  confidence: string; evidence: Evidence[]; first_seen: string; last_seen: string; removed_at: string | null;
+}
+
+export interface Finding {
+  id: string; section: string; title: string; detail: string; confidence: string; evidence: Evidence[];
+  vs_us: string | null; vs_us_by?: string; first_seen: string | null; data: Record<string, any>; weight: number;
+}
+export interface DeepDive {
+  competitor: string; name: string; domain: string; generated_at: string;
+  summary: { label: string; value: string }[]; sections: { id: string; title: string; findings: Finding[] }[];
+  counts: Record<string, number>;
+}
+export interface Launch { probability: number; horizon: string; signals: { signal: string; title: string; at: string; weight: number }[]; n: number }

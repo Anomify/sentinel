@@ -6,9 +6,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 engines:
-  perplexity: { enabled: true,  model: "sonar" }          # PERPLEXITY_API_KEY
-  openai:     { enabled: true,  model: "gpt-5-mini" }     # OPENAI_API_KEY (Responses API + web_search)
-  claude:     { enabled: false, model: "claude-opus-5-5" }    # ANTHROPIC_API_KEY (web_search tool)
+  perplexity: { enabled: true,  model: "sonar" }               # PERPLEXITY_API_KEY
+  openai:     { enabled: true,  model: "gpt-5-mini" }          # OPENAI_API_KEY (ChatGPT: Responses API + web_search)
+  gemini:     { enabled: true,  model: "gemini-2.5-flash" }    # GEMINI_API_KEY (Google Search grounding)
+  google_aio: { enabled: true,  model: "google-ai-overview" }  # SERPAPI_API_KEY (Google AI Overviews)
+  claude:     { enabled: false, model: "claude-opus-5-5" }     # ANTHROPIC_API_KEY (web_search tool)
 
 questions:
   - { id: q01, category: Category,   text: "What are the best AI security platforms for enterprises?" }

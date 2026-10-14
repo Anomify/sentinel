@@ -92,6 +92,23 @@ def _clean_title(a) -> str:
     return t[:200]
 
 
+CTYPES = [  # content-engine classification from URL + title
+    ("Podcast", r"podcast|episode|\bep\.? ?\d"), ("Webinar", r"webinar|on-demand|livestream|fireside"),
+    ("Report", r"report|whitepaper|white paper|e-?book|guide to|state of|landscape|benchmark|survey"),
+    ("Research", r"/research/|advisory|cve-|vulnerabilit|exploit|disclos|attack technique|novel|we found|discovered"),
+    ("Case study", r"case[- ]stud|customer story|how .+ (uses|secured)"),
+    ("Event", r"/events?/|summit|conference|rsa|black hat|def con|booth|meet us"),
+    ("Press", r"/press|/news/|announces|launches|partners with|appoints|raises|funding|names .+ (ceo|cro|cmo)"),
+    ("Glossary / explainer", r"/glossary/|what is |explained|101|definition"),
+]
+_CT = [(n, re.compile(r, re.I)) for n, r in CTYPES]
+
+
+def ctype(url: str, title: str) -> str:
+    s = f"{url} {title}"
+    return next((n for n, rx in _CT if rx.search(s)), "Blog")
+
+
 def topics(cfg: Config, text: str) -> list[str]:
     low = text.lower()
     return [t for t in cfg.watch_terms if t.lower() in low]
@@ -126,12 +143,12 @@ def run(cfg: Config, only: str | None = None) -> dict:
                     if not i["guid"]:
                         continue
                     cur = con.execute(
-                        "INSERT OR IGNORE INTO posts (competitor,guid,title,url,published,summary,first_seen,topics) "
-                        "VALUES (?,?,?,?,?,?,?,?)",
+                        "INSERT OR IGNORE INTO posts (competitor,guid,title,url,published,summary,first_seen,topics,ctype) "
+                        "VALUES (?,?,?,?,?,?,?,?,?)",
                         (comp.id, i["guid"], i["title"], i["url"], i["published"], i["summary"],
                          # first sighting of a whole feed = backfill; date it by publish date so it isn't "new this week"
                          (i["published"] or "1970-01-01") if baseline else db.now(),
-                         json.dumps(topics(cfg, i["title"] + " " + i["summary"]))))
+                         json.dumps(topics(cfg, i["title"] + " " + i["summary"])), ctype(i["url"], i["title"])))
                     new += cur.rowcount if not baseline else 0
                 log.info("feed %-8s %3d items  %s", feed.type, len(items), feed.url)
     return {"new_posts": new, "errors": errors}

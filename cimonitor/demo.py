@@ -116,11 +116,14 @@ def seed(cfg: Config) -> dict:
                                              "fetched_at": "2000-01-01T00:00:00+00:00", "text": "\n".join(
                                                  ["Navigation", "Platform", *add, "Customers", "Resources"])})
             when = now - timedelta(days=[0.3, 1.2, 2.5, 3.1, 4.8, 6.2, 8.5, 12, 16, 23][i % 10], hours=rnd.randint(0, 5))
-            db.insert(con, "changes", {
+            cid_ = db.insert(con, "changes", {
                 "competitor": cid, "url": url, "kind": kind, "detected_at": when.isoformat(timespec="seconds"),
                 "severity": sev, "category": cat, "headline": head, "summary": summ, "so_what": sw, "action": act,
                 "added": add, "removed": rem, "signals": sig, "change_ratio": round(rnd.uniform(0.03, 0.3), 3),
                 "prev_snapshot": a, "snapshot": b})
+            db.insert(con, "events", {"competitor": cid, "module": "pages", "kind": "page_change", "severity": sev, "title": head,
+                                      "detail": summ, "so_what": sw, "confidence": "confirmed", "evidence": [{"url": url, "observed_at": when.isoformat(), "method": "illustrative demo"}],
+                                      "data": {"category": cat, "action": act}, "detected_at": when.isoformat(timespec="seconds"), "change_id": cid_})
         # current snapshots last, so each page's "latest" is a full one
         for c in cfg.competitors:
             for pg in c.pages:

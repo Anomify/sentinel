@@ -1,11 +1,13 @@
 import { CheckCircle2, Circle, Clock, ExternalLink, Rss } from "lucide-react";
-import { useApi } from "../lib/api";
+import { useState } from "react";
+import { api, invalidate, setWorkspace, useApi } from "../lib/api";
 import type { Run } from "../lib/types";
 import { ago, host, path, until } from "../lib/format";
-import { Card, CardHeader, cx, EntityDot, PageHeader, useMeta } from "../components/ui";
+import { Button, Card, CardHeader, cx, EntityDot, PageHeader, useMeta } from "../components/ui";
+import { useToast } from "../components/shell";
 
-const ENGINE_LABEL: Record<string, string> = { perplexity: "Perplexity", openai: "ChatGPT (OpenAI)", claude: "Claude (Anthropic)" };
-const ENV: Record<string, string> = { perplexity: "PERPLEXITY_API_KEY", openai: "OPENAI_API_KEY", claude: "ANTHROPIC_API_KEY" };
+const ENGINE_LABEL: Record<string, string> = { perplexity: "Perplexity", openai: "ChatGPT (OpenAI)", gemini: "Gemini (Google)", google_aio: "Google AI Overviews (SerpAPI)", claude: "Claude (Anthropic)" };
+const ENV: Record<string, string> = { perplexity: "PERPLEXITY_API_KEY", openai: "OPENAI_API_KEY", gemini: "GEMINI_API_KEY", google_aio: "SERPAPI_API_KEY", claude: "ANTHROPIC_API_KEY" };
 
 export default function Settings() {
   const meta = useMeta();
@@ -20,7 +22,7 @@ export default function Settings() {
           <div className="divide-y divide-line border-t border-line">
             {meta.schedule.map((s) => (
               <div key={s.job} className="flex items-center gap-4 px-5 py-3 text-[13px]">
-                <span className="w-16 font-medium capitalize text-ink">{s.job}</span>
+                <span className="w-44 text-ink">{(s as any).label ?? s.job}</span>
                 <code className="font-mono text-[12px] text-ink-2">{s.spec}</code>
                 <span className="ml-auto text-[12px] text-ink-3">last {ago(s.last)}</span>
                 <span className={cx("w-20 text-right text-[12px]", s.running ? "text-accent-ink" : "text-ink-2")}>{s.running ? "running" : `next ${until(s.next)}`}</span>
@@ -36,6 +38,8 @@ export default function Settings() {
             <Row label="Change analysis" detail="Claude explains each change and writes the brief" on={meta.analysis} env="ANTHROPIC_API_KEY" />
             <Row label="Slack digest" detail="Incoming webhook" on={meta.channels.slack} env="SLACK_WEBHOOK_URL" />
             <Row label="Email digest" detail="Any SMTP provider" on={meta.channels.email} env="SMTP_HOST, DIGEST_TO" />
+            <Row label="Google ads library" detail="BigQuery public dataset (official)" on={false} env="GOOGLE_APPLICATION_CREDENTIALS" />
+            <Row label="Meta ads library" detail="Ad Library API (official)" on={false} env="META_ADS_TOKEN" />
           </div>
         </Card>
 
@@ -46,7 +50,7 @@ export default function Settings() {
               <div key={e.id} className="grid gap-3 px-5 py-4 md:grid-cols-[200px_1fr_1fr]">
                 <div className="flex items-start gap-2">
                   <EntityDot color={e.color} size={9} />
-                  <div className="-mt-0.5"><div className="text-[13px] font-medium text-ink">{e.name}</div><div className="text-[11.5px] capitalize text-ink-3">{e.tier}</div></div>
+                  <div className="-mt-0.5"><div className="text-[13px] text-ink">{e.name}</div><div className="text-[11.5px] capitalize text-ink-3">{e.tier}</div></div>
                 </div>
                 <div className="space-y-1">
                   {e.pages.map((p) => (
@@ -69,6 +73,7 @@ export default function Settings() {
           </div>
         </Card>
 
+        <Workspaces />
         <Card>
           <CardHeader title="Target questions" sub={`config/questions.yaml · ${meta.questions.length} questions`} />
           <ol className="max-h-[420px] divide-y divide-line overflow-y-auto border-t border-line">
@@ -97,6 +102,43 @@ export default function Settings() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function Workspaces() {
+  const meta = useMeta();
+  const toast = useToast();
+  const [slug, setSlug] = useState("");
+  const [name, setName] = useState("");
+  const [token, setTok] = useState<string | null>(null);
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const r = await api<{ token: string }>("/api/workspaces", { method: "POST", body: JSON.stringify({ slug, name }) });
+      setTok(r.token); setSlug(""); setName(""); invalidate();
+    } catch (err) { toast({ title: "Couldn't create workspace", body: String((err as Error).message), tone: "err" }); }
+  };
+  return (
+    <Card className="xl:col-span-2">
+      <CardHeader title="Workspaces" sub={`Each workspace has its own watchlist, questions and database (${meta.backend}). Access is per-workspace token.`} />
+      <div className="grid gap-6 border-t border-line p-6 lg:grid-cols-2">
+        <div className="space-y-1">
+          {meta.workspaces.map((w) => (
+            <button key={w.slug} onClick={() => setWorkspace(w.slug)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] hover:bg-hover">
+              <span className="text-ink">{w.name}</span><span className="text-ink-3">{w.slug === meta.workspace ? "current" : w.slug}</span>
+            </button>
+          ))}
+        </div>
+        <form onSubmit={create} className="space-y-2">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Workspace name (e.g. client or product line)" className="h-10 w-full rounded-full bg-sunken px-4 text-[13px] outline-none" />
+          <div className="flex gap-2">
+            <input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} placeholder="slug" className="h-10 flex-1 rounded-full bg-sunken px-4 text-[13px] outline-none" />
+            <Button variant="primary" type="submit" disabled={!slug || !name}>Create</Button>
+          </div>
+          {token && <div className="rounded-xl bg-accent-soft p-3 text-[12px] text-ink">Access token (shown once): <code className="break-all font-mono">{token}</code></div>}
+        </form>
+      </div>
+    </Card>
   );
 }
 

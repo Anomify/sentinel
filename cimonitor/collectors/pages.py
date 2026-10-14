@@ -8,7 +8,7 @@ import re
 
 from bs4 import BeautifulSoup
 
-from .. import db, llm
+from .. import db, facts, llm
 from ..config import Config, Entity, Page
 from .fetch import Fetcher
 
@@ -19,6 +19,50 @@ PRICE_RE = re.compile(
     r"(?:\s?(?:/|per)\s?(?:mo(?:nth)?|yr|year|user|seat|request|call|1[,.]?000|million|M|K|GB|hour|text record|unit)[\w ]{0,20})?",
     re.I,
 )
+# Module 9 — positioning vocabulary. Counts per page snapshot → buyer hierarchy & focus over time.
+PERSONAS = {
+    "CISO / security leaders": r"\bcisos?\b|chief information security|security leaders?|head of security|security executives?",
+    "SOC / security teams": r"\bsoc\b|security (teams?|operations|analysts?)|incident response|threat hunters?",
+    "AI / ML leaders": r"(ai|ml) leaders?|heads? of (ai|ml)|chief (ai|data) officer|\bcaio\b|\bcdo\b|ai (teams?|governance leads?)",
+    "Data scientists / ML engineers": r"data scientists?|ml engineers?|machine learning engineers?|mlops",
+    "Developers / AppSec": r"\bdevelopers?\b|appsec|application security|engineering teams?|devsecops|\bbuilders?\b",
+    "CIO / CTO / IT": r"\bcios?\b|\bctos?\b|chief (information|technology) officer|\bit (leaders?|teams?)\b",
+    "GRC / compliance": r"\bgrc\b|compliance (teams?|officers?|leaders?)|risk (teams?|officers?|leaders?)|governance, risk",
+    "Product leaders": r"product (leaders?|teams?|managers?)",
+    "Board / executives": r"\bboards?\b(?! of)|c-suite|executives?",
+}
+INDUSTRIES = {
+    "Financial services": r"financial services|banks?|banking|fintech|insurance|insurers?|capital markets",
+    "Healthcare & life sciences": r"healthcare|health care|life sciences|pharma|hospitals?|clinical",
+    "Government & public sector": r"government|public sector|federal|state and local|\bdod\b|defen[cs]e|agencies|fedramp",
+    "Technology & SaaS": r"\bsaas\b|software companies|tech companies|technology companies",
+    "Retail & e-commerce": r"retail|e-?commerce",
+    "Manufacturing & industrial": r"manufacturing|industrial|automotive",
+    "Energy & utilities": r"energy|utilities|oil and gas",
+    "Telecom & media": r"telecom|media|entertainment",
+}
+USE_CASES = {
+    "Prompt injection / jailbreaks": r"prompt injection|jailbreak",
+    "Agent / MCP security": r"agent(ic)? security|securing (ai )?agents|\bmcp\b|agent harness|autonomous (ai )?agents?",
+    "Model scanning / supply chain": r"model scanning|supply chain|malicious models?|model (integrity|provenance)|ai-?bom|aibom",
+    "Red teaming / attack simulation": r"red[- ]team|attack simulation|adversarial testing|penetration testing",
+    "Runtime protection / guardrails": r"runtime (protection|security|defen[cs]e)|guardrails?|firewall",
+    "Data leakage / DLP": r"data (leakage|loss|exfiltration)|\bdlp\b|\bpii\b|sensitive data",
+    "AI discovery / shadow AI": r"shadow ai|ai (discovery|inventory)|discover (all )?(ai|models)",
+    "Governance & compliance": r"governance|eu ai act|nist ai rmf|iso 42001|compliance",
+    "AI-SPM / posture": r"ai-?spm|posture management",
+    "Content safety / moderation": r"content (safety|moderation)|harmful content|toxicity|brand safety|trust (and|&) safety",
+}
+_P_RX = {k: re.compile(v, re.I) for k, v in PERSONAS.items()}
+_I_RX = {k: re.compile(v, re.I) for k, v in INDUSTRIES.items()}
+_U_RX = {k: re.compile(v, re.I) for k, v in USE_CASES.items()}
+
+
+def vocab(text: str) -> dict:
+    count = lambda rx: {k: len(r.findall(text)) for k, r in rx.items() if r.search(text)}
+    return {"personas": count(_P_RX), "industries": count(_I_RX), "use_cases": count(_U_RX)}
+
+
 CTA_RE = re.compile(r"(?i)\b(book|request|get|start|try|schedule|talk|contact|see|watch|download|sign up|join)\b")
 NOISE_TAGS = ["script", "style", "noscript", "svg", "iframe", "template"]
 
@@ -74,7 +118,7 @@ def extract(html: str, cfg: Config, focus: str | None = None) -> dict:
     return {
         "title": title, "meta": meta, "text": text,
         "signals": {"h1": h1, "headings": h2, "ctas": ctas, "prices": prices, "terms": terms,
-                    "words": len(text.split())},
+                    "words": len(text.split()), **vocab(text)},
     }
 
 
@@ -98,6 +142,10 @@ def signal_delta(old: dict, new: dict, old_meta: dict, new_meta: dict) -> dict:
             shifts[t] = {"from": o, "to": n}
     if shifts:
         d["terms"] = shifts
+    for k in ("personas", "industries", "use_cases"):
+        a, b = set((old.get(k) or {}).keys()), set((new.get(k) or {}).keys())
+        if a != b and old.get(k) is not None:
+            d[k] = {"removed": sorted(a - b), "added": sorted(b - a)}
     return d
 
 
@@ -112,6 +160,10 @@ def heuristic(kind: str, delta: dict, ratio: float) -> tuple[str, str, str]:
         return "high", "messaging", f"New hero headline: “{new[:70]}”"
     if "title" in delta or "meta" in delta:
         return "medium", "positioning", "Page title / meta description rewritten"
+    if "personas" in delta and delta["personas"]["added"]:
+        return "high", "positioning", f"Now addressing {', '.join(delta['personas']['added'][:2])}"
+    if "industries" in delta and delta["industries"]["added"]:
+        return "medium", "positioning", f"New industry focus: {', '.join(delta['industries']['added'][:2])}"
     if "terms" in delta:
         new_terms = [t for t, v in delta["terms"].items() if v["from"] == 0]
         if new_terms:
@@ -124,7 +176,7 @@ def heuristic(kind: str, delta: dict, ratio: float) -> tuple[str, str, str]:
 
 
 def check_page(con, cfg: Config, fetcher: Fetcher, comp: Entity, page: Page) -> dict:
-    f = fetcher.get(page.url)
+    f = fetcher.get(page.url, screenshot=f"{comp.id}-page")
     if f.error or not f.html:
         db.insert(con, "snapshots", {"competitor": comp.id, "url": page.url, "kind": page.kind, "fetched_at": db.now(),
                                      "status": f.status, "error": f.error or "empty"})
@@ -141,6 +193,7 @@ def check_page(con, cfg: Config, fetcher: Fetcher, comp: Entity, page: Page) -> 
     sid = db.insert(con, "snapshots", {
         "competitor": comp.id, "url": page.url, "kind": page.kind, "fetched_at": db.now(), "status": f.status,
         "hash": h, "title": ex["title"], "meta": ex["meta"], "signals": ex["signals"], "text": ex["text"],
+        "screenshot": f.screenshot,
     })
     if not prev:
         return {"url": page.url, "status": "baseline"}
@@ -168,12 +221,15 @@ def check_page(con, cfg: Config, fetcher: Fetcher, comp: Entity, page: Page) -> 
         if severity == "noise":
             return {"url": page.url, "status": "noise"}
 
-    db.insert(con, "changes", {
+    cid = db.insert(con, "changes", {
         "competitor": comp.id, "url": page.url, "kind": page.kind, "detected_at": db.now(),
         "severity": severity, "category": category, "headline": headline, "summary": summary,
         "so_what": so_what, "action": action, "added": added[:200], "removed": removed[:200],
         "signals": delta, "change_ratio": round(ratio, 4), "prev_snapshot": prev["id"], "snapshot": sid,
     })
+    facts.emit(con, comp.id, "pages", "page_change", severity, headline, detail=summary, so_what=so_what,
+               confidence=facts.CONFIRMED, evidence=[facts.ev(page.url, "page snapshot diff", f"{ratio:.0%} changed", f.screenshot)],
+               data={"category": category, "kind": page.kind, "action": action}, change_id=cid)
     return {"url": page.url, "status": "changed", "severity": severity}
 
 
@@ -183,7 +239,7 @@ def run(cfg: Config, only: str | None = None) -> dict:
         for comp in cfg.competitors:
             if only and comp.id != only:
                 continue
-            for page in comp.pages:
+            for page in comp.pages or ([Page("homepage", f"https://{comp.domain}/")] if comp.domain else []):
                 try:
                     r = check_page(con, cfg, fetcher, comp, page)
                 except Exception as e:

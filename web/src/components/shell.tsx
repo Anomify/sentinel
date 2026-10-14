@@ -3,12 +3,11 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Command } from "cmdk";
 import {
-  Activity, Bot, Check, ChevronDown, FileText, Globe, LayoutDashboard, Loader2, Mail, Menu, Moon, Newspaper,
-  Play, Radar, Search, Settings, Sun, Swords, X, Zap,
+  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, FileSearch, Globe, Layers, LayoutGrid, Loader2, Mail,
+  Menu, Network, Newspaper, Play, Rocket, Search, Settings, ShieldCheck, Swords, X,
 } from "lucide-react";
-import { api, invalidate, runJob } from "../lib/api";
+import { api, invalidate, runJob, setWorkspace, workspace } from "../lib/api";
 import type { Run } from "../lib/types";
-import { ago } from "../lib/format";
 import { cx, EntityDot, Kbd, useMeta } from "./ui";
 
 /* ── Toasts ─────────────────────────────────────────────────────────────────── */
@@ -26,18 +25,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]" aria-live="polite">
+      <div className="fixed bottom-5 right-5 z-[60] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2" aria-live="polite">
         <AnimatePresence>
           {items.map((t) => (
-            <motion.div key={t.id} layout initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, x: 24 }}
-              className="card flex gap-3 p-3.5">
+            <motion.div key={t.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 20 }}
+              className="flex gap-3 rounded-2xl border border-line bg-elev p-4 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.18)]">
               <span className={cx("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full",
-                t.tone === "err" ? "bg-crit/15 text-crit" : t.tone === "info" ? "bg-accent-soft text-accent-ink" : "bg-good/15 text-good")}>
-                {t.tone === "err" ? <X size={12} strokeWidth={3} /> : t.tone === "info" ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} strokeWidth={3} />}
+                t.tone === "err" ? "bg-crit/10 text-crit" : t.tone === "info" ? "bg-sunken text-ink-2" : "bg-good/10 text-good")}>
+                {t.tone === "err" ? <X size={11} /> : t.tone === "info" ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
               </span>
               <div className="min-w-0">
-                <div className="text-[13px] font-medium text-ink">{t.title}</div>
-                {t.body && <div className="text-[12px] text-ink-3 mt-0.5 break-words">{t.body}</div>}
+                <div className="text-[13px] text-ink">{t.title}</div>
+                {t.body && <div className="mt-0.5 break-words text-[12px] text-ink-3">{t.body}</div>}
               </div>
             </motion.div>
           ))}
@@ -47,76 +46,99 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/* ── Job runner (polls while a job is in flight, then refreshes every view) ── */
-const JOB_LABEL: Record<string, string> = { pages: "Page scan", feeds: "Feed sync", ai: "AI visibility run", digest: "Digest" };
-const JobCtx = createContext<{ running: string[]; start: (job: string, opts?: { deliver?: boolean }) => void }>({ running: [], start: () => {} });
+/* ── Jobs ───────────────────────────────────────────────────────────────────── */
+export const JOB_LABEL: Record<string, string> = {
+  pages: "Page scan", feeds: "Content sync", stack: "Stack & tag manager", dns: "DNS & email", subdomains: "Certificate transparency",
+  radar: "Pre-launch radar", hiring: "Hiring", money: "Partners & money", ads: "Ads", ai: "AI visibility", deepdive: "Deep dives", digest: "Digest",
+};
+const JobCtx = createContext<{ running: string[]; start: (job: string, opts?: { deliver?: boolean }) => void; poll: () => void }>({ running: [], start: () => {}, poll: () => {} });
 export const useJobs = () => useContext(JobCtx);
 
 export function JobProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<string[]>([]);
   const toast = useToast();
   const timer = useRef<number | undefined>(undefined);
-
   const poll = useCallback(() => {
     window.clearTimeout(timer.current);
-    api<{ runs: Run[]; running: Record<string, string> }>("/api/runs?limit=10").then((r) => {
+    api<{ runs: Run[]; running: Record<string, string> }>("/api/runs?limit=15").then((r) => {
       const now = Object.keys(r.running);
       setRunning((prev) => {
         for (const job of prev.filter((j) => !now.includes(j))) {
           const last = r.runs.find((x) => x.job === job);
-          if (last?.status === "error") toast({ title: `${JOB_LABEL[job]} failed`, body: last.error ?? undefined, tone: "err" });
-          else toast({ title: `${JOB_LABEL[job]} complete`, body: summarize(job, last?.stats) });
+          const label = JOB_LABEL[job] ?? (job.startsWith("scan:") ? "Full scan" : job);
+          if (last?.status === "error") toast({ title: `${label} failed`, body: last.error ?? undefined, tone: "err" });
+          else toast({ title: `${label} complete` });
           invalidate();
         }
         return now;
       });
-      if (now.length) timer.current = window.setTimeout(poll, 2000);
+      if (now.length) timer.current = window.setTimeout(poll, 2500);
     }).catch(() => {});
   }, [toast]);
-
   useEffect(() => { poll(); return () => window.clearTimeout(timer.current); }, [poll]);
-
   const start = useCallback((job: string, opts?: { deliver?: boolean }) => {
     runJob(job, opts).then((r) => {
-      if (r.status === "already_running") toast({ title: `${JOB_LABEL[job]} already running`, tone: "info" });
-      else toast({ title: `${JOB_LABEL[job]} started`, body: "You can keep working — we'll refresh when it's done.", tone: "info" });
+      toast({ title: r.status === "already_running" ? `${JOB_LABEL[job]} already running` : `${JOB_LABEL[job]} started`, tone: "info" });
       setRunning((p) => Array.from(new Set([...p, job])));
       window.setTimeout(poll, 1200);
     }).catch((e) => toast({ title: "Couldn't start job", body: String(e), tone: "err" }));
   }, [poll, toast]);
-
-  return <JobCtx.Provider value={{ running, start }}>{children}</JobCtx.Provider>;
-}
-
-function summarize(job: string, s: any): string | undefined {
-  if (!s) return;
-  if (job === "pages") return `${s.pages} pages checked · ${s.changed} changed${s.errors ? ` · ${s.errors} errors` : ""}`;
-  if (job === "feeds") return `${s.new_posts} new posts`;
-  if (job === "ai") return s.skipped ?? `${s.answers} answers from ${(s.engines || []).join(", ")}`;
-  if (job === "digest") return s.headline;
+  return <JobCtx.Provider value={{ running, start, poll }}>{children}</JobCtx.Provider>;
 }
 
 /* ── Navigation ─────────────────────────────────────────────────────────────── */
-export const NAV = [
-  { to: "/", label: "Overview", icon: LayoutDashboard, key: "g o" },
-  { to: "/signals", label: "Signals", icon: Activity, key: "g s" },
-  { to: "/competitors", label: "Competitors", icon: Swords, key: "g c" },
-  { to: "/content", label: "Content", icon: Newspaper, key: "g n" },
-  { to: "/ai", label: "AI Visibility", icon: Bot, key: "g a" },
-  { to: "/digest", label: "Digest", icon: Mail, key: "g d" },
-  { to: "/settings", label: "Settings", icon: Settings, key: "g ," },
+export const NAV: { group: string; items: { to: string; label: string; icon: any }[] }[] = [
+  { group: "Intelligence", items: [
+    { to: "/", label: "Overview", icon: LayoutGrid },
+    { to: "/signals", label: "Signals", icon: Activity },
+    { to: "/deep-dives", label: "Deep dives", icon: FileSearch },
+    { to: "/competitors", label: "Competitors", icon: Swords },
+  ] },
+  { group: "Modules", items: [
+    { to: "/stack", label: "GTM stack", icon: Layers },
+    { to: "/infrastructure", label: "Infrastructure", icon: Network },
+    { to: "/radar", label: "Launch radar", icon: Rocket },
+    { to: "/hiring", label: "Hiring", icon: Briefcase },
+    { to: "/money", label: "Partners & money", icon: BadgeDollarSign },
+    { to: "/positioning", label: "Positioning", icon: Newspaper },
+    { to: "/ai", label: "AI visibility", icon: Bot },
+  ] },
+  { group: "System", items: [
+    { to: "/coverage", label: "Coverage", icon: ShieldCheck },
+    { to: "/digest", label: "Digest", icon: Mail },
+    { to: "/settings", label: "Settings", icon: Settings },
+  ] },
 ];
 
 function Logo() {
   return (
-    <div className="flex items-center gap-2.5 px-2">
-      <div className="relative grid size-7 place-items-center rounded-lg bg-gradient-to-br from-[#b4abff] to-[#6e56cf] shadow-[0_4px_16px_-4px_#6e56cf]">
-        <Radar size={15} className="text-white" strokeWidth={2.4} />
+    <div className="flex items-center gap-2.5 px-3">
+      <div className="grid size-7 place-items-center rounded-[9px] bg-ink">
+        <span className="relative grid size-3.5 place-items-center rounded-full ring-[1.5px] ring-white"><span className="size-1 rounded-full bg-white" /></span>
       </div>
-      <div className="leading-none">
-        <div className="text-[14px] font-semibold tracking-[-0.01em] text-ink">Sentinel</div>
-        <div className="text-[10.5px] text-ink-3 mt-0.5">Competitive intelligence</div>
-      </div>
+      <span className="text-[16px] tracking-[-0.02em] text-ink">sentinel</span>
+    </div>
+  );
+}
+
+function WorkspaceSwitcher() {
+  const meta = useMeta();
+  const [open, setOpen] = useState(false);
+  if (meta.workspaces.length < 2) return null;
+  const cur = meta.workspaces.find((w) => w.slug === meta.workspace);
+  return (
+    <div className="relative px-1">
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] text-ink hover:bg-hover">
+        <span className="truncate">{cur?.name ?? meta.workspace}</span><ChevronDown size={13} className="text-ink-3" />
+      </button>
+      {open && (
+        <div className="card absolute left-1 right-1 top-10 z-30 p-1">
+          {meta.workspaces.map((w) => (
+            <button key={w.slug} onClick={() => { setWorkspace(w.slug); setOpen(false); }}
+              className={cx("block w-full rounded-lg px-3 py-2 text-left text-[13px] hover:bg-hover", w.slug === workspace() ? "text-ink" : "text-ink-2")}>{w.name}</button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -124,51 +146,47 @@ function Logo() {
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const meta = useMeta();
   const loc = useLocation();
+  const { running } = useJobs();
   useEffect(onClose, [loc.pathname]); // eslint-disable-line
-  const comps = meta.entities.filter((e) => !e.is_brand);
   const content = (
-    <div className="flex h-full flex-col gap-6 px-3 py-4">
+    <div className="flex h-full flex-col gap-6 overflow-y-auto px-3 pb-4 pt-5">
       <Logo />
-      <nav className="flex flex-col gap-0.5">
-        {NAV.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === "/"}
-            className={({ isActive }) => cx("group relative flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] transition-colors focus-ring",
-              isActive ? "text-ink font-medium" : "text-ink-2 hover:text-ink hover:bg-hover")}>
-            {({ isActive }) => (
-              <>
-                {isActive && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-lg bg-hover ring-1 ring-inset ring-line" transition={{ type: "spring", bounce: 0.15, duration: 0.4 }} />}
-                <Icon size={15} className={cx("relative", isActive ? "text-accent-ink" : "text-ink-3 group-hover:text-ink-2")} />
-                <span className="relative">{label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
-      <div>
-        <div className="eyebrow px-2.5 mb-2">Watchlist</div>
-        <div className="flex flex-col gap-0.5">
-          {comps.map((c) => (
-            <NavLink key={c.id} to={`/competitors/${c.id}`}
-              className={({ isActive }) => cx("flex h-7 items-center gap-2.5 rounded-lg px-2.5 text-[12.5px] transition-colors", isActive ? "bg-hover text-ink" : "text-ink-2 hover:bg-hover hover:text-ink")}>
-              <EntityDot color={c.color} size={7} />
-              <span className="truncate">{c.name}</span>
+      <WorkspaceSwitcher />
+      {NAV.map((g) => (
+        <nav key={g.group} className="flex flex-col gap-px">
+          <div className="eyebrow mb-1.5 px-3">{g.group}</div>
+          {g.items.map(({ to, label, icon: Icon }) => (
+            <NavLink key={to} to={to} end={to === "/"}
+              className={({ isActive }) => cx("group relative flex h-8 items-center gap-2.5 rounded-xl px-3 text-[13px] transition-colors focus-ring",
+                isActive ? "text-ink" : "text-ink-2 hover:bg-hover hover:text-ink")}>
+              {({ isActive }) => (
+                <>
+                  {isActive && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-xl bg-elev ring-1 ring-line" transition={{ type: "spring", bounce: 0.12, duration: 0.4 }} />}
+                  <Icon size={15} strokeWidth={1.6} className={cx("relative", isActive ? "text-ink" : "text-ink-3 group-hover:text-ink-2")} />
+                  <span className="relative">{label}</span>
+                </>
+              )}
             </NavLink>
           ))}
+        </nav>
+      ))}
+      <div className="mt-auto px-3 text-[11.5px] text-ink-3">
+        <div className="flex items-center gap-2">
+          <span className={cx("pulse-dot size-1.5 rounded-full", running.length ? "bg-accent text-accent" : meta.demo ? "bg-med text-med" : "bg-good text-good")} />
+          {running.length ? `Collecting · ${running.length} job${running.length > 1 ? "s" : ""}` : meta.demo ? "Demo workspace" : "Monitoring live"}
         </div>
-      </div>
-      <div className="mt-auto">
-        <SystemStatus />
+        <div className="mt-1.5">{meta.entities.filter((e) => !e.is_brand).length} competitors · {meta.backend}</div>
       </div>
     </div>
   );
   return (
     <>
-      <aside className="hidden lg:block fixed inset-y-0 left-0 w-60 border-r border-line bg-bg/60 backdrop-blur-xl z-30">{content}</aside>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-line bg-bg lg:block">{content}</aside>
       <AnimatePresence>
         {open && (
           <>
-            <motion.div className="lg:hidden fixed inset-0 z-40 bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-            <motion.aside className="lg:hidden fixed inset-y-0 left-0 z-50 w-64 border-r border-line bg-elev"
+            <motion.div className="fixed inset-0 z-40 bg-[#111]/20 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+            <motion.aside className="fixed inset-y-0 left-0 z-50 w-64 border-r border-line bg-bg lg:hidden"
               initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ type: "spring", bounce: 0, duration: 0.3 }}>
               {content}
             </motion.aside>
@@ -179,53 +197,18 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   );
 }
 
-function SystemStatus() {
-  const meta = useMeta();
-  const { running } = useJobs();
-  const live = meta.engines.filter((e) => e.enabled && e.has_key).length;
-  const ok = !meta.demo;
-  return (
-    <div className="rounded-xl bg-sunken ring-1 ring-inset ring-line p-3 text-[12px]">
-      <div className="flex items-center gap-2 text-ink">
-        <span className={cx("pulse-dot size-1.5 rounded-full", running.length ? "bg-accent text-accent" : ok ? "bg-good text-good" : "bg-med text-med")} />
-        <span className="font-medium">{running.length ? "Collecting…" : ok ? "Monitoring live" : "Demo workspace"}</span>
-      </div>
-      <div className="mt-2 grid grid-cols-3 gap-1 text-center">
-        {[["Pages", meta.entities.reduce((a, e) => a + e.pages.length, 0)], ["Feeds", meta.entities.reduce((a, e) => a + e.feeds.length, 0)], ["Engines", live]].map(([l, v]) => (
-          <div key={l as string} className="rounded-md bg-elev py-1.5 ring-1 ring-inset ring-line">
-            <div className="tnum text-ink font-medium">{v}</div>
-            <div className="text-[10px] text-ink-3">{l}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 /* ── Top bar ────────────────────────────────────────────────────────────────── */
 export function Topbar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
-  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || "dark");
-  const flip = () => {
-    const t = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = t;
-    try { localStorage.setItem("sentinel-theme", t); } catch { /* ignore */ }
-    setTheme(t);
-  };
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-line bg-bg/70 px-4 backdrop-blur-xl sm:px-6">
-      <button onClick={onMenu} className="lg:hidden grid size-8 place-items-center rounded-lg text-ink-2 hover:bg-hover" aria-label="Menu"><Menu size={17} /></button>
+    <header className="sticky top-0 z-20 flex h-16 items-center gap-3 bg-bg/80 px-4 backdrop-blur-xl sm:px-8">
+      <button onClick={onMenu} className="grid size-9 place-items-center rounded-full text-ink-2 hover:bg-hover lg:hidden" aria-label="Menu"><Menu size={17} /></button>
       <button onClick={onSearch}
-        className="flex h-8 min-w-0 flex-1 max-w-sm items-center gap-2 rounded-lg bg-sunken px-3 text-[13px] text-ink-3 ring-1 ring-inset ring-line transition-colors hover:ring-line-strong focus-ring">
-        <Search size={14} />
-        <span className="flex-1 text-left truncate"><span className="sm:hidden">Search…</span><span className="hidden sm:inline">Search competitors, signals, questions…</span></span>
-        <span className="hidden sm:flex gap-1"><Kbd>⌘</Kbd><Kbd>K</Kbd></span>
+        className="flex h-9 min-w-0 max-w-md flex-1 items-center gap-2.5 rounded-full bg-elev px-4 text-[13px] text-ink-3 ring-1 ring-inset ring-line transition-colors hover:ring-line-strong focus-ring">
+        <Search size={14} strokeWidth={1.6} />
+        <span className="flex-1 truncate text-left"><span className="sm:hidden">Search…</span><span className="hidden sm:inline">Search competitors, modules, questions…</span></span>
+        <span className="hidden gap-1 sm:flex"><Kbd>⌘</Kbd><Kbd>K</Kbd></span>
       </button>
-      <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        <RunMenu />
-        <button onClick={flip} className="grid size-8 place-items-center rounded-lg text-ink-2 hover:text-ink hover:bg-hover focus-ring" aria-label="Toggle theme">
-          {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-        </button>
-      </div>
+      <div className="ml-auto flex shrink-0 items-center gap-2"><RunMenu /></div>
     </header>
   );
 }
@@ -239,37 +222,25 @@ function RunMenu() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
-  const items = [
-    { job: "pages", icon: Globe, label: "Scan pages now", sub: "Homepage, product & pricing diffs" },
-    { job: "feeds", icon: Newspaper, label: "Sync feeds", sub: "New blog posts & announcements" },
-    { job: "ai", icon: Bot, label: "Run AI visibility", sub: "Ask every engine your questions" },
-    { job: "digest", icon: Mail, label: "Send digest", sub: "Build & deliver to Slack / email" },
-  ];
+  const items = ["subdomains", "dns", "stack", "pages", "radar", "hiring", "money", "ads", "feeds", "ai", "deepdive", "digest"];
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-8 items-center gap-2 rounded-lg bg-accent px-3 text-[12.5px] font-medium text-white shadow-[0_4px_14px_-6px_var(--accent)] hover:brightness-110 focus-ring">
-        {running.length ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-        <span className="hidden sm:inline">{running.length ? "Running…" : "Run now"}</span>
-        <ChevronDown size={13} className="opacity-70" />
+        className="inline-flex h-9 items-center gap-2 rounded-full bg-ink px-4 text-[13px] text-white transition-colors hover:bg-[#2a2a2e] focus-ring">
+        {running.length ? <Loader2 size={14} className="animate-spin" /> : <Play size={13} />}
+        <span className="hidden sm:inline">{running.length ? "Collecting" : "Run"}</span>
+        <ChevronDown size={13} className="opacity-60" />
       </button>
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity: 0, y: -4, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.98 }}
-            transition={{ duration: 0.15 }}
-            className="card absolute right-0 top-10 z-30 w-72 p-1.5">
-            {items.map(({ job, icon: Icon, label, sub }) => {
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.14 }}
+            className="absolute right-0 top-11 z-30 w-64 rounded-2xl border border-line bg-elev p-1.5 shadow-[0_16px_48px_-16px_rgba(0,0,0,0.2)]">
+            {items.map((job) => {
               const busy = running.includes(job);
               return (
                 <button key={job} disabled={busy} onClick={() => { start(job); setOpen(false); }}
-                  className="flex w-full items-start gap-3 rounded-lg p-2.5 text-left hover:bg-hover disabled:opacity-60">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sunken ring-1 ring-inset ring-line text-ink-2">
-                    {busy ? <Loader2 size={15} className="animate-spin text-accent" /> : <Icon size={15} />}
-                  </span>
-                  <span>
-                    <span className="block text-[13px] font-medium text-ink">{label}</span>
-                    <span className="block text-[11.5px] text-ink-3">{busy ? "Running…" : sub}</span>
-                  </span>
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] text-ink-2 hover:bg-hover hover:text-ink disabled:opacity-50">
+                  {JOB_LABEL[job]}{busy && <Loader2 size={13} className="animate-spin" />}
                 </button>
               );
             })}
@@ -280,7 +251,7 @@ function RunMenu() {
   );
 }
 
-/* ── ⌘K command palette ─────────────────────────────────────────────────────── */
+/* ── ⌘K ─────────────────────────────────────────────────────────────────────── */
 export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
   const meta = useMeta();
   const nav = useNavigate();
@@ -293,52 +264,52 @@ export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: 
     return () => window.removeEventListener("keydown", h);
   }, [open, setOpen]);
   const go = (to: string) => { nav(to); setOpen(false); };
-  const item = "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-[13px] text-ink-2 aria-selected:text-ink";
+  const item = "flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] text-ink-2 aria-selected:text-ink";
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-[55] grid place-items-start justify-center bg-black/50 backdrop-blur-sm pt-[12vh] px-4"
+        <motion.div className="fixed inset-0 z-[55] grid place-items-start justify-center bg-[#111]/15 px-4 pt-[14vh] backdrop-blur-[2px]"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)}>
-          <motion.div initial={{ opacity: 0, scale: 0.97, y: -8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.16 }} className="card w-[600px] max-w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <motion.div initial={{ opacity: 0, scale: 0.98, y: -6 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.15 }} className="w-[620px] max-w-full overflow-hidden rounded-2xl border border-line bg-elev shadow-[0_32px_80px_-24px_rgba(0,0,0,0.3)]"
+            onClick={(e) => e.stopPropagation()}>
             <Command loop label="Command menu">
-              <div className="flex items-center gap-2 border-b border-line px-4">
-                <Search size={15} className="text-ink-3" />
-                <Command.Input autoFocus placeholder="Type a command or search…" className="h-12 flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-3" />
+              <div className="flex items-center gap-2.5 border-b border-line px-5">
+                <Search size={15} className="text-ink-3" strokeWidth={1.6} />
+                <Command.Input autoFocus placeholder="Type a command or search…" className="h-14 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3" />
                 <Kbd>esc</Kbd>
               </div>
-              <Command.List className="max-h-[50vh] overflow-y-auto p-1.5">
-                <Command.Empty className="py-10 text-center text-[13px] text-ink-3">No results.</Command.Empty>
-                <Command.Group heading="Navigate">
-                  {NAV.map((n) => (
-                    <Command.Item key={n.to} onSelect={() => go(n.to)} className={item}>
-                      <n.icon size={15} className="text-ink-3" />{n.label}
-                    </Command.Item>
+              <Command.List className="max-h-[52vh] overflow-y-auto p-2">
+                <Command.Empty className="py-12 text-center text-[13px] text-ink-3">No results.</Command.Empty>
+                <Command.Group heading="Go to">
+                  {NAV.flatMap((g) => g.items).map((n) => (
+                    <Command.Item key={n.to} onSelect={() => go(n.to)} className={item}><n.icon size={15} strokeWidth={1.6} className="text-ink-3" />{n.label}</Command.Item>
                   ))}
                 </Command.Group>
-                <Command.Group heading="Competitors">
+                <Command.Group heading="Deep dives">
                   {meta.entities.filter((e) => !e.is_brand).map((c) => (
-                    <Command.Item key={c.id} value={`competitor ${c.name} ${c.domains.join(" ")}`} onSelect={() => go(`/competitors/${c.id}`)} className={item}>
-                      <EntityDot color={c.color} />{c.name}<span className="ml-auto text-[11px] text-ink-3">{c.domains[0]}</span>
+                    <Command.Item key={c.id} value={`deep dive ${c.name} ${c.domains.join(" ")}`} onSelect={() => go(`/deep-dives/${c.id}`)} className={item}>
+                      <EntityDot color={c.color} />{c.name}<span className="ml-auto text-[11.5px] text-ink-3">{c.domains[0]}</span>
                     </Command.Item>
                   ))}
+                  <Command.Item value="new deep dive enter a domain analyse" onSelect={() => go("/deep-dives?new=1")} className={item}><Compass size={15} strokeWidth={1.6} className="text-ink-3" />Analyse a new domain…</Command.Item>
                 </Command.Group>
-                <Command.Group heading="Actions">
-                  {[["pages", "Scan competitor pages now", Globe], ["feeds", "Sync blog feeds", Newspaper], ["ai", "Run AI visibility check", Bot], ["digest", "Send weekly digest now", Mail]].map(([j, l, I]: any) => (
-                    <Command.Item key={j} onSelect={() => { start(j); setOpen(false); }} className={item}>
-                      <Play size={15} className="text-ink-3" />{l}
-                    </Command.Item>
-                  ))}
-                  {meta.entities.filter((e) => !e.is_brand).map((c) => (
-                    <Command.Item key={`bc-${c.id}`} value={`battlecard copy ${c.name}`} onSelect={() => go(`/competitors/${c.id}?battlecard=1`)} className={item}>
-                      <FileText size={15} className="text-ink-3" />Open battlecard: {c.name}
-                    </Command.Item>
+                <Command.Group heading="Run">
+                  {Object.entries(JOB_LABEL).map(([j, l]) => (
+                    <Command.Item key={j} value={`run ${l}`} onSelect={() => { start(j); setOpen(false); }} className={item}><Play size={14} className="text-ink-3" />Run {l.toLowerCase()}</Command.Item>
                   ))}
                 </Command.Group>
                 <Command.Group heading="AI questions">
                   {meta.questions.map((q) => (
                     <Command.Item key={q.id} value={`question ${q.text}`} onSelect={() => go(`/ai?q=${q.id}`)} className={item}>
-                      <Bot size={15} className="text-ink-3 shrink-0" /><span className="truncate">{q.text}</span>
+                      <Bot size={15} strokeWidth={1.6} className="shrink-0 text-ink-3" /><span className="truncate">{q.text}</span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+                <Command.Group heading="Sites">
+                  {meta.entities.filter((e) => !e.is_brand).map((c) => (
+                    <Command.Item key={`site-${c.id}`} value={`open site ${c.name}`} onSelect={() => { window.open(`https://${c.domains[0]}`, "_blank"); setOpen(false); }} className={item}>
+                      <Globe size={15} strokeWidth={1.6} className="text-ink-3" />{c.domains[0]}
                     </Command.Item>
                   ))}
                 </Command.Group>
@@ -349,8 +320,4 @@ export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: 
       )}
     </AnimatePresence>
   );
-}
-
-export function LastRun({ iso }: { iso?: string | null }) {
-  return <span className="text-[12px] text-ink-3">Updated {ago(iso)}</span>;
 }

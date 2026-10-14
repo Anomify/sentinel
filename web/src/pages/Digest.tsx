@@ -44,7 +44,7 @@ export default function Digest() {
             <div className="border-t border-line">
               <button onClick={() => setSel("live")} className={cx("flex w-full items-center gap-3 border-b border-line px-5 py-3 text-left", sel === "live" ? "bg-hover" : "hover:bg-hover/60")}>
                 <span className="size-2 rounded-full bg-accent pulse-dot text-accent" />
-                <div><div className="text-[13px] font-medium text-ink">Live preview</div><div className="text-[11.5px] text-ink-3">Built from current data</div></div>
+                <div><div className="text-[13px] text-ink">Live preview</div><div className="text-[11.5px] text-ink-3">Built from current data</div></div>
               </button>
               {data?.length ? data.map((d) => (
                 <button key={d.id} onClick={() => setSel(d.id)} className={cx("block w-full border-b border-line px-5 py-3 text-left last:border-0", sel === d.id ? "bg-hover" : "hover:bg-hover/60")}>
@@ -63,7 +63,7 @@ export default function Digest() {
 
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-line px-5 py-3">
-            <div className="text-[13px] font-medium text-ink">{sel === "live" ? "Live preview" : `Digest #${sel}`}</div>
+            <div className="text-[13px] text-ink">{sel === "live" ? "Live preview" : `Digest #${sel}`}</div>
             <Segmented value={device} onChange={setDevice} options={[{ value: "desktop", label: <Monitor size={13} /> }, { value: "mobile", label: <Smartphone size={13} /> }]} />
           </div>
           <div className="grid place-items-center bg-sunken p-4 sm:p-6">

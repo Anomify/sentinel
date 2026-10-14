@@ -23,13 +23,21 @@ def build(cfg: Config, days: int | None = None) -> dict:
     colors = {e.id: e.color for e in cfg.entities}
     with db.connect() as con:
         ov = insights.overview(cfg, con, days)
-        ch = [c for c in insights.changes(con, days) if c["severity"] != "noise"]
+        evs = insights.events(con, days, limit=500)
         ps = insights.posts(con, days)
         vis = insights.visibility(cfg, con)
+        launch = insights.launch_scores(cfg, con)
+    ch = [{"id": e["id"], "competitor": e["competitor"], "kind": insights.MODULE_LABEL.get(e["module"], e["module"]),
+           "severity": e["severity"], "category": (e.get("data") or {}).get("category") or e["module"],
+           "headline": e["title"], "summary": e.get("detail") or "", "so_what": e.get("so_what"),
+           "action": (e.get("data") or {}).get("action"), "confidence": e.get("confidence"),
+           "url": next((x.get("url") for x in (e.get("evidence") or []) if x.get("url")), cfg.settings.get("digest", {}).get("app_url", ""))}
+          for e in sorted(evs, key=lambda e: -insights.SEV_WEIGHT.get(e["severity"], 0))]
     gaps = insights.gaps(cfg, vis)
     facts = {
         "changes": [{k: c[k] for k in ("competitor", "kind", "severity", "category", "headline", "summary", "so_what", "url")}
                     for c in ch[:40]],
+        "launch": {names.get(k): v.get("probability") for k, v in launch.items()},
         "posts": [{"competitor": p["competitor"], "title": p["title"], "topics": p["topics"]} for p in ps[:40]],
         "ai_share": [{"entity": names.get(s["id"]), "share": s["share"], "avg_rank": s["avg_rank"]} for s in vis["share"]],
         "ai_gaps": gaps[:10],
@@ -41,6 +49,7 @@ def build(cfg: Config, days: int | None = None) -> dict:
         "brand": cfg.brand.name, "period_start": insights.since(days), "period_end": end.isoformat(timespec="seconds"),
         "brief": brief, "kpis": ov["kpis"], "competitors": ov["competitors"],
         "changes": ch[:15], "posts": ps[:15], "share": vis["share"], "gaps": gaps[:8],
+        "launch": sorted(({"id": k, **v} for k, v in launch.items() if v.get("probability", 0) >= 0.2), key=lambda x: -x["probability"]),
         "names": names, "colors": colors, "app_url": cfg.settings.get("digest", {}).get("app_url", ""),
     }
 
@@ -58,7 +67,7 @@ def _fallback_brief(cfg, ov, ch, ps, gaps, names) -> dict:
     if not tl:
         tl.append("Quiet week — no high-severity competitor moves detected.")
     k = ov["kpis"]
-    return {"headline": f"{k['changes']} changes, {k['critical']} high-impact, {k['posts']} new posts",
+    return {"headline": f"{k['changes']} signals, {k['critical']} high-impact, {k['posts']} new posts",
             "tldr": tl, "watch_next": []}
 
 
@@ -67,71 +76,76 @@ def _e(s) -> str:
     return html.escape(str(s or ""))
 
 
+FONT = "'Alpha Lyrae','Helvetica Neue',Helvetica,Arial,sans-serif"
+
+
 def render_html(d: dict) -> str:
+    """Light, minimal email. One weight throughout; hierarchy comes from size and tone."""
     k, b = d["kpis"], d["brief"]
-    period = f"{d['period_start'][:10]} → {d['period_end'][:10]}"
+    period = f"{d['period_start'][:10]} – {d['period_end'][:10]}"
     share = {s["id"]: s for s in d["share"]}
     brand_share = share.get("__brand__", {}).get("share")
+    t = lambda size, color="#16161a", extra="": f"font:400 {size}px/1.5 {FONT};color:{color};{extra}"  # noqa: E731
 
     def kpi(label, val, sub=""):
-        return (f'<td style="padding:16px 18px;background:#F7F7F8;border-radius:12px;width:25%">'
-                f'<div style="font:500 11px/1 Inter,Arial;letter-spacing:.06em;text-transform:uppercase;color:#8B8D98">{label}</div>'
-                f'<div style="font:600 26px/1.2 Inter,Arial;color:#111113;margin-top:8px">{val}</div>'
-                f'<div style="font:12px Inter,Arial;color:#8B8D98;margin-top:2px">{sub}</div></td>')
+        return (f'<td style="padding:0 20px 0 0;width:25%;vertical-align:top">'
+                f'<div style="{t(11, "#8a8a93", "letter-spacing:.08em;text-transform:uppercase")}">{label}</div>'
+                f'<div style="{t(30, "#16161a", "letter-spacing:-.02em;margin-top:6px;line-height:1")}">{val}</div>'
+                f'<div style="{t(12, "#8a8a93", "margin-top:6px")}">{sub}</div></td>')
 
     rows = "".join(
-        f'<tr><td style="padding:14px 0;border-top:1px solid #EEE">'
-        f'<span style="display:inline-block;width:8px;height:8px;border-radius:9px;background:{SEV_COLOR.get(c["severity"], "#999")};margin-right:8px"></span>'
-        f'<span style="font:600 12px Inter,Arial;color:{d["colors"].get(c["competitor"], "#333")}">{_e(d["names"].get(c["competitor"]))}</span>'
-        f'<span style="font:12px Inter,Arial;color:#8B8D98"> · {_e(c["category"])} · {_e(c["kind"])}</span>'
-        f'<div style="font:600 15px/1.4 Inter,Arial;color:#111113;margin-top:4px"><a href="{_e(c["url"])}" style="color:#111113;text-decoration:none">{_e(c["headline"])}</a></div>'
-        f'<div style="font:14px/1.5 Inter,Arial;color:#3A3A40;margin-top:2px">{_e(c["so_what"] or c["summary"])}</div>'
-        + (f'<div style="font:13px/1.5 Inter,Arial;color:#6E56CF;margin-top:4px">→ {_e(c["action"])}</div>' if c.get("action") else "")
-        + "</td></tr>" for c in d["changes"][:10]) or \
-        '<tr><td style="font:14px Inter,Arial;color:#8B8D98;padding:12px 0">No material page changes this week.</td></tr>'
+        f'<tr><td style="padding:18px 0;border-top:1px solid #ececef">'
+        f'<div style="{t(12, "#8a8a93")}"><span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:{SEV_COLOR.get(c["severity"], "#999")};margin-right:8px;vertical-align:middle"></span>'
+        f'{_e(d["names"].get(c["competitor"]))} · {_e(c["kind"])}{(" · " + _e(c.get("confidence"))) if c.get("confidence") else ""}</div>'
+        f'<div style="{t(16, "#16161a", "margin-top:4px;line-height:1.4")}"><a href="{_e(c["url"])}" style="color:#16161a;text-decoration:none">{_e(c["headline"])}</a></div>'
+        + (f'<div style="{t(14, "#4a4a52", "margin-top:4px")}">{_e(c["so_what"] or c["summary"])}</div>' if (c.get("so_what") or c.get("summary")) else "")
+        + (f'<div style="{t(13, "#5b45b8", "margin-top:6px")}">→ {_e(c["action"])}</div>' if c.get("action") else "")
+        + "</td></tr>" for c in d["changes"][:12]) or \
+        f'<tr><td style="{t(14, "#8a8a93", "padding:12px 0")}">No material moves this period.</td></tr>'
 
-    posts = "".join(
-        f'<li style="margin:0 0 8px"><span style="color:{d["colors"].get(p["competitor"])};font-weight:600">{_e(d["names"].get(p["competitor"]))}</span> — '
-        f'<a href="{_e(p["url"])}" style="color:#111113">{_e(p["title"])}</a></li>' for p in d["posts"][:10]) or \
-        '<li style="color:#8B8D98">No new posts.</li>'
-
+    posts = "".join(f'<li style="margin:0 0 8px">{_e(d["names"].get(p["competitor"]))} — <a href="{_e(p["url"])}" style="color:#16161a">{_e(p["title"])}</a></li>'
+                    for p in d["posts"][:8]) or '<li style="color:#8a8a93">No new posts.</li>'
     bars = ""
     for s in sorted(d["share"], key=lambda s: -s["share"]):
         pct = round(s["share"] * 100)
-        bars += (f'<tr><td style="font:13px Inter,Arial;color:#3A3A40;padding:4px 12px 4px 0;white-space:nowrap">{_e(d["names"].get(s["id"]))}</td>'
-                 f'<td style="width:100%;padding:4px 0"><div style="background:#EEE;border-radius:4px;height:8px">'
-                 f'<div style="background:{d["colors"].get(s["id"])};width:{max(pct, 1)}%;height:8px;border-radius:4px"></div></div></td>'
-                 f'<td style="font:600 13px Inter,Arial;padding:4px 0 4px 12px;text-align:right">{pct}%</td></tr>')
-    gaps = "".join(f'<li style="margin:0 0 6px">{_e(g["text"])} <span style="color:#8B8D98">— {", ".join(_e(d["names"].get(c)) for c in g["competitors"])}</span></li>'
-                   for g in d["gaps"])
+        bars += (f'<tr><td style="{t(13, "#4a4a52", "padding:5px 14px 5px 0;white-space:nowrap")}">{_e(d["names"].get(s["id"]))}</td>'
+                 f'<td style="width:100%;padding:5px 0"><div style="background:#f0f0f2;border-radius:3px;height:4px">'
+                 f'<div style="background:{d["colors"].get(s["id"])};width:{max(pct, 1)}%;height:4px;border-radius:3px"></div></div></td>'
+                 f'<td style="{t(13, "#16161a", "padding:5px 0 5px 14px;text-align:right")}">{pct}%</td></tr>')
+    launch = "".join(f'<li style="margin:0 0 6px">{_e(d["names"].get(l["id"]))}: {round(l["probability"] * 100)}% · likely within {_e(l.get("horizon"))}</li>'
+                     for l in d.get("launch", [])[:4])
+    gaps = "".join(f'<li style="margin:0 0 6px">{_e(g["text"])}</li>' for g in d["gaps"])
+    tldr = "".join(f'<li style="margin:0 0 10px">{_e(x)}</li>' for x in b.get("tldr", []))
+    watch = "".join(f'<li style="margin:0 0 6px">{_e(x)}</li>' for x in b.get("watch_next", []))
+    sec = lambda title: f'<div style="{t(11, "#8a8a93", "letter-spacing:.1em;text-transform:uppercase;margin:40px 0 10px")}">{title}</div>'  # noqa: E731
+    ul = lambda inner, size=14: f'<ul style="{t(size, "#2a2a30", "padding-left:18px;margin:0")}">{inner}</ul>'  # noqa: E731
 
-    tldr = "".join(f'<li style="margin:0 0 8px">{_e(t)}</li>' for t in b.get("tldr", []))
-    watch = "".join(f'<li style="margin:0 0 6px">{_e(t)}</li>' for t in b.get("watch_next", []))
-    sec = lambda t: f'<h2 style="font:600 12px Inter,Arial;letter-spacing:.08em;text-transform:uppercase;color:#8B8D98;margin:36px 0 8px">{t}</h2>'
-
-    return f"""<!doctype html><html><body style="margin:0;background:#EDEDF0;padding:32px 12px">
-<table role="presentation" width="100%" style="max-width:680px;margin:0 auto;background:#fff;border-radius:20px;overflow:hidden">
-<tr><td style="background:#0B0B0F;padding:28px 36px">
-  <div style="font:600 12px Inter,Arial;letter-spacing:.14em;color:#A594F9;text-transform:uppercase">◆ Sentinel · {_e(d['title'])}</div>
-  <div style="font:600 24px/1.3 Inter,Arial;color:#fff;margin-top:10px">{_e(b.get('headline'))}</div>
-  <div style="font:13px Inter,Arial;color:#8B8D98;margin-top:6px">{period}</div>
+    return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<style>@font-face{{font-family:'Alpha Lyrae';src:url('{_e(d['app_url'])}/fonts/AlphaLyrae-Medium.woff2') format('woff2');font-weight:100 900}}</style></head>
+<body style="margin:0;background:#f6f6f4;padding:40px 14px">
+<table role="presentation" width="100%" style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ececef;border-radius:16px">
+<tr><td style="padding:40px 44px 8px">
+  <div style="{t(12, "#8a8a93", "letter-spacing:.12em;text-transform:uppercase")}">Sentinel · {_e(d['title'])}</div>
+  <div style="{t(26, "#16161a", "letter-spacing:-.02em;line-height:1.25;margin-top:14px")}">{_e(b.get('headline'))}</div>
+  <div style="{t(13, "#8a8a93", "margin-top:8px")}">{period}</div>
 </td></tr>
-<tr><td style="padding:28px 36px 36px">
-  <table role="presentation" width="100%" cellspacing="8" style="margin:0 -8px"><tr>
-    {kpi('Changes', k['changes'], f"{k['critical']} high-impact")}
-    {kpi('Pricing moves', k['pricing'], 'detected')}
-    {kpi('New posts', k['posts'], 'across feeds')}
+<tr><td style="padding:28px 44px 44px">
+  <table role="presentation" width="100%"><tr>
+    {kpi('Signals', k['changes'], f"{k['critical']} high-impact")}
+    {kpi('Launch risk', f"{round((k.get('launch_max') or 0) * 100)}%", 'highest competitor')}
+    {kpi('New content', k['posts'], 'pieces')}
     {kpi('AI share', f"{round(brand_share * 100)}%" if brand_share is not None else '—', f"{k['ai_gaps']} gaps")}
   </tr></table>
-  {sec('TL;DR')}<ul style="font:15px/1.55 Inter,Arial;color:#111113;padding-left:20px;margin:0">{tldr}</ul>
+  {sec('In brief')}{ul(tldr, 15)}
   {sec('What moved')}<table role="presentation" width="100%">{rows}</table>
-  {sec('New content')}<ul style="font:14px/1.5 Inter,Arial;color:#3A3A40;padding-left:20px;margin:0">{posts}</ul>
-  {sec('AI search share of voice') + '<table role="presentation" width="100%">' + bars + '</table>' if bars else ''}
-  {sec(f"Where we're missing from AI answers") + '<ul style="font:14px/1.5 Inter,Arial;color:#3A3A40;padding-left:20px;margin:0">' + gaps + '</ul>' if gaps else ''}
-  {sec('Watch next') + '<ul style="font:14px/1.5 Inter,Arial;color:#3A3A40;padding-left:20px;margin:0">' + watch + '</ul>' if watch else ''}
-  <div style="margin-top:36px"><a href="{_e(d['app_url'])}" style="display:inline-block;background:#6E56CF;color:#fff;font:600 14px Inter,Arial;padding:12px 20px;border-radius:10px;text-decoration:none">Open dashboard →</a></div>
+  {(sec('Launch radar') + ul(launch)) if launch else ''}
+  {sec('New content')}{ul(posts)}
+  {(sec('AI search share of voice') + '<table role="presentation" width="100%">' + bars + '</table>') if bars else ''}
+  {(sec("Where we're missing from AI answers") + ul(gaps)) if gaps else ''}
+  {(sec('Watch next') + ul(watch)) if watch else ''}
+  <div style="margin-top:40px"><a href="{_e(d['app_url'])}" style="{t(14, "#ffffff", "display:inline-block;background:#16161a;padding:12px 22px;border-radius:999px;text-decoration:none")}">Open Sentinel</a></div>
 </td></tr></table>
-<div style="text-align:center;font:12px Inter,Arial;color:#8B8D98;margin-top:16px">Sentinel competitive intelligence for {_e(d['brand'])}</div>
+<div style="{t(12, "#8a8a93", "text-align:center;margin-top:18px")}">Passive, public-source intelligence for {_e(d['brand'])}</div>
 </body></html>"""
 
 

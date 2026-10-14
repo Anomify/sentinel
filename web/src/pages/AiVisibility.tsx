@@ -9,7 +9,7 @@ import { BarList, LineChart } from "../components/charts";
 import { Button, Card, CardHeader, Chip, cx, Delta, Drawer, Empty, EntityDot, EntityTag, fade, PageHeader, Segmented, Skeleton, useMeta, useSeries } from "../components/ui";
 import { useJobs } from "../components/shell";
 
-const ENGINE_LABEL: Record<string, string> = { perplexity: "Perplexity", openai: "ChatGPT", claude: "Claude" };
+const ENGINE_LABEL: Record<string, string> = { perplexity: "Perplexity", openai: "ChatGPT", gemini: "Gemini", google_aio: "AI Overviews", claude: "Claude" };
 
 export default function AiVisibility() {
   const meta = useMeta();
@@ -62,10 +62,10 @@ export default function AiVisibility() {
         <div className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-3">
             <motion.div {...fade}>
-              <Card glow className="h-full p-6">
+              <Card className="h-full p-6">
                 <div className="flex items-center gap-1.5 text-[12px] text-ink-3"><Target size={14} />Your share of voice</div>
                 <div className="mt-3 flex items-end gap-3">
-                  <div className="text-[52px] font-semibold leading-none tracking-[-0.03em] tnum text-ink">{pct(brandShare?.share)}</div>
+                  <div className="text-[52px] leading-none tracking-[-0.03em] tnum text-ink">{pct(brandShare?.share)}</div>
                   {prev != null && engine === "all" && !run && <div className="mb-2"><Delta value={Math.round(((brandShare?.share ?? 0) - prev) * 100)} suffix=" pts" /></div>}
                 </div>
                 <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
@@ -128,6 +128,28 @@ export default function AiVisibility() {
             </Card>
           </div>
 
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader title="Source gaps" sub="Domains cited in answers that name a competitor but not you — where to earn coverage next" />
+              <div className="px-5 pb-5">
+                {data.source_gaps?.length ? <BarList fmt={(v) => String(v)} rows={data.source_gaps.slice(0, 8).map((c) => ({ id: c.domain, label: c.domain, value: c.count, color: "var(--ink)" }))} />
+                  : <div className="py-6 text-center text-[13px] text-ink-3">No source gaps in this run.</div>}
+              </div>
+            </Card>
+            <Card>
+              <CardHeader title="Narrative accuracy" sub="How correctly answers describe you, graded by Claude against your brand facts" />
+              <div className="px-5 pb-5">
+                {data.accuracy ? (
+                  <>
+                    <div className="flex items-end gap-3"><div className="text-[40px] leading-none tracking-[-0.03em] tnum text-ink">{Math.round(data.accuracy.score * 100)}%</div>
+                      <div className="mb-1 text-[12.5px] text-ink-3">across {data.accuracy.n} answers that mention you</div></div>
+                    <ul className="mt-4 space-y-1.5">{data.accuracy.issues.slice(0, 6).map((i, k) => <li key={k} className="text-[12.5px] leading-relaxed text-ink-2">— {i}</li>)}</ul>
+                  </>
+                ) : <div className="py-4 text-[13px] leading-relaxed text-ink-3">Add <code className="font-mono text-[12px]">facts:</code> under <code className="font-mono text-[12px]">brand</code> in watchlist.yaml and an ANTHROPIC_API_KEY to grade what AI search says about you.</div>}
+              </div>
+            </Card>
+          </div>
+
           <Card className="overflow-hidden">
             <CardHeader title="Question matrix" sub="Position each vendor holds in each answer. Click a question to read the answers."
               right={<div className="hidden md:flex flex-wrap gap-1.5">
@@ -170,7 +192,7 @@ export default function AiVisibility() {
 function MiniStat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "warn" }) {
   return (
     <div className="rounded-lg bg-sunken py-2 ring-1 ring-inset ring-line">
-      <div className={cx("text-[16px] font-semibold tnum", tone === "warn" ? "text-med" : "text-ink")}>{value}</div>
+      <div className={cx("text-[16px] tnum", tone === "warn" ? "text-med" : "text-ink")}>{value}</div>
       <div className="text-[10.5px] text-ink-3">{label}</div>
     </div>
   );
@@ -184,7 +206,7 @@ function RankCell({ e, cell, engine }: { e: Entity; cell: Record<string, number 
   return (
     <td className={cx("px-2 py-2.5 text-center", e.is_brand && "bg-accent-soft/60")} title={tip}>
       {best ? (
-        <span className="inline-flex h-6 min-w-9 items-center justify-center gap-0.5 rounded-md px-1.5 text-[11px] font-semibold tnum text-ink ring-1 ring-inset"
+        <span className="inline-flex h-6 min-w-9 items-center justify-center gap-0.5 rounded-md px-1.5 text-[11px] tnum text-ink ring-1 ring-inset"
           style={{ background: `color-mix(in oklab, ${e.color} ${best === 1 ? 32 : best <= 3 ? 20 : 10}%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${e.color} 40%, transparent)` }}>
           #{best}{entries.length > 1 && <span className="font-normal text-ink-3">·{ranks.length}/{entries.length}</span>}
         </span>
@@ -208,7 +230,7 @@ function AnswerDrawer({ qid, runId, onClose }: { qid: string | null; runId: stri
     <Drawer open={!!qid} onClose={onClose} width={720}>
       <div className="border-b border-line p-7 pr-14 glow">
         <div className="eyebrow mb-1">{q?.category} · Target question</div>
-        <h2 className="text-[20px] font-semibold leading-snug tracking-[-0.01em] text-ink">{q?.text}</h2>
+        <h2 className="text-[20px] leading-snug tracking-[-0.01em] text-ink">{q?.text}</h2>
         {data && data.length > 1 && (
           <div className="mt-4"><Segmented value={tab} onChange={setTab} options={data.map((d, i) => ({ value: i, label: ENGINE_LABEL[d.engine] ?? d.engine }))} /></div>
         )}
@@ -228,7 +250,7 @@ function AnswerDrawer({ qid, runId, onClose }: { qid: string | null; runId: stri
             <div className="whitespace-pre-wrap rounded-xl bg-sunken p-5 text-[13.5px] leading-relaxed text-ink-2 ring-1 ring-inset ring-line">
               {a.error ? <span className="text-crit">{a.error}</span> : a.answer.split(re.rx).map((part, i) => {
                 const e = re.map.get(part.toLowerCase());
-                return e ? <mark key={i} className="rounded px-0.5 font-medium text-ink" style={{ background: `color-mix(in oklab, ${e.color} 28%, transparent)` }}>{part}</mark> : part;
+                return e ? <mark key={i} className="rounded px-0.5 text-ink" style={{ background: `color-mix(in oklab, ${e.color} 28%, transparent)` }}>{part}</mark> : part;
               })}
             </div>
           </div>

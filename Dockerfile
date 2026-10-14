@@ -12,7 +12,7 @@ ENV PYTHONUNBUFFERED=1 SENTINEL_DATA_DIR=/data PORT=8000
 WORKDIR /app
 COPY pyproject.toml ./
 COPY cimonitor/ cimonitor/
-RUN pip install --no-cache-dir ".[browser]" && playwright install --with-deps chromium
+RUN pip install --no-cache-dir ".[browser,postgres]" && playwright install --with-deps chromium
 COPY config/ config/
 COPY --from=web /web/dist web/dist
 VOLUME /data

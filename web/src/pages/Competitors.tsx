@@ -1,255 +1,215 @@
-import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { motion } from "motion/react";
-import { AlertCircle, ArrowUpRight, Bot, CheckCircle2, Copy, Download, ExternalLink, FileText, Globe, Newspaper, Rss } from "lucide-react";
-import { api, useApi } from "../lib/api";
-import type { Change, Entity, Overview, Post, Share } from "../lib/types";
-import { ago, day, host, path, pct } from "../lib/format";
-import { LineChart, Sparkline } from "../components/charts";
-import { ChangeDrawer, ChangeRow } from "../components/change";
-import { Button, Card, CardHeader, cx, Drawer, Empty, fade, Monogram, PageHeader, Skeleton, useEntity, useMeta } from "../components/ui";
-import { useToast } from "../components/shell";
+import { ArrowRight, ExternalLink, FileSearch } from "lucide-react";
+import { useApi } from "../lib/api";
+import type { Fact, Overview } from "../lib/types";
+import { ago, day, pct } from "../lib/format";
+import { Sparkline } from "../components/charts";
+import { EventDrawer, EventRow } from "../components/signal";
+import { Button, Card, Chip, Confidence, cx, Empty, EvidenceList, fade, Monogram, PageHeader, Skeleton, Tabs, Thumb, useEntity, useMeta } from "../components/ui";
 
 export function CompetitorList() {
   const { data } = useApi<Overview>("/api/overview?days=30");
   const meta = useMeta();
-  const tiers: Record<string, string> = { primary: "Primary", secondary: "Secondary", platform: "Cloud platform" };
+  const comps = meta.entities.filter((e) => !e.is_brand);
   return (
     <div>
-      <PageHeader title="Competitors" sub="Everyone on your watchlist, ranked by how much they've moved in the last 30 days." />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {(data?.competitors ?? meta.entities.filter((e) => !e.is_brand).map((e) => ({ ...e, changes: 0, posts: 0, critical: 0, heat: 0, latest: null, ai_share: null, last_checked: null, heat_delta: 0 }))).map((c, i) => {
-          const e = meta.entities.find((x) => x.id === c.id)!;
-          return (
-            <motion.div key={c.id} {...fade} transition={{ ...fade.transition, delay: i * 0.04 }}>
-              <Link to={`/competitors/${c.id}`} className="group block h-full">
-                <Card className="relative h-full overflow-hidden p-5 transition-all group-hover:-translate-y-0.5 group-hover:ring-1 group-hover:ring-line-strong">
-                  <div className="pointer-events-none absolute -right-16 -top-16 size-40 rounded-full opacity-[0.10] blur-2xl" style={{ background: c.color }} />
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <Monogram id={c.id} size={38} />
-                      <div>
-                        <div className="text-[15px] font-semibold text-ink">{c.name}</div>
-                        <div className="text-[12px] text-ink-3">{tiers[c.tier] ?? c.tier} · {e.domains[0]}</div>
-                      </div>
-                    </div>
-                    <ArrowUpRight size={16} className="text-ink-3 opacity-0 transition-opacity group-hover:opacity-100" />
-                  </div>
-                  <div className="mt-5 grid grid-cols-3 gap-2">
-                    <Stat label="Signals" value={c.changes} hot={c.critical > 0} />
-                    <Stat label="Posts" value={c.posts} />
-                    <Stat label="AI share" value={pct(c.ai_share)} />
-                  </div>
-                  {data && <div className="mt-4"><Sparkline values={data.timeline.slice(-30).map((d) => Number(d[c.id]) || 0)} color={c.color} width={300} height={26} /></div>}
-                  <div className="mt-4 border-t border-line pt-3 text-[12.5px]">
-                    {c.latest ? (
-                      <div className="line-clamp-1 text-ink-2"><span className="text-ink-3">Latest · </span>{c.latest.headline}</div>
-                    ) : <div className="text-ink-3">No changes in the last 30 days</div>}
-                  </div>
-                </Card>
+      <PageHeader title="Competitors" sub="Your watchlist, ranked by how much each competitor moved in the last 30 days. Add any domain from Deep dives."
+        right={<Link to="/deep-dives?new=1"><Button variant="primary" size="sm">Add a domain</Button></Link>} />
+      <Card className="overflow-hidden">
+        <div className="hidden grid-cols-[1.6fr_.8fr_.8fr_.8fr_1fr_120px] gap-4 border-b border-line px-6 py-3 text-[11px] uppercase tracking-[.1em] text-ink-3 md:grid">
+          <span>Competitor</span><span>Signals</span><span>Launch</span><span>AI share</span><span>Latest</span><span>30 days</span>
+        </div>
+        <div className="divide-y divide-line">
+          {(data?.competitors ?? comps.map((c) => ({ id: c.id, name: c.name, changes: 0, critical: 0, launch: 0, ai_share: null, latest: null, color: c.color }))).map((c: any, i: number) => (
+            <motion.div key={c.id} {...fade} transition={{ ...fade.transition, delay: i * 0.03 }}>
+              <Link to={`/competitors/${c.id}`} className="grid grid-cols-[1fr_auto] items-center gap-4 px-6 py-4 hover:bg-hover/60 md:grid-cols-[1.6fr_.8fr_.8fr_.8fr_1fr_120px]">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Monogram id={c.id} size={32} />
+                  <div className="min-w-0"><div className="truncate text-[14px] text-ink">{c.name}</div><div className="text-[12px] text-ink-3">{meta.entities.find((e) => e.id === c.id)?.domains[0]}</div></div>
+                </div>
+                <div className="hidden text-[14px] text-ink tnum md:block">{c.changes}{c.critical ? <span className="ml-1.5 text-[12px] text-high">{c.critical} high</span> : null}</div>
+                <div className="hidden text-[14px] text-ink tnum md:block">{pct(c.launch)}</div>
+                <div className="hidden text-[14px] text-ink tnum md:block">{pct(c.ai_share)}</div>
+                <div className="hidden truncate text-[12.5px] text-ink-2 md:block">{c.latest?.title ?? "—"}</div>
+                <div className="flex items-center justify-end gap-3">
+                  {data && <Sparkline values={data.timeline.slice(-30).map((d) => Number(d[c.id]) || 0)} color={c.color} width={80} height={20} />}
+                  <ArrowRight size={14} className="text-ink-3" />
+                </div>
               </Link>
             </motion.div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
 
-function Stat({ label, value, hot }: { label: string; value: React.ReactNode; hot?: boolean }) {
-  return (
-    <div className="rounded-lg bg-sunken px-3 py-2 ring-1 ring-inset ring-line">
-      <div className="text-[10.5px] text-ink-3">{label}</div>
-      <div className={cx("text-[16px] font-semibold tnum", hot ? "text-high" : "text-ink")}>{value}</div>
-    </div>
-  );
-}
-
-interface CompetitorDetail extends Entity {
-  pages_status: { kind: string; url: string; changes: number; latest: { fetched_at: string; status: number; title: string; meta: string; signals: any; error: string | null } | null }[];
-  changes: Change[]; posts: Post[]; ai: Share | null; ai_trend: { date: string; share: number | null }[];
-}
+type TabId = "signals" | "stack" | "tracking" | "dns" | "subdomains" | "radar" | "hiring" | "money" | "ads" | "pages";
+const TABS: { id: TabId; label: string; module?: string }[] = [
+  { id: "signals", label: "Signals" }, { id: "stack", label: "Stack", module: "stack" }, { id: "tracking", label: "Tracking", module: "gtm" },
+  { id: "dns", label: "DNS & email", module: "dns" }, { id: "subdomains", label: "Subdomains", module: "subdomains" },
+  { id: "radar", label: "Pre-launch", module: "radar" }, { id: "hiring", label: "Hiring", module: "hiring" },
+  { id: "money", label: "Partners & money", module: "money" }, { id: "ads", label: "Ads", module: "ads" }, { id: "pages", label: "Pages" },
+];
+const KIND_LABEL: Record<string, string> = {
+  tool: "Tools", conversion_path: "Conversion paths", motion: "Motion", third_party: "Third-party domains", cookies: "Cookies",
+  container: "GTM containers", tracking_id: "Tracking IDs", conversion: "Conversion events", gtm_tag: "GTM tags", sgtm: "Server-side tagging", funnel: "Funnel reading",
+  verification: "TXT verifications", email_sender: "Email senders (SPF)", mx: "Mail routing", dmarc: "DMARC", dkim: "DKIM selectors", spf: "SPF", ns: "Nameservers", txt: "Raw TXT records",
+  subdomain: "Hostnames", wildcard: "Wildcard certificates", page_id: "IDs on subdomains",
+  staging_site: "Staging sites", staging_page: "Pre-launch pages", publish: "Publishes", repo: "Public repos", site_page: "Production pages",
+  job: "Open roles", board: "Job boards", partner: "Partners", marketplace: "Marketplaces", partner_program: "Partner programme", funding: "Funding",
+  arr_claim: "Growth claims", m_and_a: "M&A", press: "Press", ad_channel: "Ad channels", ad_creative: "Creatives",
+};
+const KIND_ORDER = Object.keys(KIND_LABEL);
+const HIDE_KINDS = new Set(["txt", "page_id", "site_page", "spf"]);
 
 export function CompetitorDetailPage() {
   const { id = "" } = useParams();
-  const { data } = useApi<CompetitorDetail>(`/api/competitors/${id}`);
   const e = useEntity(id);
-  const meta = useMeta();
-  const [open, setOpen] = useState<number | null>(null);
-  const [sp, setSp] = useSearchParams();
-  const bc = sp.get("battlecard") === "1";
-
+  const [tab, setTab] = useState<TabId>("signals");
+  const { data } = useApi<any>(`/api/competitors/${id}`);
   if (!e) return <Empty title="Competitor not found" />;
+  const counts: Record<string, number> = data?.modules ?? {};
   return (
     <div>
-      <motion.div {...fade} className="relative mb-6 overflow-hidden rounded-2xl border border-line bg-elev p-6">
-        <div className="pointer-events-none absolute inset-0 opacity-[0.16]" style={{ background: `radial-gradient(600px 220px at 0% 0%, ${e.color}, transparent 70%)` }} />
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Monogram id={id} size={52} />
-            <div>
-              <div className="eyebrow mb-1"><Link to="/competitors" className="hover:text-ink">Competitors</Link> / {e.tier}</div>
-              <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">{e.name}</h1>
-              <div className="mt-1 flex flex-wrap gap-3 text-[12.5px] text-ink-3">
-                {e.domains.map((d) => <a key={d} href={`https://${d}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-ink"><Globe size={12} />{d}</a>)}
-                <span>{e.pages.length} pages · {e.feeds.length} feeds</span>
-              </div>
-            </div>
+      <motion.div {...fade} className="mb-8 flex flex-wrap items-end justify-between gap-5">
+        <div className="flex items-center gap-4">
+          <Monogram id={id} size={52} />
+          <div>
+            <div className="eyebrow mb-2"><Link to="/competitors" className="hover:text-ink">Competitors</Link> / {e.tier}</div>
+            <h1 className="text-[34px] leading-none tracking-[-0.03em] text-ink">{e.name}</h1>
+            <a href={`https://${e.domains[0]}`} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[13px] text-ink-3 hover:text-ink">{e.domains[0]}<ExternalLink size={11} /></a>
           </div>
-          <Button variant="primary" onClick={() => setSp({ battlecard: "1" })}><FileText size={14} />Live battlecard</Button>
         </div>
+        <Link to={`/deep-dives/${id}`}><Button variant="primary" size="sm"><FileSearch size={13} />Open deep dive</Button></Link>
       </motion.div>
-
-      {!data ? <Skeleton className="h-96 rounded-[14px]" /> : (
-        <div className="grid gap-4 xl:grid-cols-3">
-          <div className="space-y-4 xl:col-span-2">
-            <Card>
-              <CardHeader title="Live positioning" sub="What each monitored page says right now: hero, CTAs, prices, and message emphasis." />
-              <div className="divide-y divide-line border-t border-line">
-                {data.pages_status.map((p) => <PagePanel key={p.url} p={p} terms={meta.watch_terms} color={e.color} />)}
-              </div>
-            </Card>
-            <Card className="overflow-hidden">
-              <CardHeader title="Change history" sub={`${data.changes.length} signals recorded`} />
-              {data.changes.length ? (
-                <div className="divide-y divide-line border-t border-line">{data.changes.map((c) => <ChangeRow key={c.id} c={c} onOpen={setOpen} />)}</div>
-              ) : <Empty title="No changes yet">The first scan sets a baseline. Changes appear here from the next scan.</Empty>}
-            </Card>
-          </div>
-          <div className="space-y-4">
-            <Card>
-              <CardHeader title="AI search presence" sub="Share of tracked answers mentioning them" />
-              <div className="px-5 pb-5">
-                {data.ai ? (
-                  <>
-                    <div className="flex items-end gap-6">
-                      <div><div className="text-[30px] font-semibold leading-none tnum text-ink">{pct(data.ai.share)}</div><div className="mt-1 text-[11.5px] text-ink-3">of answers</div></div>
-                      <div><div className="text-[18px] font-semibold leading-none tnum text-ink">{data.ai.avg_rank ? `#${data.ai.avg_rank.toFixed(1)}` : "—"}</div><div className="mt-1 text-[11.5px] text-ink-3">avg. position</div></div>
-                      <div><div className="text-[18px] font-semibold leading-none tnum text-ink">{data.ai.cited}</div><div className="mt-1 text-[11.5px] text-ink-3">citations</div></div>
-                    </div>
-                    {data.ai_trend.length > 1 && (
-                      <div className="mt-4">
-                        <LineChart height={140} series={[e]} fmtX={day} data={data.ai_trend.map((t) => ({ date: t.date, [e.id]: t.share ?? 0 }))} />
-                      </div>
-                    )}
-                  </>
-                ) : <Empty icon={<Bot size={18} />} title="No AI runs yet" />}
-              </div>
-            </Card>
-            <Card className="overflow-hidden">
-              <CardHeader title="Content" sub={`${data.posts.length} posts tracked`} right={<Rss size={14} className="text-ink-3" />} />
-              <div className="max-h-[520px] divide-y divide-line overflow-y-auto border-t border-line">
-                {data.posts.length ? data.posts.slice(0, 40).map((p) => (
-                  <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block px-5 py-3 hover:bg-hover/60">
-                    <div className="text-[13px] font-medium leading-snug text-ink">{p.title}</div>
-                    <div className="mt-0.5 text-[11.5px] text-ink-3">{p.published ? day(p.published) : `seen ${ago(p.first_seen)}`}</div>
-                  </a>
-                )) : <Empty icon={<Newspaper size={18} />} title="No posts yet" />}
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-      <ChangeDrawer id={open} onClose={() => setOpen(null)} />
-      <Battlecard id={id} open={bc} onClose={() => setSp({})} />
+      <Tabs value={tab} onChange={setTab} tabs={TABS.map((t) => ({ id: t.id, label: t.label, count: t.module ? (counts[t.module] ?? 0) + (t.module === "gtm" ? counts["gtm_links"] ?? 0 : 0) : undefined }))} />
+      <div className="pt-6">
+        {!data ? <Skeleton className="h-80 rounded-2xl" /> :
+          tab === "signals" ? <SignalsTab events={data.events} /> :
+          tab === "pages" ? <PagesTab pages={data.pages_status} /> :
+          <ModuleTab competitor={id} module={TABS.find((t) => t.id === tab)!.module!} />}
+      </div>
     </div>
   );
 }
 
-function PagePanel({ p, terms, color }: { p: CompetitorDetail["pages_status"][number]; terms: string[]; color: string }) {
-  const s = p.latest, sig = s?.signals ?? {};
-  const termRows = terms.map((t) => [t, sig.terms?.[t] ?? 0] as const).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 6);
-  const tmax = Math.max(1, ...termRows.map(([, v]) => v));
+function SignalsTab({ events }: { events: any[] }) {
+  const [open, setOpen] = useState<number | null>(null);
+  if (!events.length) return <Card><Empty title="No signals yet">Modules alert from their second run onward.</Empty></Card>;
   return (
-    <div className="p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="rounded-md bg-sunken px-1.5 py-0.5 text-[10.5px] font-medium uppercase tracking-wide text-ink-3 ring-1 ring-inset ring-line">{p.kind}</span>
-          <a href={p.url} target="_blank" rel="noreferrer" className="truncate text-[12.5px] text-ink-2 hover:text-ink">{host(p.url)}{path(p.url)}</a>
-          <ExternalLink size={11} className="text-ink-3 shrink-0" />
-        </div>
-        <div className="flex items-center gap-1.5 text-[11.5px] text-ink-3">
-          {s?.error ? <><AlertCircle size={12} className="text-crit" />{s.error}</> : s ? <><CheckCircle2 size={12} className="text-good" />checked {ago(s.fetched_at)}</> : "not yet checked"}
-          {p.changes > 0 && <span className="ml-2 rounded-full bg-accent-soft px-2 py-0.5 text-accent-ink">{p.changes} changes</span>}
-        </div>
-      </div>
-      {s && !s.error && (
-        <div className="mt-3 grid gap-4 md:grid-cols-[1fr_200px]">
-          <div className="min-w-0">
-            {sig.h1?.[0] && <div className="text-[17px] font-semibold leading-snug tracking-[-0.01em] text-ink">“{sig.h1[0]}”</div>}
-            {s.meta && <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">{s.meta}</p>}
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {(sig.ctas ?? []).slice(0, 4).map((c: string) => <span key={c} className="rounded-md px-2 py-0.5 text-[11.5px] font-medium ring-1 ring-inset" style={{ color, boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${color} 35%, transparent)` }}>{c}</span>)}
-              {(sig.prices ?? []).slice(0, 6).map((pr: string) => <span key={pr} className="rounded-md bg-sunken px-2 py-0.5 font-mono text-[11px] text-ink ring-1 ring-inset ring-line">{pr}</span>)}
-            </div>
-          </div>
-          {termRows.length > 0 && (
-            <div>
-              <div className="eyebrow mb-2">Message emphasis</div>
-              <div className="space-y-1.5">
-                {termRows.map(([t, v]) => (
-                  <div key={t} className="flex items-center gap-2 text-[11.5px]">
-                    <span className="w-24 truncate text-ink-2">{t}</span>
-                    <div className="h-1.5 flex-1 rounded-full bg-sunken"><div className="h-full rounded-full" style={{ width: `${(v / tmax) * 100}%`, background: color }} /></div>
-                    <span className="w-5 text-right tnum text-ink-3">{v}</span>
-                  </div>
-                ))}
+    <Card className="overflow-hidden">
+      <div className="divide-y divide-line">{events.map((ev) => <EventRow key={ev.id} e={ev} onOpen={setOpen} showCompetitor={false} />)}</div>
+      <EventDrawer id={open} onClose={() => setOpen(null)} />
+    </Card>
+  );
+}
+
+function PagesTab({ pages }: { pages: any[] }) {
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      {pages.map((p) => {
+        const s = p.latest, sig = s?.signals ?? {};
+        return (
+          <Card key={p.url} className="overflow-hidden">
+            <Thumb name={s?.screenshot} className="aspect-[16/9] w-full rounded-none border-0 border-b" />
+            <div className="p-5">
+              <div className="flex items-center justify-between gap-3 text-[12px] text-ink-3">
+                <span className="uppercase tracking-[.1em]">{p.kind}</span><span>{s ? `checked ${ago(s.fetched_at)}` : "not yet checked"}</span>
               </div>
+              {sig.h1?.[0] && <div className="mt-2 text-[17px] leading-snug tracking-[-0.01em] text-ink">“{sig.h1[0]}”</div>}
+              {s?.meta && <p className="mt-1.5 text-[13px] leading-relaxed text-ink-2">{s.meta}</p>}
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(sig.ctas ?? []).slice(0, 4).map((c: string) => <span key={c} className="rounded-full bg-sunken px-2.5 py-0.5 text-[11.5px] text-ink-2">{c}</span>)}
+                {(sig.prices ?? []).slice(0, 4).map((c: string) => <span key={c} className="rounded-full bg-sunken px-2.5 py-0.5 font-mono text-[11px] text-ink-2">{c}</span>)}
+              </div>
+              <a href={p.url} target="_blank" rel="noreferrer" className="mt-3 block truncate text-[12px] text-ink-3 hover:text-ink">{p.url}</a>
             </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Battlecard({ id, open, onClose }: { id: string; open: boolean; onClose: () => void }) {
-  const [md, setMd] = useState<string>("");
-  const toast = useToast();
-  const e = useEntity(id);
-  useEffect(() => { if (open) api<string>(`/api/battlecard/${id}`).then(setMd).catch(() => setMd("")); }, [open, id]);
-  const copy = async () => { try { await navigator.clipboard.writeText(md); toast({ title: "Battlecard copied", body: "Markdown is on your clipboard." }); } catch { toast({ title: "Copy failed", tone: "err" }); } };
-  const download = () => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
-    a.download = `${id}-battlecard.md`; a.click();
-  };
-  return (
-    <Drawer open={open} onClose={onClose} width={680}>
-      <div className="border-b border-line p-7 pr-14 glow">
-        <div className="eyebrow mb-1">Live battlecard</div>
-        <h2 className="text-[22px] font-semibold tracking-[-0.015em] text-ink">{e?.name}</h2>
-        <p className="mt-1 text-[13px] text-ink-2">Regenerated from the latest snapshots on every scan, so it never goes stale. Paste it into your battlecard doc.</p>
-        <div className="mt-4 flex gap-2">
-          <Button variant="primary" size="sm" onClick={copy}><Copy size={13} />Copy markdown</Button>
-          <Button variant="outline" size="sm" onClick={download}><Download size={13} />Download .md</Button>
-        </div>
-      </div>
-      <div className="p-7">
-        {md ? <MarkdownLite md={md} /> : <Skeleton className="h-64" />}
-      </div>
-    </Drawer>
-  );
-}
-
-/** Tiny renderer for the battlecard's own, known markdown subset. */
-function MarkdownLite({ md }: { md: string }) {
-  const inline = (s: string) => s.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\)|_[^_]+_)/g).map((t, i) => {
-    if (t.startsWith("**")) return <strong key={i} className="font-semibold text-ink">{t.slice(2, -2)}</strong>;
-    const m = t.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-    if (m) return <a key={i} href={m[2]} target="_blank" rel="noreferrer" className="text-accent-ink hover:underline">{m[1]}</a>;
-    if (/^_.+_$/.test(t)) return <em key={i} className="text-ink-3 not-italic">{t.slice(1, -1)}</em>;
-    return t;
-  });
-  return (
-    <div className="space-y-1.5 text-[13.5px] leading-relaxed text-ink-2">
-      {md.split("\n").map((l, i) => {
-        if (l.startsWith("# ")) return null;
-        if (l.startsWith("## ")) return <h3 key={i} className="pt-4 text-[14px] font-semibold text-ink first:pt-0">{inline(l.slice(3))}</h3>;
-        if (l.startsWith("- ")) return <div key={i} className="flex gap-2"><span className="mt-2 size-1 shrink-0 rounded-full bg-ink-3" /><span>{inline(l.slice(2))}</span></div>;
-        if (!l.trim()) return null;
-        return <p key={i}>{inline(l)}</p>;
+          </Card>
+        );
       })}
     </div>
   );
 }
+
+export function ModuleTab({ competitor, module }: { competitor: string; module: string }) {
+  const { data } = useApi<Fact[]>(`/api/facts?competitor=${competitor}&module=${module}`);
+  const { data: links } = useApi<Fact[]>(module === "gtm" ? `/api/facts?competitor=${competitor}&module=gtm_links` : null);
+  const [showRaw, setShowRaw] = useState(false);
+  const all = useMemo(() => [...(data ?? []), ...(links ?? [])], [data, links]);
+  const kinds = useMemo(() => {
+    const g = new Map<string, Fact[]>();
+    for (const f of all) g.set(f.kind, [...(g.get(f.kind) ?? []), f]);
+    return [...g.entries()].filter(([k]) => showRaw || !HIDE_KINDS.has(k)).sort((a, b) => KIND_ORDER.indexOf(a[0]) - KIND_ORDER.indexOf(b[0]));
+  }, [all, showRaw]);
+  if (!data) return <Skeleton className="h-64 rounded-2xl" />;
+  if (!all.length) return <Card><Empty title="Nothing collected yet">Run this module from the Run menu, or rescan from the deep dive.</Empty></Card>;
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end"><Chip active={showRaw} onClick={() => setShowRaw((v) => !v)}>Show raw records</Chip></div>
+      {kinds.map(([kind, fs]) => <KindCard key={kind} kind={kind} facts={fs} />)}
+    </div>
+  );
+}
+
+function KindCard({ kind, facts }: { kind: string; facts: Fact[] }) {
+  const [open, setOpen] = useState<number | null>(null);
+  const [all, setAll] = useState(false);
+  const shown = all ? facts : facts.slice(0, 12);
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-baseline justify-between px-6 pb-3 pt-5">
+        <h3 className="text-[14px] text-ink">{KIND_LABEL[kind] ?? kind}</h3>
+        <span className="text-[12px] text-ink-3 tnum">{facts.length}</span>
+      </div>
+      <div className="divide-y divide-line border-t border-line">
+        {shown.map((f) => (
+          <div key={f.id}>
+            <button onClick={() => setOpen(open === f.id ? null : f.id)} className="grid w-full grid-cols-[1fr_auto] items-center gap-4 px-6 py-3 text-left hover:bg-hover/60">
+              <div className="min-w-0">
+                <div className="truncate text-[13.5px] text-ink">{f.label}</div>
+                <div className="truncate text-[12px] text-ink-3">{summary(f)}</div>
+              </div>
+              <div className="flex items-center gap-4"><Confidence c={f.confidence} /><span className="hidden w-24 text-right text-[11.5px] text-ink-3 sm:block">since {day(f.first_seen)}</span></div>
+            </button>
+            {open === f.id && (
+              <div className="space-y-3 bg-sunken/50 px-6 py-4">
+                {f.value?.screenshot && <Thumb name={f.value.screenshot} className="aspect-[16/9] w-full max-w-sm" />}
+                <div className="grid grid-cols-[150px_1fr] gap-x-4 gap-y-1 text-[12px]">
+                  {Object.entries(f.value || {}).filter(([k, v]) => v != null && v !== "" && k !== "screenshot").slice(0, 16).map(([k, v]) => (
+                    <div key={k} className="contents"><span className="text-ink-3">{k.replace(/_/g, " ")}</span><span className="break-words text-ink-2">{Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v)}</span></div>
+                  ))}
+                </div>
+                <EvidenceList items={f.evidence || []} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {facts.length > 12 && <button onClick={() => setAll((a) => !a)} className="w-full border-t border-line py-3 text-[12.5px] text-ink-3 hover:text-ink">{all ? "Show fewer" : `Show all ${facts.length}`}</button>}
+    </Card>
+  );
+}
+
+function summary(f: Fact): string {
+  const v = f.value || {};
+  switch (f.kind) {
+    case "tool": return `${v.category_label ?? ""}${v.phases ? " · " + v.phases.join(", ") : ""}${v.fires_before_consent ? " · fires before consent" : ""}`;
+    case "subdomain": return [v.kind, v.hosting, v.title, v.private ? "private IP · not contacted" : v.internal ? "internal tooling · not contacted" : null, v.first_cert ? `cert ${v.first_cert}` : null].filter(Boolean).join(" · ");
+    case "job": return [v.function, v.seniority, v.location || v.region].filter(Boolean).join(" · ");
+    case "verification": return [v.category, v.means].filter(Boolean).join(" · ");
+    case "conversion": return `${v.platform ?? ""}${v.fires_on?.length ? " · fires on " + v.fires_on.join(", ") : ""}`;
+    case "motion": return (v.reasons ?? []).join(" · ");
+    case "funding": return [v.date?.slice(0, 10), v.investors?.join(", ")].filter(Boolean).join(" · ");
+    case "ad_channel": return `${v.status} · ${v.reading ?? ""}`;
+    case "repo": return [v.language, v.stars != null ? `${v.stars}★` : null, v.pushed_at ? `pushed ${v.pushed_at.slice(0, 10)}` : null].filter(Boolean).join(" · ");
+    case "press": return [v.source, v.published?.slice(0, 10)].filter(Boolean).join(" · ");
+    case "email_sender": return v.include ?? "";
+    case "staging_site": return v.crawl ?? v.url ?? "";
+    default: return Object.entries(v).filter(([, x]) => typeof x === "string" || typeof x === "number").slice(0, 2).map(([k, x]) => `${k.replace(/_/g, " ")}: ${x}`).join(" · ");
+  }
+}
+
+export { cx };
