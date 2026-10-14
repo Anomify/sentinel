@@ -1,0 +1,118 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Sentinel CI — watchlist
+#  Who you track, which pages matter, and where their content lives.
+#  URLs below were verified live on 2026-10-14. Edit freely; the app re-syncs
+#  this file on every run.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Your own brand — used for AI-search share-of-voice ("are WE in the answer?").
+brand:
+  name: "Your Company"            # ← change me
+  aliases: []                     # e.g. ["YourCo", "YourProduct"]
+  domains: ["example.com"]        # ← change me (used to match AI citations)
+  color: "#9085e9"
+
+# Terms whose frequency on competitor pages signals a messaging pivot.
+watch_terms:
+  - agentic
+  - MCP
+  - runtime
+  - guardrails
+  - red teaming
+  - prompt injection
+  - AI-SPM
+  - governance
+  - EU AI Act
+  - free trial
+  - enterprise
+  - open source
+
+# Lines matching these regexes are ignored when diffing (cookie banners, dates…)
+ignore_patterns:
+  - "(?i)cookie"
+  - "(?i)accept all"
+  - "(?i)©\\s*\\d{4}"
+  - "(?i)all rights reserved"
+
+competitors:
+  - id: hiddenlayer
+    name: HiddenLayer
+    tier: primary                 # primary | secondary | platform
+    color: "#3987e5"
+    aliases: ["Hidden Layer", "AISec Platform"]
+    domains: ["hiddenlayer.com"]
+    pages:
+      - { kind: homepage,  url: "https://www.hiddenlayer.com/" }
+      - { kind: product,   url: "https://www.hiddenlayer.com/platform/ai-runtime-security" }
+      - { kind: product,   url: "https://www.hiddenlayer.com/solutions/ai-guardrails" }
+      - { kind: product,   url: "https://www.hiddenlayer.com/solutions/agentic-mcp-security" }
+      - { kind: product,   url: "https://www.hiddenlayer.com/platform/ai-attack-simulation" }
+    feeds:
+      # No RSS published — scrape the listing page for post links instead.
+      - type: listing
+        url: "https://www.hiddenlayer.com/innovation-hub/insights"
+        link_pattern: "^/(insight|research|sai-security-advisory)/[^/]+/?$"
+      - type: listing
+        url: "https://www.hiddenlayer.com/innovation-hub/research"
+        link_pattern: "^/(insight|research|sai-security-advisory)/[^/]+/?$"
+
+  - id: alice
+    name: Alice (WonderFence)
+    tier: primary
+    color: "#d95926"
+    aliases: ["Alice", "WonderFence", "ActiveFence", "Active Fence"]
+    domains: ["alice.io", "activefence.com"]
+    pages:
+      - { kind: homepage, url: "https://alice.io/" }
+      - { kind: product,  url: "https://alice.io/products/wonderfence" }
+    feeds:
+      - { type: rss, url: "https://alice.io/blog/rss.xml" }
+
+  - id: lakera
+    name: Lakera
+    tier: secondary
+    color: "#199e70"
+    aliases: ["Lakera Guard", "Lakera Red", "Gandalf"]
+    domains: ["lakera.ai"]
+    pages:
+      - { kind: homepage, url: "https://www.lakera.ai/" }
+    feeds:
+      - type: listing
+        url: "https://www.lakera.ai/blog"
+        link_pattern: "^/blog/[a-z0-9-]+/?$"
+
+  - id: aws-bedrock
+    name: AWS Bedrock Guardrails
+    tier: platform
+    color: "#c98500"
+    aliases: ["Bedrock Guardrails", "Amazon Bedrock Guardrails"]
+    domains: ["aws.amazon.com"]
+    pages:
+      - { kind: product, url: "https://aws.amazon.com/bedrock/guardrails/" }
+      - { kind: pricing, url: "https://aws.amazon.com/bedrock/pricing/", focus: "(?i)guardrail" }
+    feeds:
+      - { type: rss, url: "https://aws.amazon.com/blogs/security/feed/", filter: "(?i)guardrail|bedrock|generative|LLM|agent" }
+      - { type: rss, url: "https://aws.amazon.com/blogs/machine-learning/feed/", filter: "(?i)guardrail|safety|prompt injection" }
+
+  - id: google-model-armor
+    name: Google Model Armor
+    tier: platform
+    color: "#d55181"
+    aliases: ["Model Armor", "Security Command Center AI Protection"]
+    domains: ["cloud.google.com"]
+    pages:
+      - { kind: product, url: "https://cloud.google.com/security/products/model-armor" }
+      - { kind: pricing, url: "https://cloud.google.com/security-command-center/pricing", focus: "(?i)model armor|AI protection" }
+    feeds:
+      - { type: rss, url: "https://cloudblog.withgoogle.com/products/identity-security/rss/", filter: "(?i)model armor|AI|agent|gemini" }
+
+  - id: azure-content-safety
+    name: Azure AI Content Safety
+    tier: platform
+    color: "#008300"
+    aliases: ["Azure Content Safety", "Prompt Shields", "Azure AI Foundry guardrails"]
+    domains: ["azure.microsoft.com", "learn.microsoft.com"]
+    pages:
+      - { kind: product, url: "https://azure.microsoft.com/en-us/products/ai-services/ai-content-safety" }
+    feeds:
+      - { type: rss, url: "https://azure.microsoft.com/en-us/blog/feed/", filter: "(?i)content safety|prompt shield|guardrail|responsible AI" }

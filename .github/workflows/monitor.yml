@@ -1,0 +1,53 @@
+# Zero-infrastructure mode: GitHub Actions runs the collectors on a schedule and
+# keeps the SQLite database on a dedicated `sentinel-data` branch.
+# Add your API keys / webhook as repository secrets. Disable this workflow if you
+# run Sentinel on a server (Docker) instead — its built-in scheduler does the same.
+name: Monitor
+on:
+  schedule:
+    - cron: "17 */6 * * *"     # pages + feeds every 6h
+    - cron: "43 12 * * 1"      # Monday 12:43 UTC: AI visibility + weekly digest
+  workflow_dispatch:
+    inputs:
+      full: { description: "Also run AI visibility + digest", type: boolean, default: false }
+
+permissions: { contents: write }
+concurrency: { group: sentinel-monitor, cancel-in-progress: false }
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      SENTINEL_DATA_DIR: ${{ github.workspace }}/state
+      PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASS: ${{ secrets.SMTP_PASS }}
+      DIGEST_FROM: ${{ secrets.DIGEST_FROM }}
+      DIGEST_TO: ${{ secrets.DIGEST_TO }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore database
+        run: |
+          mkdir -p state
+          if git fetch --depth 1 origin sentinel-data 2>/dev/null; then
+            git show origin/sentinel-data:sentinel.db > state/sentinel.db
+          fi
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -e ".[browser]" && playwright install --with-deps chromium
+      - run: sentinel pages
+      - run: sentinel feeds
+      - name: AI visibility + digest
+        if: github.event.schedule == '43 12 * * 1' || inputs.full
+        run: sentinel ai && sentinel digest
+      - name: Persist database
+        run: |
+          cd state
+          git init -q -b sentinel-data && git add sentinel.db
+          git -c user.name=sentinel -c user.email=sentinel@users.noreply.github.com commit -qm "data: $(date -u +%FT%TZ)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" sentinel-data

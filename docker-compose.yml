@@ -1,0 +1,9 @@
+services:
+  sentinel:
+    build: .
+    ports: ["8000:8000"]
+    env_file: .env
+    volumes:
+      - ./data:/data
+      - ./config:/app/config   # edit the watchlist without rebuilding
+    restart: unless-stopped

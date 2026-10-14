@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  AI-search target questions
+#  Replace these with your own list of 20. Each is asked to every enabled engine
+#  on the AI-visibility schedule; the app records who gets mentioned, in what
+#  order, and which domains are cited.
+# ─────────────────────────────────────────────────────────────────────────────
+
+engines:
+  perplexity: { enabled: true,  model: "sonar" }          # PERPLEXITY_API_KEY
+  openai:     { enabled: true,  model: "gpt-5-mini" }     # OPENAI_API_KEY (Responses API + web_search)
+  claude:     { enabled: false, model: "claude-opus-5-5" }    # ANTHROPIC_API_KEY (web_search tool)
+
+questions:
+  - { id: q01, category: Category,   text: "What are the best AI security platforms for enterprises?" }
+  - { id: q02, category: Category,   text: "What is AI runtime security and which vendors offer it?" }
+  - { id: q03, category: Guardrails, text: "What are the best LLM guardrail tools for production applications?" }
+  - { id: q04, category: Guardrails, text: "How do I protect an LLM app from prompt injection?" }
+  - { id: q05, category: Guardrails, text: "Bedrock Guardrails vs third-party AI guardrails: which is better?" }
+  - { id: q06, category: Agents,     text: "How do you secure AI agents and MCP servers?" }
+  - { id: q07, category: Agents,     text: "What tools detect tool misuse or data exfiltration by AI agents?" }
+  - { id: q08, category: Red team,   text: "What are the best AI red teaming tools?" }
+  - { id: q09, category: Red team,   text: "How do I run automated adversarial testing on a GenAI app?" }
+  - { id: q10, category: Compare,    text: "HiddenLayer alternatives" }
+  - { id: q11, category: Compare,    text: "WonderFence vs HiddenLayer" }
+  - { id: q12, category: Compare,    text: "Lakera Guard alternatives" }
+  - { id: q13, category: Governance, text: "How do I comply with the EU AI Act for generative AI applications?" }
+  - { id: q14, category: Governance, text: "What is AI security posture management (AI-SPM)?" }
+  - { id: q15, category: Safety,     text: "How can I stop an LLM chatbot from producing harmful or off-brand content?" }
+  - { id: q16, category: Safety,     text: "What are the best content moderation APIs for generative AI?" }
+  - { id: q17, category: Supply,     text: "How do I scan AI models for malware or backdoors?" }
+  - { id: q18, category: Buyer,      text: "What should a CISO look for in an AI security vendor?" }
+  - { id: q19, category: Buyer,      text: "How much does an AI security platform cost?" }
+  - { id: q20, category: Buyer,      text: "Who are the leading startups in AI security in 2026?" }
