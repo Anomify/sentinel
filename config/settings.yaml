@@ -21,8 +21,9 @@ fetch:
   min_change_ratio: 0.01   # ignore text changes smaller than 1% unless a signal moved
 
 analysis:
-  provider: claude         # LLM that writes the "so what" for each change; off if no key
-  model: "claude-opus-5-5"
+  provider: auto           # auto | gemini | claude — auto uses Claude if ANTHROPIC_API_KEY is set, else Gemini
+  gemini_model: "gemini-3.5-flash"   # GEMINI_API_KEY; falls back to gemini-flash-latest when overloaded
+  model: "claude-opus-5-5"           # ANTHROPIC_API_KEY
   effort: low
 
 digest:

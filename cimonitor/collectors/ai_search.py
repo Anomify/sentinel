@@ -75,24 +75,37 @@ def ask_claude(model: str, q: str) -> tuple[str, list[dict]]:
 
 
 def ask_gemini(model: str, q: str) -> tuple[str, list[dict]]:
-    """Gemini with Google Search grounding; grounding chunks are the cited sources."""
-    r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        params={"key": os.environ["GEMINI_API_KEY"]},
-        json={"systemInstruction": {"parts": [{"text": SYSTEM}]}, "contents": [{"role": "user", "parts": [{"text": q}]}],
-              "tools": [{"google_search": {}}]},
-        timeout=180,
-    )
+    """Gemini with Google Search grounding; grounding chunks are the cited sources.
+
+    If search grounding is over quota, falls back to an ungrounded answer (the model's own
+    knowledge, no citations) so visibility is still measured; that answer is labelled.
+    """
+    import time
+    key = os.environ["GEMINI_API_KEY"]
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    base = {"systemInstruction": {"parts": [{"text": SYSTEM}]}, "contents": [{"role": "user", "parts": [{"text": q}]}]}
+    grounded, r = True, None
+    for attempt in range(6):
+        body = {**base, "tools": [{"google_search": {}}]} if grounded else base
+        r = requests.post(url, headers={"x-goog-api-key": key}, json=body, timeout=180)
+        if r.status_code == 429 and grounded and "quota" in r.text.lower():
+            grounded = False          # search quota exhausted → answer without search
+            continue
+        if r.status_code in (429, 500, 503):
+            time.sleep(3 * (attempt + 1))
+            continue
+        break
     r.raise_for_status()
     cand = (r.json().get("candidates") or [{}])[0]
     text = "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", []))
     chunks = (cand.get("groundingMetadata") or {}).get("groundingChunks") or []
-    # grounding URIs are redirect links; the title carries the source domain
     cites = [{"url": c["web"].get("uri"), "title": c["web"].get("title")} for c in chunks if c.get("web")]
-    for c in cites:
+    for c in cites:  # grounding URIs are redirect links; the title carries the source domain
         t = c.get("title") or ""
         if re.fullmatch(r"[\w.-]+\.[a-z]{2,}", t):
             c["domain"] = t
+    if not grounded:
+        text = "[Gemini answered without Google Search — search-grounding quota unavailable]\n" + text
     return text, cites
 
 

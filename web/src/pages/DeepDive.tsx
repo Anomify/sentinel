@@ -178,7 +178,7 @@ function FindingBlock({ f }: { f: Finding }) {
       {shot && <Thumb name={shot} className="mt-4 aspect-[16/9] w-full max-w-md" />}
       {f.vs_us && (
         <div className="mt-4 border-l-2 border-accent pl-4">
-          <div className="text-[11.5px] text-accent-ink">Vs. us{f.vs_us_by === "claude" ? " · written by Claude" : ""}</div>
+          <div className="text-[11.5px] text-accent-ink">Vs. us{f.vs_us_by === "claude" ? " · written by Claude" : f.vs_us_by === "gemini" ? " · written by Gemini" : ""}</div>
           <p className="mt-1 text-[14px] leading-relaxed text-ink">{f.vs_us}</p>
         </div>
       )}

@@ -33,8 +33,28 @@ BRIEF_SCHEMA = {
 }
 
 
-def available() -> bool:
+def _has_claude() -> bool:
     return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+
+
+def _has_gemini() -> bool:
+    return bool(os.environ.get("GEMINI_API_KEY"))
+
+
+def provider(cfg=None) -> str | None:
+    """Which LLM writes the analysis: settings `analysis.provider` = auto | claude | gemini."""
+    want = ((cfg.settings if cfg else {}).get("analysis", {}) or {}).get("provider", "auto")
+    if want == "claude" and _has_claude():
+        return "claude"
+    if want == "gemini" and _has_gemini():
+        return "gemini"
+    if want in ("auto", "claude", "gemini"):
+        return "claude" if _has_claude() else "gemini" if _has_gemini() else None
+    return None
+
+
+def available(cfg=None) -> bool:
+    return provider(cfg) is not None
 
 
 def _client():
@@ -42,7 +62,46 @@ def _client():
     return anthropic.Anthropic()
 
 
-def _json_call(model: str, system: str, prompt: str, schema: dict, effort: str = "low") -> dict | None:
+def _json_call(cfg, system: str, prompt: str, schema: dict, effort: str | None = None) -> dict | None:
+    a = cfg.settings.get("analysis", {}) or {}
+    if provider(cfg) == "gemini":
+        return _gemini_json(a.get("gemini_model", "gemini-3.5-flash"), system, prompt, schema)
+    return _claude_json(a.get("model", "claude-opus-5-5"), system, prompt, schema, effort or a.get("effort", "low"))
+
+
+def _gemini_schema(s):
+    """Gemini's responseSchema is an OpenAPI subset: no additionalProperties."""
+    if isinstance(s, dict):
+        return {k: _gemini_schema(v) for k, v in s.items() if k != "additionalProperties"}
+    if isinstance(s, list):
+        return [_gemini_schema(x) for x in s]
+    return s
+
+
+def _gemini_json(model: str, system: str, prompt: str, schema: dict) -> dict | None:
+    import time
+    import requests
+    models = [model] + [m for m in ("gemini-flash-latest", "gemini-3.5-flash") if m != model]
+    body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json", "responseSchema": _gemini_schema(schema), "temperature": 0.2}}
+    last = None
+    for attempt in range(6):
+        m = models[min(attempt // 2, len(models) - 1)]  # retry, then fall back to another model on overload
+        r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
+                          headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, json=body, timeout=120)
+        if r.status_code in (429, 500, 503):
+            last = r.text[:200]
+            time.sleep(2 * (attempt + 1))
+            continue
+        r.raise_for_status()
+        cand = (r.json().get("candidates") or [{}])[0]
+        text = "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", []))
+        return json.loads(text) if text else None
+    log.warning("Gemini analysis unavailable: %s", last)
+    return None
+
+
+def _claude_json(model: str, system: str, prompt: str, schema: dict, effort: str = "low") -> dict | None:
     import anthropic
     client = _client()
     kwargs = dict(
@@ -65,7 +124,7 @@ def _json_call(model: str, system: str, prompt: str, schema: dict, effort: str =
 
 def analyze_change(cfg, competitor: str, url: str, kind: str, removed: list[str], added: list[str],
                    signals: dict) -> dict | None:
-    if not available():
+    if not available(cfg):
         return None
     a = cfg.settings.get("analysis", {})
     system = (
@@ -81,14 +140,14 @@ def analyze_change(cfg, competitor: str, url: str, kind: str, removed: list[str]
         "\n\nADDED lines:\n" + "\n".join(f"+ {l}" for l in added[:80])[:6000]
     )
     try:
-        return _json_call(a.get("model", "claude-opus-5-5"), system, prompt, CHANGE_SCHEMA, a.get("effort", "low"))
+        return _json_call(cfg, system, prompt, CHANGE_SCHEMA)
     except Exception as e:  # analysis is best-effort; heuristics still apply
         log.warning("change analysis failed: %s", e)
         return None
 
 
 def write_brief(cfg, facts: dict) -> dict | None:
-    if not available():
+    if not available(cfg):
         return None
     a = cfg.settings.get("analysis", {})
     system = (
@@ -97,7 +156,7 @@ def write_brief(cfg, facts: dict) -> dict | None:
         "watch_next: 2-3 things to keep an eye on. No filler, no hedging."
     )
     try:
-        return _json_call(a.get("model", "claude-opus-5-5"), system,
+        return _json_call(cfg, system,
                           "This week's raw intelligence (JSON):\n" + json.dumps(facts, default=str)[:60000],
                           BRIEF_SCHEMA, a.get("effort", "low"))
     except Exception as e:
@@ -121,7 +180,7 @@ ACCURACY_SCHEMA = {
 def judge_accuracy(cfg, question: str, answer: str) -> dict | None:
     """Narrative accuracy: does the AI answer describe the brand correctly, per the brand's own facts?"""
     facts_ = cfg.brand.profile.get("facts") or []
-    if not available() or not facts_:
+    if not available(cfg) or not facts_:
         return None
     a = cfg.settings.get("analysis", {})
     system = (f"You audit what AI search engines say about {cfg.brand.name}. Compare the answer ONLY against the "
@@ -130,7 +189,7 @@ def judge_accuracy(cfg, question: str, answer: str) -> dict | None:
     prompt = ("Ground-truth facts:\n" + "\n".join(f"- {f}" for f in facts_) +
               f"\n\nQuestion asked: {question}\n\nAnswer given:\n{answer[:12000]}")
     try:
-        return _json_call(a.get("model", "claude-opus-5-5"), system, prompt, ACCURACY_SCHEMA, "low")
+        return _json_call(cfg, system, prompt, ACCURACY_SCHEMA, "low")
     except Exception as e:
         log.warning("accuracy judge failed: %s", e)
         return None
@@ -148,7 +207,7 @@ VSUS_SCHEMA = {
 
 def vs_us(cfg, competitor: str, findings: list[dict]) -> dict[str, str]:
     """For each finding, a recommended response ("Vs. us") in the brand's voice."""
-    if not available() or not findings:
+    if not available(cfg) or not findings:
         return {}
     a = cfg.settings.get("analysis", {})
     p = cfg.brand.profile
@@ -160,7 +219,7 @@ def vs_us(cfg, competitor: str, findings: list[dict]) -> dict[str, str]:
     prompt = f"Competitor: {competitor}\nFindings (JSON):\n" + json.dumps(
         [{"id": f["id"], "section": f["section"], "finding": f["title"], "detail": f.get("detail", "")} for f in findings])[:30000]
     try:
-        out = _json_call(a.get("model", "claude-opus-5-5"), system, prompt, VSUS_SCHEMA, a.get("effort", "low"))
+        out = _json_call(cfg, system, prompt, VSUS_SCHEMA, a.get("effort", "low"))
         return {i["id"]: i["vs_us"] for i in (out or {}).get("items", [])}
     except Exception as e:
         log.warning("vs-us failed: %s", e)

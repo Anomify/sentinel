@@ -137,7 +137,7 @@ export default function AiVisibility() {
               </div>
             </Card>
             <Card>
-              <CardHeader title="Narrative accuracy" sub="How correctly answers describe you, graded by Claude against your brand facts" />
+              <CardHeader title="Narrative accuracy" sub="How correctly answers describe you, graded by AI (Gemini or Claude) against your brand facts" />
               <div className="px-5 pb-5">
                 {data.accuracy ? (
                   <>
@@ -145,7 +145,7 @@ export default function AiVisibility() {
                       <div className="mb-1 text-[12.5px] text-ink-3">across {data.accuracy.n} answers that mention you</div></div>
                     <ul className="mt-4 space-y-1.5">{data.accuracy.issues.slice(0, 6).map((i, k) => <li key={k} className="text-[12.5px] leading-relaxed text-ink-2">— {i}</li>)}</ul>
                   </>
-                ) : <div className="py-4 text-[13px] leading-relaxed text-ink-3">Add <code className="font-mono text-[12px]">facts:</code> under <code className="font-mono text-[12px]">brand</code> in watchlist.yaml and an ANTHROPIC_API_KEY to grade what AI search says about you.</div>}
+                ) : <div className="py-4 text-[13px] leading-relaxed text-ink-3">Add <code className="font-mono text-[12px]">facts:</code> under <code className="font-mono text-[12px]">brand</code> in watchlist.yaml and a GEMINI_API_KEY or ANTHROPIC_API_KEY to grade what AI search says about you.</div>}
               </div>
             </Card>
           </div>

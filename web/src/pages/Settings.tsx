@@ -35,7 +35,7 @@ export default function Settings() {
           <CardHeader title="Integrations" sub="Set keys in .env; restart to apply" />
           <div className="divide-y divide-line border-t border-line">
             {meta.engines.map((e) => <Row key={e.id} label={ENGINE_LABEL[e.id] ?? e.id} detail={`${e.model}${e.enabled ? "" : " · disabled in questions.yaml"}`} on={e.enabled && e.has_key} env={ENV[e.id]} />)}
-            <Row label="Change analysis" detail="Claude explains each change and writes the brief" on={meta.analysis} env="ANTHROPIC_API_KEY" />
+            <Row label="AI analysis" detail={`So-what, Vs. us, weekly brief, accuracy grading${(meta as any).analysis_provider ? ` · using ${(meta as any).analysis_provider === "gemini" ? "Gemini" : "Claude"}` : ""}`} on={meta.analysis} env="GEMINI_API_KEY or ANTHROPIC_API_KEY" />
             <Row label="Slack digest" detail="Incoming webhook" on={meta.channels.slack} env="SLACK_WEBHOOK_URL" />
             <Row label="Email digest" detail="Any SMTP provider" on={meta.channels.email} env="SMTP_HOST, DIGEST_TO" />
             <Row label="Google ads library" detail="BigQuery public dataset (official)" on={false} env="GOOGLE_APPLICATION_CREDENTIALS" />

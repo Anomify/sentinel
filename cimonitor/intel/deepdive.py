@@ -293,7 +293,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         for f in out:
             if f["id"] in ai:
                 f["vs_us"] = ai[f["id"]]
-                f["vs_us_by"] = "claude"
+                f["vs_us_by"] = llm.provider(cfg) or "ai"
     except Exception:
         log.exception("vs us")
     summary = _summary(comp, out, motion, jobs, funding, launch, stack_tools, subs)

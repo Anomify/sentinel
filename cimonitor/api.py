@@ -64,7 +64,7 @@ def meta():
         "engines": [{"id": k, "model": v.get("model"), "enabled": bool(v.get("enabled")),
                      "has_key": bool(os.environ.get(ai_search.ENGINES[k][1])) if k in ai_search.ENGINES else False}
                     for k, v in c.engines.items()],
-        "channels": digest.channels_configured(), "analysis": llm.available(),
+        "channels": digest.channels_configured(), "analysis": llm.available(c), "analysis_provider": llm.provider(c),
         "schedule": jobs.schedule_status(c), "demo": db.is_demo(), "counts": counts,
         "auth": bool(TOKEN), "backend": db.backend(), "policy": [{"title": t, "detail": d} for t, d in guard.POLICY],
         "modules": insights.MODULE_LABEL,

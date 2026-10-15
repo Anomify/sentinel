@@ -35,7 +35,7 @@ export default function Digest() {
               <Channel icon={<Mail size={14} />} label="Email" on={meta.channels.email} hint="SMTP_HOST + DIGEST_TO" />
               <div className="flex items-center justify-between rounded-lg px-3 py-2 text-[12.5px]">
                 <span className="text-ink-2">AI-written brief</span>
-                <span className={meta.analysis ? "text-good" : "text-ink-3"}>{meta.analysis ? "Claude" : "Template (add ANTHROPIC_API_KEY)"}</span>
+                <span className={meta.analysis ? "text-good" : "text-ink-3"}>{meta.analysis ? ((meta as any).analysis_provider === "gemini" ? "Gemini" : "Claude") : "Template (add GEMINI_API_KEY)"}</span>
               </div>
             </div>
           </Card>
