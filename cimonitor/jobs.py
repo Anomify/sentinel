@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 def _c():
-    from .collectors import ads, ai_search, dns_infra, feeds, hiring, money, pages, radar, stack, subdomains
+    from .collectors import ads, ai_search, dns_infra, feeds, hiring, money, pages, products, radar, stack, subdomains
     return locals()
 
 
@@ -34,15 +34,16 @@ JOBS = {
     "hiring": lambda cfg, **kw: _c()["hiring"].run(cfg, kw.get("competitor")),
     "money": lambda cfg, **kw: _c()["money"].run(cfg, kw.get("competitor")),
     "ads": lambda cfg, **kw: _c()["ads"].run(cfg, kw.get("competitor")),
+    "product": lambda cfg, **kw: _c()["products"].run(cfg, kw.get("competitor")),
     "ai": lambda cfg, **kw: _c()["ai_search"].run(cfg, kw.get("limit")),
     "deepdive": _deepdive,
     "digest": lambda cfg, **kw: digest.run(cfg, deliver=kw.get("deliver", True)),
 }
 # Order for a full scan of one competitor (deep dive): dependencies first.
-FULL_SCAN = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "hiring", "money", "ads", "deepdive"]
+FULL_SCAN = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "hiring", "money", "ads", "deepdive"]
 LABELS = {"pages": "Pages & pricing", "feeds": "Content", "stack": "GTM stack + tag manager", "dns": "DNS & email",
           "subdomains": "Subdomains & certificates", "radar": "Pre-launch radar", "hiring": "Hiring", "money": "Partners & money",
-          "ads": "Ads", "ai": "AI visibility", "deepdive": "Deep dive", "digest": "Digest", "scan": "Full scan"}
+          "ads": "Ads", "product": "Product launches", "ai": "AI visibility", "deepdive": "Deep dive", "digest": "Digest", "scan": "Full scan"}
 
 _lock = threading.Lock()
 _running: dict[tuple[str, str], str] = {}

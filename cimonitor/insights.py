@@ -12,7 +12,7 @@ from .signatures import CATEGORIES
 SEV_WEIGHT = {"critical": 10, "high": 5, "medium": 2, "low": 1, "noise": 0, "info": 0}
 MODULE_LABEL = {"pages": "Positioning", "stack": "GTM stack", "gtm": "Tracking", "gtm_links": "Tracking", "dns": "DNS & email",
                 "subdomains": "Subdomains", "radar": "Pre-launch", "hiring": "Hiring", "money": "Money & partners",
-                "ads": "Ads", "content": "Content", "ai": "AI search"}
+                "ads": "Ads", "content": "Content", "ai": "AI search", "product": "Product"}
 
 
 def since(days: int) -> str:
@@ -22,7 +22,7 @@ def since(days: int) -> str:
 def entities(cfg: Config) -> list[dict]:
     return [{"id": e.id, "name": e.name, "color": e.color, "tier": e.tier, "domains": e.domains, "aliases": e.aliases,
              "is_brand": e.is_brand, "source": e.source, "pages": [p.__dict__ for p in e.pages], "feeds": [f.__dict__ for f in e.feeds]}
-            for e in cfg.entities]
+            for e in [cfg.brand, *cfg.competitors]]
 
 
 def events(con, days=30, competitor=None, module=None, severity=None, limit=300) -> list[dict]:

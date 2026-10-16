@@ -90,7 +90,7 @@ export function EntityTag({ id, className }: { id: string; className?: string })
   if (!e) return <span className="text-ink-3">{id}</span>;
   return (
     <span className={cx("inline-flex items-center gap-1.5 text-[12.5px] text-ink", className)}>
-      <EntityDot color={e.color} size={7} />{e.is_brand ? `${e.name} (you)` : e.name}
+      <EntityDot color={e.color} size={7} />{e.is_brand ? `${e.name} (you)` : e.tier === "self" ? `${e.name} (us)` : e.name}
     </span>
   );
 }

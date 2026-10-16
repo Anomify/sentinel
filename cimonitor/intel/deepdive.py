@@ -25,6 +25,7 @@ SECTIONS = [
     ("dns", "Email & DNS infrastructure"),
     ("subdomains", "Subdomains & infrastructure"),
     ("radar", "Pre-launch radar"),
+    ("product", "Product & feature launches"),
     ("hiring", "Hiring"),
     ("money", "Partners, channel & money"),
     ("ads", "Advertising"),
@@ -71,6 +72,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         jobs, boards = A("hiring", "job"), A("hiring", "board")
         partners, mkts, prog, funding, arr, mna, press = (A("money", k) for k in ("partner", "marketplace", "partner_program", "funding", "arr_claim", "m_and_a", "press"))
         adch = A("ads", "ad_channel")
+        prods, rels, launches = A("product", "product_page"), A("product", "release"), A("product", "launch")
         launch = db.get_meta(con, f"launch:{comp.id}") or {}
         firsts = db.rows(con.execute("SELECT * FROM events WHERE competitor=? AND kind='first_role' ORDER BY detected_at DESC LIMIT 6", (comp.id,)))
         snap = db.row(con.execute("SELECT * FROM snapshots WHERE competitor=? AND kind='homepage' AND error IS NULL ORDER BY id DESC LIMIT 1", (comp.id,)).fetchone())
@@ -220,6 +222,20 @@ def build(cfg: Config, comp: Entity) -> dict:
         out.append(_f("hiring", f"first:{e['id']}", e["title"], e.get("so_what") or "", "confirmed", e["evidence"], first_seen=e["detected_at"],
                       vs_us="A first-of-its-kind role marks a new motion or market. Pre-empt it in the accounts it will target.", weight=4))
 
+    # ── Product
+    by_date = lambda xs: sorted(xs, key=lambda f: f["value"].get("published") or f["first_seen"] or "", reverse=True)  # noqa: E731
+    for f_ in by_date(launches)[:6]:
+        out.append(_f("product", f"launch:{f_['key']}", f"Launch: {f_['label']}", f_["value"].get("source", ""), f_["confidence"], f_["evidence"],
+                      first_seen=f_["first_seen"], weight=4))
+    if prods:
+        newest = sorted(prods, key=lambda f: f["first_seen"] or "", reverse=True)
+        out.append(_f("product", "catalogue", f"{len(prods)} product and solution pages", ", ".join(p["label"] for p in newest[:10]),
+                      "confirmed", _ev(newest[:2]), weight=3))
+    if rels:
+        newest = sorted(rels, key=lambda f: f["first_seen"] or "", reverse=True)
+        out.append(_f("product", "releases", f"Release notes: {len(rels)} entries tracked", "Latest: " + "; ".join(r["label"][:80] for r in newest[:4]),
+                      "confirmed", _ev(newest[:1]), weight=3))
+
     # ── Money
     for f_ in sorted(funding, key=lambda f: f["value"].get("date") or "", reverse=True)[:3]:
         v = f_["value"]
@@ -289,7 +305,7 @@ def build(cfg: Config, comp: Entity) -> dict:
 
     # Vs. us: Claude where available (overrides rule text), keeps rule text otherwise.
     try:
-        ai = llm.vs_us(cfg, comp.name, [f for f in out if f["weight"] >= 2])
+        ai = {} if comp.tier == "self" else llm.vs_us(cfg, comp.name, [f for f in out if f["weight"] >= 2])
         for f in out:
             if f["id"] in ai:
                 f["vs_us"] = ai[f["id"]]

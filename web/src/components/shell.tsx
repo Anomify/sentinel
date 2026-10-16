@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Command } from "cmdk";
 import {
-  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, FileSearch, Globe, Layers, LayoutGrid, Loader2, Mail,
+  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, FileSearch, Globe, Layers, LayoutGrid, Loader2, Mail, Package,
   Menu, Network, Newspaper, Play, Rocket, Search, Settings, ShieldCheck, Swords, X,
 } from "lucide-react";
 import { api, invalidate, runJob, setWorkspace, workspace } from "../lib/api";
@@ -49,7 +49,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 /* ── Jobs ───────────────────────────────────────────────────────────────────── */
 export const JOB_LABEL: Record<string, string> = {
   pages: "Page scan", feeds: "Content sync", stack: "Stack & tag manager", dns: "DNS & email", subdomains: "Certificate transparency",
-  radar: "Pre-launch radar", hiring: "Hiring", money: "Partners & money", ads: "Ads", ai: "AI visibility", deepdive: "Deep dives", digest: "Digest",
+  radar: "Pre-launch radar", product: "Product launches", hiring: "Hiring", money: "Partners & money", ads: "Ads", ai: "AI visibility", deepdive: "Deep dives", digest: "Digest",
 };
 const JobCtx = createContext<{ running: string[]; start: (job: string, opts?: { deliver?: boolean }) => void; poll: () => void }>({ running: [], start: () => {}, poll: () => {} });
 export const useJobs = () => useContext(JobCtx);
@@ -98,6 +98,7 @@ export const NAV: { group: string; items: { to: string; label: string; icon: any
     { to: "/stack", label: "GTM stack", icon: Layers },
     { to: "/infrastructure", label: "Infrastructure", icon: Network },
     { to: "/radar", label: "Launch radar", icon: Rocket },
+    { to: "/product", label: "Product launches", icon: Package },
     { to: "/hiring", label: "Hiring", icon: Briefcase },
     { to: "/money", label: "Partners & money", icon: BadgeDollarSign },
     { to: "/positioning", label: "Positioning", icon: Newspaper },
@@ -222,7 +223,7 @@ function RunMenu() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
-  const items = ["subdomains", "dns", "stack", "pages", "radar", "hiring", "money", "ads", "feeds", "ai", "deepdive", "digest"];
+  const items = ["subdomains", "dns", "stack", "pages", "radar", "product", "hiring", "money", "ads", "feeds", "ai", "deepdive", "digest"];
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)}

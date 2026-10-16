@@ -351,6 +351,52 @@ function MoneyCard({ id }: { id: string }) {
   );
 }
 
+/* ── Product intelligence ───────────────────────────────────────────────────── */
+export function ProductPage() {
+  const meta = useMeta();
+  const cs = comps(meta);
+  return (
+    <div>
+      <PageHeader eyebrow="Product intelligence" title="Product launches" sub="New products and features as they appear: new product and solution pages, new entries in release notes, and launch announcements on their blog and in the press." />
+      <div className="space-y-5">{cs.map((c) => <ProductCard key={c.id} id={c.id} />)}</div>
+    </div>
+  );
+}
+
+function ProductCard({ id }: { id: string }) {
+  const e = useEntity(id)!;
+  const { data } = useApi<Fact[]>(`/api/facts?competitor=${id}&module=product`);
+  if (!data) return <Skeleton className="h-40 rounded-2xl" />;
+  const k = (kind: string) => data.filter((f) => f.kind === kind).sort((a, b) => (b.value.published ?? b.first_seen ?? "").localeCompare(a.value.published ?? a.first_seen ?? ""));
+  const recent = (f: Fact) => Date.now() - new Date(f.first_seen).getTime() < 30 * 864e5;
+  const launches = k("launch"), pages = k("product_page"), rels = k("release");
+  return (
+    <Card className="p-6">
+      <div className="mb-5 flex items-center gap-2.5"><Monogram id={id} size={26} /><span className="text-[15px] text-ink">{e.name}{e.tier === "self" ? " (us)" : ""}</span>
+        <Link to={`/competitors/${id}`} className="ml-auto text-[12.5px] text-ink-3 hover:text-ink">All facts</Link></div>
+      <div className="grid gap-6 md:grid-cols-3">
+        <div><div className="eyebrow mb-2">Launch announcements</div>
+          {launches.length ? launches.slice(0, 6).map((f) => (
+            <a key={f.id} href={f.evidence[0]?.url ?? undefined} target="_blank" rel="noreferrer" className="mb-2 block hover:text-ink">
+              <div className="text-[13px] leading-snug text-ink">{f.label}</div>
+              <div className="text-[11.5px] text-ink-3">{f.value.source} · {day(f.value.published ?? f.first_seen)}</div>
+            </a>)) : <div className="text-[12.5px] text-ink-3">None found yet</div>}
+        </div>
+        <div><div className="eyebrow mb-2">Products & solutions ({pages.length})</div>
+          {pages.length ? pages.sort((a, b) => b.first_seen.localeCompare(a.first_seen)).slice(0, 12).map((f) => (
+            <a key={f.id} href={f.value.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 py-0.5 text-[13px] text-ink-2 hover:text-ink">
+              <span className="truncate">{f.label}</span>{recent(f) && <Chip>new</Chip>}</a>)) : <div className="text-[12.5px] text-ink-3">No product pages found</div>}
+        </div>
+        <div><div className="eyebrow mb-2">Release notes</div>
+          {rels.length ? rels.sort((a, b) => b.first_seen.localeCompare(a.first_seen)).slice(0, 8).map((f) => (
+            <a key={f.id} href={f.value.page} target="_blank" rel="noreferrer" className="flex items-center gap-2 py-0.5 text-[13px] text-ink-2 hover:text-ink">
+              <span className="truncate">{f.label}</span>{recent(f) && <Chip>new</Chip>}</a>)) : <div className="text-[12.5px] text-ink-3">No public changelog found</div>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 /* ── Positioning & content ──────────────────────────────────────────────────── */
 export function PositioningPage() {
   const meta = useMeta();

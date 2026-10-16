@@ -81,7 +81,8 @@ class Config:
 
     @property
     def entities(self) -> list[Entity]:
-        return [self.brand, *self.competitors]
+        # AI share-of-voice counts the brand once, so the self-monitoring copy is left out here.
+        return [self.brand, *(c for c in self.competitors if c.tier != "self")]
 
     def competitor(self, cid: str) -> Entity | None:
         return next((c for c in self.competitors if c.id == cid), None)
@@ -127,6 +128,15 @@ def load() -> Config:
                    aliases=b.get("aliases") or [], domains=[clean_domain(d) for d in b.get("domains") or []], is_brand=True, tier="brand",
                    profile={k: b[k] for k in ("positioning", "strengths", "products", "facts", "icp") if k in b})
     comps = [entity_from(c) for c in wl.get("competitors") or []]
+    if b.get("monitor", True) and brand.domains:
+        # Track ourselves with every module, exactly as if we were a competitor.
+        dom = brand.domains[0]
+        self_ = {"id": re.sub(r"[^a-z0-9]+", "-", brand.name.lower()).strip("-") or "us", "name": brand.name,
+                 "color": brand.color, "tier": "self", "aliases": brand.aliases, "domains": brand.domains,
+                 "pages": b.get("pages") or [{"kind": "homepage", "url": f"https://{dom}/"}], "feeds": b.get("feeds") or [],
+                 **{k: b[k] for k in EXT if b.get(k) is not None}}
+        if self_["id"] not in {c.id for c in comps}:
+            comps.insert(0, entity_from(self_))
     have = {c.id for c in comps}
     for i, t in enumerate(_ui_targets()):
         if t["id"] not in have:
