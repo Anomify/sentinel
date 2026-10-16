@@ -10,7 +10,7 @@ from email.message import EmailMessage
 
 import requests
 
-from . import db, insights, llm
+from . import config, db, insights, llm
 from .config import Config
 
 log = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ def _fallback_brief(cfg, ov, ch, ps, gaps, names) -> dict:
     if gaps:
         tl.append(f"{len(gaps)} target questions surface a competitor but not {cfg.brand.name}.")
     if not tl:
-        tl.append("Quiet week — no high-severity competitor moves detected.")
+        tl.append("Quiet week, no high-severity competitor moves detected.")
     k = ov["kpis"]
     return {"headline": f"{k['changes']} signals, {k['critical']} high-impact, {k['posts']} new posts",
             "tldr": tl, "watch_next": []}
@@ -103,7 +103,7 @@ def render_html(d: dict) -> str:
         + "</td></tr>" for c in d["changes"][:12]) or \
         f'<tr><td style="{t(14, "#8a8a93", "padding:12px 0")}">No material moves this period.</td></tr>'
 
-    posts = "".join(f'<li style="margin:0 0 8px">{_e(d["names"].get(p["competitor"]))} — <a href="{_e(p["url"])}" style="color:#16161a">{_e(p["title"])}</a></li>'
+    posts = "".join(f'<li style="margin:0 0 8px">{_e(d["names"].get(p["competitor"]))}, <a href="{_e(p["url"])}" style="color:#16161a">{_e(p["title"])}</a></li>'
                     for p in d["posts"][:8]) or '<li style="color:#8a8a93">No new posts.</li>'
     bars = ""
     for s in sorted(d["share"], key=lambda s: -s["share"]):
@@ -134,7 +134,7 @@ def render_html(d: dict) -> str:
     {kpi('Signals', k['changes'], f"{k['critical']} high-impact")}
     {kpi('Launch risk', f"{round((k.get('launch_max') or 0) * 100)}%", 'highest competitor')}
     {kpi('New content', k['posts'], 'pieces')}
-    {kpi('AI share', f"{round(brand_share * 100)}%" if brand_share is not None else '—', f"{k['ai_gaps']} gaps")}
+    {kpi('AI share', f"{round(brand_share * 100)}%" if brand_share is not None else '-', f"{k['ai_gaps']} gaps")}
   </tr></table>
   {sec('In brief')}{ul(tldr, 15)}
   {sec('What moved')}<table role="presentation" width="100%">{rows}</table>
@@ -157,7 +157,7 @@ def render_slack(d: dict) -> dict:
         {"type": "section", "text": {"type": "mrkdwn", "text": f"*{b.get('headline')}*\n" + "\n".join(f"• {t}" for t in b.get("tldr", []))}},
         {"type": "context", "elements": [{"type": "mrkdwn", "text":
             f"*{k['changes']}* changes · *{k['critical']}* high-impact · *{k['posts']}* new posts · "
-            f"AI share *{round(k['ai_share'] * 100) if k['ai_share'] is not None else '—'}%*"}]},
+            f"AI share *{round(k['ai_share'] * 100) if k['ai_share'] is not None else '-'}%*"}]},
         {"type": "divider"},
     ]
     for c in d["changes"][:6]:
@@ -180,15 +180,28 @@ def render_slack(d: dict) -> dict:
 
 
 # ── delivery ──────────────────────────────────────────────────────────────────
-def channels_configured() -> dict:
+def recipients(cfg: Config | None = None) -> list[str]:
+    """DIGEST_TO (comma-separated) wins; otherwise config/settings.yaml → digest.to."""
+    raw = os.environ.get("DIGEST_TO") or ((cfg.settings.get("digest", {}) or {}).get("to") if cfg else "") or ""
+    if isinstance(raw, list):
+        raw = ",".join(raw)
+    return [r.strip() for r in raw.split(",") if r.strip()]
+
+
+def smtp_host() -> str:
+    # Google Workspace / Gmail is the default when only SMTP_USER + SMTP_PASS (an app password) are set.
+    return os.environ.get("SMTP_HOST") or ("smtp.gmail.com" if os.environ.get("SMTP_USER") else "")
+
+
+def channels_configured(cfg: Config | None = None) -> dict:
     return {"slack": bool(os.environ.get("SLACK_WEBHOOK_URL")),
-            "email": bool(os.environ.get("SMTP_HOST") and os.environ.get("DIGEST_TO"))}
+            "email": bool(smtp_host() and recipients(cfg or config.load()))}
 
 
 def send(cfg: Config, d: dict, html_body: str) -> dict:
     out = {}
     want = cfg.settings.get("digest", {}).get("channels", ["slack", "email"])
-    ok = channels_configured()
+    ok = channels_configured(cfg)
     if "slack" in want and ok["slack"]:
         try:
             r = requests.post(os.environ["SLACK_WEBHOOK_URL"], json=render_slack(d), timeout=30)
@@ -199,13 +212,14 @@ def send(cfg: Config, d: dict, html_body: str) -> dict:
         try:
             msg = EmailMessage()
             msg["Subject"] = f"{d['title']}: {d['brief'].get('headline')}"
-            msg["From"] = os.environ.get("DIGEST_FROM", os.environ.get("SMTP_USER", "sentinel@localhost"))
-            msg["To"] = os.environ["DIGEST_TO"]
+            msg["From"] = os.environ.get("DIGEST_FROM") or os.environ.get("SMTP_USER") or "sentinel@localhost"
+            msg["To"] = ", ".join(recipients(cfg))
             msg.set_content("\n".join(["• " + t for t in d["brief"].get("tldr", [])]) + f"\n\n{d['app_url']}")
             msg.add_alternative(html_body, subtype="html")
-            port = int(os.environ.get("SMTP_PORT", 587))
-            with smtplib.SMTP(os.environ["SMTP_HOST"], port, timeout=30) as s:
-                if port != 25:
+            port = int(os.environ.get("SMTP_PORT") or 587)
+            smtp = smtplib.SMTP_SSL if port == 465 else smtplib.SMTP
+            with smtp(smtp_host(), port, timeout=30) as s:
+                if port not in (25, 465):
                     s.starttls()
                 if os.environ.get("SMTP_USER"):
                     s.login(os.environ["SMTP_USER"], os.environ.get("SMTP_PASS", ""))
@@ -217,8 +231,8 @@ def send(cfg: Config, d: dict, html_body: str) -> dict:
 
 
 def run(cfg: Config, deliver: bool = True, days: int | None = None) -> dict:
-    d = build(cfg, days)
-    body = render_html(d)
+    d = llm.no_dashes(build(cfg, days))
+    body = llm.no_dashes(render_html(d))
     delivered = send(cfg, d, body) if deliver else {}
     with db.connect() as con:
         did = db.insert(con, "digests", {"created_at": db.now(), "period_start": d["period_start"],

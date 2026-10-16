@@ -1,9 +1,9 @@
-"""Module 8 — Ads intelligence.
+"""Module 8, Ads intelligence.
 
 Sources, all official or explicitly public:
   • Google Ads Transparency Center via the official BigQuery public dataset
-    (bigquery-public-data.google_ads_transparency_center) — needs Google Cloud credentials.
-  • Meta Ad Library API (graph.facebook.com/ads_archive) — needs META_ADS_TOKEN.
+    (bigquery-public-data.google_ads_transparency_center), needs Google Cloud credentials.
+  • Meta Ad Library API (graph.facebook.com/ads_archive), needs META_ADS_TOKEN.
   • LinkedIn Ad Library: LinkedIn's robots.txt prohibits automated access, so Sentinel does
     NOT scrape it. It produces a one-click deep link for a human to check instead.
 Then every channel is cross-checked against the pixels Module 1 detected, which settles
@@ -101,7 +101,7 @@ def run_one(con, comp: Entity) -> dict:
     # LinkedIn: check policy explicitly and log the decision (it is disallowed → manual link).
     li_ok = guard.robots_allowed(links["linkedin"])
     guard.audit(links["linkedin"], "allowed" if li_ok else "blocked",
-                "LinkedIn Ad Library permitted by robots.txt" if li_ok else "robots.txt prohibits automated access — manual deep link provided")
+                "LinkedIn Ad Library permitted by robots.txt" if li_ok else "robots.txt prohibits automated access, manual deep link provided")
     for ch, meta in CHANNELS.items():
         pixel = bool(tools & meta["pixels"])
         ads = lib.get(ch)
@@ -113,7 +113,7 @@ def run_one(con, comp: Entity) -> dict:
                        f" and ads are likely or soon running. Verify: {links.get(ch, 'n/a')}")
         elif ads:
             st, conf = f"active · {len(ads)} creatives in library", facts.CONFIRMED
-            reading = f"Confirmed running {meta['name']} ({len(ads)} creatives)." + ("" if pixel else " No conversion pixel detected — likely brand/awareness only, or tracking via server-side tagging.")
+            reading = f"Confirmed running {meta['name']} ({len(ads)} creatives)." + ("" if pixel else " No conversion pixel detected, likely brand/awareness only, or tracking via server-side tagging.")
         else:
             st, conf = "no ads in library", facts.CONFIRMED if not pixel else facts.LIKELY
             reading = (f"Pixel present but no ads in the library: audience building / retargeting prep, or ads paused." if pixel

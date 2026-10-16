@@ -49,7 +49,7 @@ CHANGES = [
      {"meta": {"from": "The AI-native security platform", "to": "AI security, now part of Check Point"}}),
     ("hiddenlayer", "product", "medium", "proof", "New customer logos on runtime security page",
      "Added two Fortune 500 financial-services logos and a 40% ‘time to detect’ stat.",
-     "They are stacking FSI proof points — our strongest vertical.",
+     "They are stacking FSI proof points, our strongest vertical.",
      "Ask CS for two FSI references to counter in late-stage deals.",
      [], ["Trusted by leading financial institutions", "40% faster time to detect"], {}),
     ("azure-content-safety", "product", "low", "product", "Prompt Shields copy refreshed",
@@ -67,7 +67,7 @@ CHANGES = [
      "Page now lists automated-reasoning hallucination checks as generally available.",
      "Hallucination detection becomes table stakes in AWS-native evaluations.",
      "Confirm our hallucination story and add proof to the comparison sheet.", [],
-     ["Automated Reasoning checks — now generally available"], {}),
+     ["Automated Reasoning checks, now generally available"], {}),
 ]
 
 POSTS = [
@@ -130,7 +130,7 @@ def seed(cfg: Config) -> dict:
                 db.insert(con, "snapshots", {
                     "competitor": c.id, "url": pg.url, "kind": pg.kind, "status": 200,
                     "fetched_at": (now - timedelta(hours=rnd.randint(1, 6))).isoformat(timespec="seconds"),
-                    "hash": f"demo{rnd.random()}", "title": f"{c.name}", "meta": f"{c.name} — illustrative demo snapshot",
+                    "hash": f"demo{rnd.random()}", "title": f"{c.name}", "meta": f"{c.name}, illustrative demo snapshot",
                     "signals": {"h1": [f"{c.name} (demo hero headline)"], "headings": [], "ctas": ["Book a demo"],
                                 "prices": [], "terms": {t: rnd.randint(0, 6) for t in cfg.watch_terms}, "words": 900},
                     "text": "Demo snapshot text."})
@@ -142,7 +142,7 @@ def seed(cfg: Config) -> dict:
             dom = next(c.domains[0] for c in cfg.competitors if c.id == cid)
             db.insert(con, "posts", {"competitor": cid, "guid": f"demo-{j}", "title": title,
                                      "url": f"https://{dom}/demo/{slug}", "published": when, "first_seen": when,
-                                     "summary": "Illustrative demo post — not a real article.", "topics": tops})
+                                     "summary": "Illustrative demo post, not a real article.", "topics": tops})
         # 8 weekly AI runs
         engines = [("perplexity", "sonar"), ("openai", "gpt-5-mini")]
         for w in range(8):

@@ -1,4 +1,4 @@
-"""Module 2 — Tag manager & conversion forensics.
+"""Module 2, Tag manager & conversion forensics.
 
 Reads the public Google Tag Manager container (gtm.js is public by design: every visitor's
 browser downloads it), parses every tag/trigger, extracts tracking IDs and conversion

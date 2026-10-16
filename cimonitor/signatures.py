@@ -82,7 +82,7 @@ SIGNATURES: list[Sig] = [
     S("commonroom", "Common Room", "abm", ["cdn.cr-relay.com"], means="Community + web signals into a GTM workspace."),
     S("bombora", "Bombora", "abm", ["ml314.com"], motion="sales"),
     S("liveintent", "LiveIntent identity graph", "abm", ["liadm.com"], cookies=["^_li_ss$", "^lidid$", "^_lc2_fpi"], motion="sales",
-      means="Email-based identity resolution — matching anonymous visitors to known people for outreach/ads."),
+      means="Email-based identity resolution, matching anonymous visitors to known people for outreach/ads."),
     S("usbrowserspeed", "Identity-resolution pixel (usbrowserspeed)", "abm", ["usbrowserspeed.com"], motion="sales",
       means="Third-party person-level visitor identification (commonly behind tools like RB2B/Vector-style de-anonymisation)."),
     S("mutiny", "Mutiny", "testing", ["client-registry.mutinycdn.com", "api.mutinyhq.com", "mutinycdn.com"], motion="sales", means="Personalising the site per target account (ABM web personalisation)."),
@@ -103,17 +103,17 @@ SIGNATURES: list[Sig] = [
     S("fathom", "Fathom", "analytics", ["cdn.usefathom.com"]),
     S("adobe-analytics", "Adobe Analytics", "analytics", ["omtrdc.net", "2o7.net", "assets.adobedtm.com"]),
     S("matomo", "Matomo", "analytics", [], [r"matomo\.js", r"piwik\.js"]),
-    S("dreamdata", "Dreamdata", "analytics", ["cdn.dreamdata.cloud"], motion="sales", means="B2B revenue attribution — they're measuring pipeline by channel."),
+    S("dreamdata", "Dreamdata", "analytics", ["cdn.dreamdata.cloud"], motion="sales", means="B2B revenue attribution, they're measuring pipeline by channel."),
     S("hockeystack", "HockeyStack", "analytics", ["cdn.jsdelivr.net/npm/hockeystack", "hockeystack.com"], [r"hockeystack"], means="B2B revenue attribution across the funnel."),
     S("factors", "Factors.ai", "analytics", ["app.factors.ai", "fa.factors.ai"], motion="sales"),
     # ── Product analytics & CDP
-    S("segment", "Segment", "product", ["cdn.segment.com", "api.segment.io"], ["^ajs_anonymous_id$"], motion="product", means="Customer data platform — instrumenting users across web and product."),
+    S("segment", "Segment", "product", ["cdn.segment.com", "api.segment.io"], ["^ajs_anonymous_id$"], motion="product", means="Customer data platform, instrumenting users across web and product."),
     S("rudderstack", "RudderStack", "product", ["cdn.rudderlabs.com"], motion="product"),
-    S("amplitude", "Amplitude", "product", ["cdn.amplitude.com", "api2.amplitude.com", "api.amplitude.com"], cookies=["^AMP_"], motion="product", means="Product analytics on the marketing site — usually a self-serve funnel."),
+    S("amplitude", "Amplitude", "product", ["cdn.amplitude.com", "api2.amplitude.com", "api.amplitude.com"], cookies=["^AMP_"], motion="product", means="Product analytics on the marketing site, usually a self-serve funnel."),
     S("mixpanel", "Mixpanel", "product", ["cdn.mxpnl.com", "api-js.mixpanel.com"], cookies=["^mp_"], motion="product"),
     S("posthog", "PostHog", "product", ["posthog.com", "us.i.posthog.com", "eu.i.posthog.com"], cookies=["^ph_"], motion="product"),
     S("heap", "Heap", "product", ["cdn.heapanalytics.com", "heapanalytics.com"], cookies=["^_hp2_"], motion="product"),
-    S("pendo", "Pendo", "product", ["cdn.pendo.io", "app.pendo.io", "data.pendo.io"], cookies=["^_pendo_"], motion="product", means="In-app guides & product analytics — investing in product-led onboarding."),
+    S("pendo", "Pendo", "product", ["cdn.pendo.io", "app.pendo.io", "data.pendo.io"], cookies=["^_pendo_"], motion="product", means="In-app guides & product analytics, investing in product-led onboarding."),
     # ── Session replay
     S("hotjar", "Hotjar", "replay", ["static.hotjar.com", "script.hotjar.com", "vars.hotjar.com"], cookies=["^_hj"]),
     S("clarity", "Microsoft Clarity", "replay", ["clarity.ms", "www.clarity.ms"], cookies=["^_clck$", "^_clsk$"]),
@@ -131,13 +131,13 @@ SIGNATURES: list[Sig] = [
     S("crisp", "Crisp", "chat", ["client.crisp.chat"]),
     S("tidio", "Tidio", "chat", ["code.tidio.co"]),
     # ── Scheduling / routing
-    S("chilipiper", "Chili Piper", "scheduling", ["js.chilipiper.com", "chilipiper.com"], motion="sales", means="Instant demo booking & lead routing from forms — a demo-led funnel."),
+    S("chilipiper", "Chili Piper", "scheduling", ["js.chilipiper.com", "chilipiper.com"], motion="sales", means="Instant demo booking & lead routing from forms, a demo-led funnel."),
     S("revenuehero", "RevenueHero", "scheduling", ["assets.revenuehero.io", "app.revenuehero.io"], motion="sales", means="Inbound demo scheduling & routing."),
     S("default", "Default", "scheduling", ["import-cdn.default.com", "default.com"], [r"import-cdn\.default\.com"], motion="sales", means="Inbound lead routing & scheduling."),
     S("calendly", "Calendly", "scheduling", ["assets.calendly.com", "calendly.com"]),
     S("hubspot-meetings", "HubSpot Meetings", "scheduling", ["static.hsappstatic.net/MeetingsEmbed"], [r"meetings\.hubspot\.com"], motion="sales"),
     # ── Interactive demos
-    S("navattic", "Navattic", "demo", ["js.navattic.com", "capture.navattic.com"], [r"navattic"], means="Self-guided interactive product demos — letting buyers try before talking to sales."),
+    S("navattic", "Navattic", "demo", ["js.navattic.com", "capture.navattic.com"], [r"navattic"], means="Self-guided interactive product demos, letting buyers try before talking to sales."),
     S("storylane", "Storylane", "demo", ["js.storylane.io", "app.storylane.io"]),
     S("arcade", "Arcade", "demo", ["demo.arcade.software", "app.arcade.software"]),
     S("walnut", "Walnut", "demo", ["teamwalnut.com"]),
@@ -180,16 +180,16 @@ SIGNATURES: list[Sig] = [
     S("segment-tags", "Tealium", "tag", ["tags.tiqcdn.com"]),
     # ── Partner & channel
     S("partnerstack", "PartnerStack", "partner", ["partnerlinks.io", "js.partnerstack.com", "partnerstack.com"], means="Running an affiliate/partner referral programme."),
-    S("impartner", "Impartner PRM", "partner", ["impartner.com"], means="Partner relationship management — a formal channel programme."),
+    S("impartner", "Impartner PRM", "partner", ["impartner.com"], means="Partner relationship management, a formal channel programme."),
     S("crossbeam", "Crossbeam", "partner", ["crossbeam.com"], means="Account mapping with partners (co-selling)."),
-    S("mindmatrix", "Mindmatrix", "partner", ["mindmatrix.net"], means="Channel/partner enablement platform — building a reseller programme."),
+    S("mindmatrix", "Mindmatrix", "partner", ["mindmatrix.net"], means="Channel/partner enablement platform, building a reseller programme."),
     S("allbound", "Allbound", "partner", ["allbound.com"]),
     # ── Events
     S("goldcast", "Goldcast", "events", ["goldcast.io"], means="Running B2B virtual events/webinars."),
     S("on24", "ON24", "events", ["on24.com"]),
     S("zoom-events", "Zoom Events/Webinars", "events", ["zoom.us/webinar", "events.zoom.us"]),
     # ── Call tracking
-    S("callrail", "CallRail", "calltracking", ["cdn.callrail.com", "js.callrail.com"], motion="sales", means="Tracking phone calls back to campaigns — phone is a conversion path."),
+    S("callrail", "CallRail", "calltracking", ["cdn.callrail.com", "js.callrail.com"], motion="sales", means="Tracking phone calls back to campaigns, phone is a conversion path."),
     S("invoca", "Invoca", "calltracking", ["solutions.invocacdn.com"], motion="sales"),
     # ── Monitoring
     S("sentry", "Sentry", "monitoring", ["browser.sentry-cdn.com", "sentry.io", "ingest.sentry.io"]),
@@ -202,7 +202,7 @@ SIGNATURES: list[Sig] = [
     S("workable", "Workable", "hiring", ["apply.workable.com"]),
     S("adobe-fonts", "Adobe Fonts (Typekit)", "cms", ["use.typekit.net", "p.typekit.net"]),
     # ── Self-serve
-    S("stripe", "Stripe.js", "payments", ["js.stripe.com"], motion="product", means="Card payments on the site — a self-serve purchase path."),
+    S("stripe", "Stripe.js", "payments", ["js.stripe.com"], motion="product", means="Card payments on the site, a self-serve purchase path."),
     S("paddle", "Paddle", "payments", ["cdn.paddle.com"], motion="product"),
     S("chargebee", "Chargebee", "payments", ["js.chargebee.com"], motion="product"),
 ]

@@ -1,4 +1,4 @@
-"""Module 4 — Subdomain & certificate monitoring.
+"""Module 4, Subdomain & certificate monitoring.
 
 Certificate Transparency (crt.sh, Cert Spotter fallback) reveals every hostname that gets
 a public TLS certificate, often weeks before anything links to it. Each name is resolved
@@ -91,7 +91,7 @@ ENV_RX = re.compile(r"(^|[.-])(dev|stage|staging|stg|qa|uat|test|sandbox|preview
 
 
 def ct_names(domain: str) -> tuple[dict[str, str], str]:
-    """{hostname: earliest cert date}, sources. crt.sh (retried — it is often overloaded) merged with Cert Spotter."""
+    """{hostname: earliest cert date}, sources. crt.sh (retried, it is often overloaded) merged with Cert Spotter."""
     import time
     names: dict[str, str] = {}
     sources = []
@@ -205,12 +205,12 @@ def run_one(con, cfg: Config, comp: Entity, fetcher: Fetcher | None, shots_left:
         old = prev.get(host, {}).get("value") or {}
         info.update({k: old[k] for k in ("title", "hash", "status", "screenshot", "last_published", "words") if k in old})
         if info["private"]:
-            info["note"] = "Resolves to a private address — recorded only, never contacted."
+            info["note"] = "Resolves to a private address, recorded only, never contacted."
         elif INTERNAL_TOOLING.search(host[: -len(domain) - 1] if host != domain else ""):
             info["internal"] = True
-            info["note"] = "Internal-tooling hostname — recorded from CT/DNS only, never contacted."
+            info["note"] = "Internal-tooling hostname, recorded from CT/DNS only, never contacted."
         elif not _contactable(host, domain, info["kind"]):
-            info["note"] = "Not a clearly public-facing name — recorded from CT/DNS only, not contacted."
+            info["note"] = "Not a clearly public-facing name, recorded from CT/DNS only, not contacted."
         elif info["resolves"] and fetcher and _due(host, prev, old) and shots_left[0] > 0:
             # Fetch on first sight, then re-check weekly; screenshot on first sight and on change.
             shots_left[0] -= 1
@@ -280,13 +280,13 @@ def _sub_sev(f: Fact) -> str:
 def _sub_so_what(f: Fact) -> str | None:
     v = f.value
     if v.get("private") or v.get("internal"):
-        return "Internal hostname exposed via a public certificate — signals internal tooling/infrastructure (not contacted)."
+        return "Internal hostname exposed via a public certificate, signals internal tooling/infrastructure (not contacted)."
     if v.get("kind") == "campaign / product":
         return "A new non-infrastructure name with a certificate usually means a campaign, microsite or product launch is coming."
     if v.get("kind") == "tracking":
         return "A first-party tagging endpoint (server-side GTM): their tracking survives ad blockers and browser restrictions."
     if v.get("kind") == "environment":
-        return "New environment — something is being built or staged."
+        return "New environment, something is being built or staged."
     return None
 
 

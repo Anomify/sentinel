@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "@fontsource-variable/geist-mono";
 
-/* Alpha Lyrae — Fontfabric, SIL Open Font License 1.1 (see /fonts/AlphaLyrae-OFL.md).
+/* Alpha Lyrae, Fontfabric, SIL Open Font License 1.1 (see /fonts/AlphaLyrae-OFL.md).
    One weight only, mapped across the whole weight range so nothing is ever faux-bolded. */
 @font-face {
   font-family: "Alpha Lyrae";

@@ -1,11 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  Sentinel CI — watchlist
+#  Sentinel CI, watchlist
 #  Who you track, which pages matter, and where their content lives.
 #  URLs below were verified live on 2026-10-14. Edit freely; the app re-syncs
 #  this file on every run.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Your own brand — used for AI-search share-of-voice ("are WE in the answer?").
+# Your own brand, used for AI-search share-of-voice ("are WE in the answer?").
 brand:
   name: "Hyperfence"            # ← change me
   aliases: []                     # e.g. ["YourCo", "YourProduct"]
@@ -54,7 +54,7 @@ competitors:
       - { kind: product,   url: "https://www.hiddenlayer.com/solutions/agentic-mcp-security" }
       - { kind: product,   url: "https://www.hiddenlayer.com/platform/ai-attack-simulation" }
     feeds:
-      # No RSS published — scrape the listing page for post links instead.
+      # No RSS published, scrape the listing page for post links instead.
       - type: listing
         url: "https://www.hiddenlayer.com/innovation-hub/insights"
         link_pattern: "^/(insight|research|sai-security-advisory)/[^/]+/?$"

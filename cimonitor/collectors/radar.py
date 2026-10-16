@@ -1,4 +1,4 @@
-"""Module 5 — Pre-launch radar.
+"""Module 5, Pre-launch radar.
 
   • Public staging sites (configured, discovered from CT, or Webflow's <name>-stg.webflow.io
     convention): pages on staging that aren't on production are pre-launch pages.
@@ -102,7 +102,7 @@ RULES = {
                          so_what=lambda f: "Staging mirrors upcoming site releases; pages here usually go live within days or weeks."),
     "staging_page": Rule(severity="high", title_add=lambda f: f"Pre-launch page on staging: {f.label}",
                          title_remove=lambda r: f"Staging page published or removed: {r['label']}",
-                         so_what=lambda f: "This page exists on their staging site but not on production — an upcoming launch, campaign or pricing change."),
+                         so_what=lambda f: "This page exists on their staging site but not on production, an upcoming launch, campaign or pricing change."),
     "site_page": Rule(severity="low", on_remove=True, title_add=lambda f: f"New page live: {f.label}",
                       severity_fn=lambda f: "medium" if not NOISE_PATH.search(f.key) else "low"),
     "publish": Rule(severity="low", on_remove=False, title_add=lambda f: f"Site republished ({f.value.get('site')})"),
@@ -136,7 +136,7 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
                 # The host exists (it serves robots.txt) but forbids crawling: record existence only.
                 staging_found += 1
                 obs.append(Fact("staging_site", urlparse(s).hostname, urlparse(s).hostname,
-                                {"url": s, "crawl": "disallowed by robots.txt — existence recorded, content not collected"},
+                                {"url": s, "crawl": "disallowed by robots.txt, existence recorded, content not collected"},
                                 facts.CONFIRMED, [ev(s + "/robots.txt", "robots.txt (host exists; crawling disallowed)")]))
             continue
         except Exception:
@@ -222,7 +222,7 @@ def launch_score(con, comp: Entity, window_days: int = 45) -> dict:
     p = 1 - p_none
     contrib.sort(key=lambda c: -c["weight"])
     kinds = {c["signal"] for c in contrib}
-    horizon = "2–4 weeks" if "new page on staging" in kinds else "4–8 weeks" if p >= 0.3 else "—"
+    horizon = "2–4 weeks" if "new page on staging" in kinds else "4–8 weeks" if p >= 0.3 else "-"
     out = {"probability": round(p, 3), "horizon": horizon, "signals": contrib[:8], "n": len(contrib)}
     facts.metric(con, comp.id, MODULE, "launch_probability", datetime.now(timezone.utc).strftime("%Y-%m-%d"), out["probability"])
     db.set_meta(con, f"launch:{comp.id}", out)

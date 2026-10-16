@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, Response, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -38,7 +38,22 @@ async def scope(request: Request, call_next):
     if needs_auth and not tenancy.authorize(ws, given, TOKEN):
         return JSONResponse({"detail": "unauthorized"}, status_code=401)
     with tenancy.use(ws):
-        return await call_next(request)
+        resp = await call_next(request)
+    return await _strip_dashes(resp)
+
+
+async def _strip_dashes(resp):
+    """No em dashes anywhere in the app, including stored data and AI text written before this rule."""
+    ctype = resp.headers.get("content-type", "")
+    if not (ctype.startswith("application/json") or ctype.startswith("text/html")):
+        return resp
+    body = b"".join([c async for c in resp.body_iterator])
+    text = body.decode("utf-8")
+    if "\u2014" not in text and "\\u2014" not in text:
+        return Response(body, status_code=resp.status_code, headers=dict(resp.headers))
+    text = re.sub(r"\s*(\u2014|\\u2014)\s*", ", ", text)
+    headers = {k: v for k, v in resp.headers.items() if k.lower() != "content-length"}
+    return Response(text.encode("utf-8"), status_code=resp.status_code, headers=headers)
 
 
 def cfg():
@@ -64,7 +79,7 @@ def meta():
         "engines": [{"id": k, "model": v.get("model"), "enabled": bool(v.get("enabled")),
                      "has_key": bool(os.environ.get(ai_search.ENGINES[k][1])) if k in ai_search.ENGINES else False}
                     for k, v in c.engines.items()],
-        "channels": digest.channels_configured(), "analysis": llm.available(c), "analysis_provider": llm.provider(c),
+        "channels": digest.channels_configured(c), "digest_to": digest.recipients(c), "analysis": llm.available(c), "analysis_provider": llm.provider(c),
         "schedule": jobs.schedule_status(c), "demo": db.is_demo(), "counts": counts,
         "auth": bool(TOKEN), "backend": db.backend(), "policy": [{"title": t, "detail": d} for t, d in guard.POLICY],
         "modules": insights.MODULE_LABEL,
@@ -345,6 +360,19 @@ def evidence(name: str):
 def digests():
     with db.connect() as con:
         return db.rows(con.execute("SELECT id, created_at, period_start, period_end, headline, delivered FROM digests ORDER BY id DESC LIMIT 50"))
+
+
+@app.post("/api/digests")
+def digest_create(deliver: bool = False):
+    """Build (and optionally send) a digest now, and say exactly what happened."""
+    c = cfg()
+    if deliver and not any(digest.channels_configured(c).values()):
+        raise HTTPException(400, "Email isn't set up yet. Add SMTP_USER and SMTP_PASS (a Google app password) to .env, then restart Sentinel.")
+    r = digest.run(c, deliver=deliver)
+    failed = {k: v for k, v in r["delivered"].items() if v != "sent"}
+    if failed:
+        raise HTTPException(502, "; ".join(f"{k}: {v}" for k, v in failed.items()) + f" (saved as digest #{r['digest_id']})")
+    return {**r, "to": digest.recipients(c)}
 
 
 @app.get("/api/digests/preview", response_class=HTMLResponse)

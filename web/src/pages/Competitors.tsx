@@ -32,7 +32,7 @@ export function CompetitorList() {
                 <div className="hidden text-[14px] text-ink tnum md:block">{c.changes}{c.critical ? <span className="ml-1.5 text-[12px] text-high">{c.critical} high</span> : null}</div>
                 <div className="hidden text-[14px] text-ink tnum md:block">{pct(c.launch)}</div>
                 <div className="hidden text-[14px] text-ink tnum md:block">{pct(c.ai_share)}</div>
-                <div className="hidden truncate text-[12.5px] text-ink-2 md:block">{c.latest?.title ?? "—"}</div>
+                <div className="hidden truncate text-[12.5px] text-ink-2 md:block">{c.latest?.title ?? "-"}</div>
                 <div className="flex items-center justify-end gap-3">
                   {data && <Sparkline values={data.timeline.slice(-30).map((d) => Number(d[c.id]) || 0)} color={c.color} width={80} height={20} />}
                   <ArrowRight size={14} className="text-ink-3" />

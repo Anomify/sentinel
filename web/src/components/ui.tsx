@@ -237,7 +237,7 @@ export function EvidenceList({ items, compact }: { items: Evidence[]; compact?: 
     <div className={cx("space-y-1.5", compact && "space-y-1")}>
       {items.map((e, i) => (
         <div key={i} className="flex items-center gap-2 text-[11.5px] text-ink-3">
-          <span className="w-[72px] shrink-0 tnum">{e.observed_at ? new Date(e.observed_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
+          <span className="w-[72px] shrink-0 tnum">{e.observed_at ? new Date(e.observed_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "-"}</span>
           <span className="truncate">{e.method}{e.note ? ` · ${e.note}` : ""}</span>
           {e.url && <a href={e.url} target="_blank" rel="noreferrer" className="ml-auto inline-flex shrink-0 items-center gap-1 text-ink-2 hover:text-ink">{host(e.url)}<ExternalLink size={10} /></a>}
           {e.screenshot && (

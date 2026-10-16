@@ -77,7 +77,7 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
             )}
             {(c?.action || e.data?.action) && (
               <section className="rounded-2xl bg-accent-soft px-5 py-4">
-                <div className="mb-1 text-[11.5px] text-accent-ink">Vs. us — recommended response</div>
+                <div className="mb-1 text-[11.5px] text-accent-ink">Vs. us, recommended response</div>
                 <p className="text-[14px] leading-relaxed text-ink">{c?.action || e.data?.action}</p>
               </section>
             )}

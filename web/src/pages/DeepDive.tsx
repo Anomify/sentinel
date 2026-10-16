@@ -38,7 +38,7 @@ export function DeepDives() {
   const comps = meta.entities.filter((e) => !e.is_brand);
   return (
     <div>
-      <PageHeader eyebrow="Intelligence layer" title="Deep dives" sub="Enter a domain. Sentinel runs every public-source method — stack, tracking, DNS, certificates, staging, hiring, partners, ads, positioning — and writes the teardown, with a recommended response for each finding. It stays current on every scan." />
+      <PageHeader eyebrow="Intelligence layer" title="Deep dives" sub="Enter a domain. Sentinel runs every public-source method, stack, tracking, DNS, certificates, staging, hiring, partners, ads, positioning, and writes the teardown, with a recommended response for each finding. It stays current on every scan." />
       <motion.form {...fade} onSubmit={submit} className="card mb-8 flex items-center gap-3 p-2 pl-5">
         <Search size={16} strokeWidth={1.6} className="text-ink-3" />
         <input autoFocus={sp.get("new") === "1"} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="competitor.com"
@@ -68,7 +68,7 @@ function DiveCard({ id, i }: { id: string; i: number }) {
           <ArrowRight size={15} className="ml-auto text-ink-3 transition-transform group-hover:translate-x-0.5" />
         </div>
         <div className="mt-6 flex items-end justify-between text-[12px] text-ink-3">
-          <div><div className="text-[22px] leading-none tracking-[-0.02em] text-ink tnum">{facts ?? "—"}</div><div className="mt-1.5">facts on file</div></div>
+          <div><div className="text-[22px] leading-none tracking-[-0.02em] text-ink tnum">{facts ?? "-"}</div><div className="mt-1.5">facts on file</div></div>
           <div className="text-right">{data?.report_at ? `Updated ${ago(data.report_at)}` : data?.scan?.step && !data.scan.done ? "Scanning…" : "Not yet generated"}</div>
         </div>
       </Link>
@@ -113,7 +113,7 @@ export function DeepDive() {
             <Monogram id={id} size={52} />
             <div>
               <h1 className="text-[38px] leading-none tracking-[-0.03em] text-ink">{e.name}</h1>
-              <div className="mt-2.5 text-[13px] text-ink-3">{data ? `Generated ${ago(data.generated_at)} · passive public sources only` : "—"}</div>
+              <div className="mt-2.5 text-[13px] text-ink-3">{data ? `Generated ${ago(data.generated_at)} · passive public sources only` : "-"}</div>
             </div>
           </div>
           <div className="flex gap-2">

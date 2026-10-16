@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 
@@ -64,9 +65,23 @@ def _client():
 
 def _json_call(cfg, system: str, prompt: str, schema: dict, effort: str | None = None) -> dict | None:
     a = cfg.settings.get("analysis", {}) or {}
+    system += " Never use em dashes; use commas, colons or full stops instead."
     if provider(cfg) == "gemini":
-        return _gemini_json(a.get("gemini_model", "gemini-3.5-flash"), system, prompt, schema)
-    return _claude_json(a.get("model", "claude-opus-5-5"), system, prompt, schema, effort or a.get("effort", "low"))
+        out = _gemini_json(a.get("gemini_model", "gemini-3.5-flash"), system, prompt, schema)
+    else:
+        out = _claude_json(a.get("model", "claude-opus-5-5"), system, prompt, schema, effort or a.get("effort", "low"))
+    return no_dashes(out)
+
+
+def no_dashes(v):
+    """Strip em dashes from any string inside a JSON-like value."""
+    if isinstance(v, str):
+        return re.sub(r"\s*\u2014\s*", ", ", v.strip()).replace(", ,", ",")
+    if isinstance(v, dict):
+        return {k: no_dashes(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [no_dashes(x) for x in v]
+    return v
 
 
 def _gemini_schema(s):

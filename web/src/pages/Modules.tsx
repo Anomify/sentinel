@@ -17,7 +17,7 @@ export function StackPage() {
   const cs = comps(meta);
   return (
     <div>
-      <PageHeader eyebrow="Modules 1 & 2" title="GTM stack" sub="What every competitor actually runs — captured from a headless browser before and after cookie consent — plus what their tag manager says they optimise for." />
+      <PageHeader eyebrow="Modules 1 & 2" title="GTM stack" sub="What every competitor actually runs, captured from a headless browser before and after cookie consent, plus what their tag manager says they optimise for." />
       {!data ? <Skeleton className="h-96 rounded-2xl" /> : (
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -172,7 +172,7 @@ export function RadarPage() {
   const { data } = useApi<{ competitors: any[] }>("/api/radar");
   return (
     <div>
-      <PageHeader eyebrow="Module 5" title="Launch radar" sub="Weak signals combined into one probability: new campaign subdomains, pages on staging, new repos, first-of-their-kind hires, new verifications and conversion events — decayed over time. Inferred, never certain." />
+      <PageHeader eyebrow="Module 5" title="Launch radar" sub="Weak signals combined into one probability: new campaign subdomains, pages on staging, new repos, first-of-their-kind hires, new verifications and conversion events, decayed over time. Inferred, never certain." />
       {!data ? <Skeleton className="h-96 rounded-2xl" /> : (
         <div className="space-y-5">{data.competitors.map((r) => <RadarCard key={r.id} r={r} />)}</div>
       )}
@@ -204,11 +204,11 @@ function RadarCard({ r }: { r: any }) {
         </div>
         <div className="space-y-4 text-[12.5px]">
           <div><div className="eyebrow mb-2">Staging</div>
-            {r.staging.length ? r.staging.map((s: any) => <div key={s.host} className="text-ink-2">{s.host}<span className="text-ink-3">{s.crawl ? " · robots.txt disallows crawling — existence only" : ""}</span></div>) : <div className="text-ink-3">None found</div>}
+            {r.staging.length ? r.staging.map((s: any) => <div key={s.host} className="text-ink-2">{s.host}<span className="text-ink-3">{s.crawl ? " · robots.txt disallows crawling, existence only" : ""}</span></div>) : <div className="text-ink-3">None found</div>}
             {r.staging_pages.length > 0 && <div className="mt-1 text-ink">{r.staging_pages.length} pre-launch pages: {r.staging_pages.slice(0, 4).map((p: any) => p.path).join(", ")}</div>}
           </div>
           <div><div className="eyebrow mb-2">Campaign subdomains</div>
-            <div className="text-ink-2">{[...new Set(r.campaign_subdomains.map((s: any) => s.host.split(".")[0]))].slice(0, 8).join(", ") || "—"}</div></div>
+            <div className="text-ink-2">{[...new Set(r.campaign_subdomains.map((s: any) => s.host.split(".")[0]))].slice(0, 8).join(", ") || "-"}</div></div>
           <div><div className="eyebrow mb-2">Release cadence</div>
             <div className="text-ink-2">{r.publishes.length ? `${r.publishes.length} publish${r.publishes.length === 1 ? "" : "es"} recorded · last ${r.publishes[r.publishes.length - 1].replace("T", " ")}` : "Not yet observed"}</div></div>
           {r.repos.length > 0 && <div><div className="eyebrow mb-2">Repos</div><div className="text-ink-2">{r.repos.slice(0, 4).map((x: any) => x.name.split("/")[1]).join(", ")}</div></div>}
@@ -231,7 +231,7 @@ export function HiringPage() {
   const fnSeries = Object.keys(FN_COLORS).map((f) => ({ id: f, name: f, color: FN_COLORS[f], is_brand: false } as any));
   return (
     <div>
-      <PageHeader eyebrow="Module 6" title="Hiring" sub="Public Greenhouse, Lever and Ashby boards. Every role tagged by function, seniority and region, with the tech stack pulled from descriptions. Firsts — first partner manager, first EMEA role — are the strategic tells." />
+      <PageHeader eyebrow="Module 6" title="Hiring" sub="Public Greenhouse, Lever and Ashby boards. Every role tagged by function, seniority and region, with the tech stack pulled from descriptions. Firsts, first partner manager, first EMEA role, are the strategic tells." />
       {!data ? <Skeleton className="h-96 rounded-2xl" /> : (
         <div className="space-y-5">
           <Card className="overflow-x-auto">
@@ -243,7 +243,7 @@ export function HiringPage() {
                   <tr key={r.id} onClick={() => setSel(r.id)} className={cx("cursor-pointer border-b border-line last:border-0 hover:bg-hover/60", cur?.id === r.id && "bg-hover/60")}>
                     <td className="px-6 py-3"><span className="inline-flex items-center gap-2 text-ink"><EntityDot color={meta.entities.find((e) => e.id === r.id)?.color ?? "#999"} size={7} />{meta.entities.find((e) => e.id === r.id)?.name}</span>
                       {!r.boards.length && <span className="ml-2 text-ink-3">no public board</span>}</td>
-                    <td className="px-3 py-3 text-right text-ink tnum">{r.open || "—"}</td>
+                    <td className="px-3 py-3 text-right text-ink tnum">{r.open || "-"}</td>
                     {FN_ORDER.slice(0, 8).map((f) => <td key={f} className="px-3 py-3 text-right tnum text-ink-2">{r.functions[f] || ""}</td>)}
                   </tr>
                 ))}
@@ -325,7 +325,7 @@ function MoneyCard({ id }: { id: string }) {
           {k("arr_claim").map((a) => <div key={a.id} className="mt-2 text-[12.5px] text-ink-2">{a.label}</div>)}
         </div>
         <div><div className="eyebrow mb-2">Partner programme</div>
-          <div className="text-[13px] text-ink-2">{k("partner_program").map((p) => p.label).join(" · ") || "—"}</div>
+          <div className="text-[13px] text-ink-2">{k("partner_program").map((p) => p.label).join(" · ") || "-"}</div>
           {k("partner").length > 0 && <div className="mt-2 text-[12.5px] text-ink-3">{k("partner").length} partners: {k("partner").slice(0, 8).map((p) => p.label).join(", ")}</div>}
         </div>
         <div><div className="eyebrow mb-2">Marketplaces</div>
@@ -360,7 +360,7 @@ export function PositioningPage() {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <div>
-      <PageHeader eyebrow="Module 9" title="Positioning & content" sub="Who they sell to (the buyer hierarchy), which industries and use cases they lead with, and how their content engine is running — tracked from copy and feeds over time." />
+      <PageHeader eyebrow="Module 9" title="Positioning & content" sub="Who they sell to (the buyer hierarchy), which industries and use cases they lead with, and how their content engine is running, tracked from copy and feeds over time." />
       {!data ? <Skeleton className="h-96 rounded-2xl" /> : (
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -372,12 +372,12 @@ export function PositioningPage() {
                   <div className="flex items-center gap-2.5"><Monogram id={r.id} size={26} /><span className="text-[14px] text-ink">{e.name}</span></div>
                   {r.hero && <div className="mt-4 text-[16px] leading-snug tracking-[-0.01em] text-ink">“{r.hero}”</div>}
                   <div className="eyebrow mb-2 mt-5">Buyer hierarchy</div>
-                  {pers.length ? <ol className="space-y-1">{pers.slice(0, 4).map(([k, v], i) => <li key={k} className="flex justify-between text-[12.5px]"><span className="text-ink-2"><span className="mr-2 text-ink-3 tnum">{i + 1}</span>{k}</span><span className="text-ink-3 tnum">{v}</span></li>)}</ol> : <div className="text-[12.5px] text-ink-3">—</div>}
+                  {pers.length ? <ol className="space-y-1">{pers.slice(0, 4).map(([k, v], i) => <li key={k} className="flex justify-between text-[12.5px]"><span className="text-ink-2"><span className="mr-2 text-ink-3 tnum">{i + 1}</span>{k}</span><span className="text-ink-3 tnum">{v}</span></li>)}</ol> : <div className="text-[12.5px] text-ink-3">-</div>}
                   <div className="eyebrow mb-2 mt-5">Leads with</div>
                   <div className="flex flex-wrap gap-1.5">{Object.keys(r.use_cases).slice(0, 5).map((u) => <span key={u} className="rounded-full bg-sunken px-2.5 py-0.5 text-[11.5px] text-ink-2">{u}</span>)}</div>
                   {Object.keys(r.industries).length > 0 && <div className="mt-3 text-[12px] text-ink-3">Industries: {Object.keys(r.industries).slice(0, 4).join(", ")}</div>}
                   <div className="eyebrow mb-2 mt-5">Content, last 12 months</div>
-                  <div className="text-[12.5px] text-ink-2">{r.cadence.length ? r.cadence.reduce((a: number, m: any) => a + Object.entries(m).filter(([k]) => k !== "month").reduce((x, [, v]) => x + (v as number), 0), 0) + " pieces · " + topTypes(r.cadence) : "—"}</div>
+                  <div className="text-[12.5px] text-ink-2">{r.cadence.length ? r.cadence.reduce((a: number, m: any) => a + Object.entries(m).filter(([k]) => k !== "month").reduce((x, [, v]) => x + (v as number), 0), 0) + " pieces · " + topTypes(r.cadence) : "-"}</div>
                 </Card>
               );
             })}

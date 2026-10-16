@@ -35,7 +35,7 @@ export default function Signals() {
 
   return (
     <div>
-      <PageHeader title="Signals" sub="Every change Sentinel detects across stack, tracking, DNS, certificates, staging, hiring, partners, ads, positioning and AI search — scored, labelled and evidenced."
+      <PageHeader title="Signals" sub="Every change Sentinel detects across stack, tracking, DNS, certificates, staging, hiring, partners, ads, positioning and AI search, scored, labelled and evidenced."
         right={<Segmented value={days} onChange={setDays} options={[{ value: 7, label: "7d" }, { value: 30, label: "30d" }, { value: 90, label: "90d" }, { value: 365, label: "1y" }]} />} />
       <Card className="mb-5 grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
         {SEVS.map((s) => (

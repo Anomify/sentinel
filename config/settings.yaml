@@ -21,13 +21,14 @@ fetch:
   min_change_ratio: 0.01   # ignore text changes smaller than 1% unless a signal moved
 
 analysis:
-  provider: auto           # auto | gemini | claude — auto uses Claude if ANTHROPIC_API_KEY is set, else Gemini
+  provider: auto           # auto | gemini | claude, auto uses Claude if ANTHROPIC_API_KEY is set, else Gemini
   gemini_model: "gemini-3.5-flash"   # GEMINI_API_KEY; falls back to gemini-flash-latest when overloaded
   model: "claude-opus-5-5"           # ANTHROPIC_API_KEY
   effort: low
 
 digest:
   title: "Weekly Competitive Brief"
+  to: "keith@hyperfence.io"   # comma-separate for more; DIGEST_TO in .env overrides
   lookback_days: 7
   channels: [slack, email] # each only fires when its env vars are set
   app_url: "http://localhost:8000"

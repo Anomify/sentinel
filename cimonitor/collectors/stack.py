@@ -1,4 +1,4 @@
-"""Module 1 — GTM stack fingerprinting.
+"""Module 1, GTM stack fingerprinting.
 
 Loads key pages in headless Chromium, records every request/script/cookie before and
 after cookie consent, matches the tool-signature library, and infers the go-to-market

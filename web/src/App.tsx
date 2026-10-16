@@ -44,7 +44,7 @@ function Layout({ meta }: { meta: Meta }) {
         <Topbar onMenu={() => setNav(true)} onSearch={() => setCmd(true)} />
         {meta.demo && (
           <div className="mx-4 rounded-full bg-elev px-4 py-2 text-center text-[12px] text-ink-2 ring-1 ring-line sm:mx-8">
-            <Sparkles size={12} className="mr-1.5 inline -mt-0.5 text-med" />Demo workspace — competitor moves shown here are illustrative samples, not real observations.
+            <Sparkles size={12} className="mr-1.5 inline -mt-0.5 text-med" />Demo workspace, competitor moves shown here are illustrative samples, not real observations.
             <span className="hidden sm:inline"> Run without <code className="font-mono">SENTINEL_DEMO</code> for live data.</span>
           </div>
         )}

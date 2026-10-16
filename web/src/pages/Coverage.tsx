@@ -17,7 +17,7 @@ export default function Coverage() {
   const { data: g } = useApi<any>("/api/guard?limit=120");
   return (
     <div>
-      <PageHeader eyebrow="Method tracker" title="Coverage" sub="Which intelligence methods have produced evidence for each competitor — and the guardrails every collector runs under." />
+      <PageHeader eyebrow="Method tracker" title="Coverage" sub="Which intelligence methods have produced evidence for each competitor, and the guardrails every collector runs under." />
       {!data ? <Skeleton className="h-96 rounded-2xl" /> : (
         <Card className="mb-5 overflow-x-auto">
           <table className="w-full min-w-[980px] text-[12.5px]">
@@ -60,7 +60,7 @@ export default function Coverage() {
       )}
       <div className="grid gap-5 xl:grid-cols-[1fr_1.2fr]">
         <Card>
-          <CardHeader title="Guardrails" sub="Passive, public sources only — enforced in code, not just policy" right={<ShieldCheck size={16} strokeWidth={1.6} className="text-ink-3" />} />
+          <CardHeader title="Guardrails" sub="Passive, public sources only, enforced in code, not just policy" right={<ShieldCheck size={16} strokeWidth={1.6} className="text-ink-3" />} />
           <div className="divide-y divide-line border-t border-line">
             {(g?.policy ?? meta.policy).map((p: any) => (
               <div key={p.title} className="px-6 py-3.5"><div className="text-[13.5px] text-ink">{p.title}</div><div className="mt-0.5 text-[12.5px] leading-relaxed text-ink-3">{p.detail}</div></div>
@@ -68,7 +68,7 @@ export default function Coverage() {
           </div>
         </Card>
         <Card className="overflow-hidden">
-          <CardHeader title="Audit log" sub={g ? `${g.stats.allowed ?? 0} allowed · ${g.stats.blocked ?? 0} declined by policy` : "—"} />
+          <CardHeader title="Audit log" sub={g ? `${g.stats.allowed ?? 0} allowed · ${g.stats.blocked ?? 0} declined by policy` : "-"} />
           <div className="max-h-[520px] divide-y divide-line overflow-y-auto border-t border-line">
             {(g?.log ?? []).map((r: any) => (
               <div key={r.id} className="grid grid-cols-[64px_1fr_auto] items-center gap-3 px-6 py-2 text-[12px]">

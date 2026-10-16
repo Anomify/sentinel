@@ -72,7 +72,7 @@ export default function AiVisibility() {
                   of AI answers mention {brand.name}{brandShare?.avg_rank ? <>, at average position <b className="text-ink tnum">#{brandShare.avg_rank.toFixed(1)}</b></> : null}.
                 </p>
                 <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-                  <MiniStat label="Rank vs field" value={brandRankAmong ? `${brandRankAmong}/${share.length}` : "—"} />
+                  <MiniStat label="Rank vs field" value={brandRankAmong ? `${brandRankAmong}/${share.length}` : "-"} />
                   <MiniStat label="Top-3 mentions" value={brandShare?.top3 ?? 0} />
                   <MiniStat label="Gaps" value={data.gaps.length} tone={data.gaps.length ? "warn" : undefined} />
                 </div>
@@ -130,7 +130,7 @@ export default function AiVisibility() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <CardHeader title="Source gaps" sub="Domains cited in answers that name a competitor but not you — where to earn coverage next" />
+              <CardHeader title="Source gaps" sub="Domains cited in answers that name a competitor but not you, where to earn coverage next" />
               <div className="px-5 pb-5">
                 {data.source_gaps?.length ? <BarList fmt={(v) => String(v)} rows={data.source_gaps.slice(0, 8).map((c) => ({ id: c.domain, label: c.domain, value: c.count, color: "var(--ink)" }))} />
                   : <div className="py-6 text-center text-[13px] text-ink-3">No source gaps in this run.</div>}
@@ -143,7 +143,7 @@ export default function AiVisibility() {
                   <>
                     <div className="flex items-end gap-3"><div className="text-[40px] leading-none tracking-[-0.03em] tnum text-ink">{Math.round(data.accuracy.score * 100)}%</div>
                       <div className="mb-1 text-[12.5px] text-ink-3">across {data.accuracy.n} answers that mention you</div></div>
-                    <ul className="mt-4 space-y-1.5">{data.accuracy.issues.slice(0, 6).map((i, k) => <li key={k} className="text-[12.5px] leading-relaxed text-ink-2">— {i}</li>)}</ul>
+                    <ul className="mt-4 space-y-1.5">{data.accuracy.issues.slice(0, 6).map((i, k) => <li key={k} className="text-[12.5px] leading-relaxed text-ink-2">• {i}</li>)}</ul>
                   </>
                 ) : <div className="py-4 text-[13px] leading-relaxed text-ink-3">Add <code className="font-mono text-[12px]">facts:</code> under <code className="font-mono text-[12px]">brand</code> in watchlist.yaml and a GEMINI_API_KEY or ANTHROPIC_API_KEY to grade what AI search says about you.</div>}
               </div>

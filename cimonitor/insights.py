@@ -126,7 +126,7 @@ def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
 
 
 def gaps(cfg: Config, vis: dict) -> list[dict]:
-    """Questions where a competitor shows up and we don't — the AI-search to-do list."""
+    """Questions where a competitor shows up and we don't, the AI-search to-do list."""
     out = []
     for row in vis.get("matrix", []):
         ours = [r for r in (row["cells"].get("__brand__") or {}).values() if r]
@@ -137,7 +137,7 @@ def gaps(cfg: Config, vis: dict) -> list[dict]:
 
 
 def launch_scores(cfg: Config, con) -> dict:
-    return {c.id: db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "horizon": "—", "n": 0} for c in cfg.competitors}
+    return {c.id: db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "horizon": "-", "n": 0} for c in cfg.competitors}
 
 
 def overview(cfg: Config, con, days=7) -> dict:
@@ -238,7 +238,7 @@ def hiring_view(cfg: Config, con) -> dict:
 def radar_view(cfg: Config, con) -> dict:
     out = []
     for c in cfg.competitors:
-        lp = db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "horizon": "—"}
+        lp = db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "horizon": "-"}
         hist = [{"date": s["period"], "p": s["value"]} for s in facts.series(con, c.id, "radar", "launch_probability")]
         pubs = sorted({s["period"] for s in facts.series(con, c.id, "radar", "publish") if s["metric"] == "publish"})
         out.append({"id": c.id, "launch": lp, "history": hist[-60:], "publishes": pubs[-40:],

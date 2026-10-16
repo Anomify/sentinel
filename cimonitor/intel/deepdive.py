@@ -192,7 +192,7 @@ def build(cfg: Config, comp: Entity) -> dict:
                       "confirmed", _ev(stg_pages), first_seen=_first(stg_pages), vs_us="Read these pages now; they are their next launch.", weight=5))
     if publishes:
         ts = sorted({p["value"].get("at") for p in publishes if p["value"].get("site") == "production"})
-        out.append(_f("radar", "cadence", f"Site published {len(ts)} time(s) since monitoring began", f"Latest: {ts[-1] if ts else '—'}",
+        out.append(_f("radar", "cadence", f"Site published {len(ts)} time(s) since monitoring began", f"Latest: {ts[-1] if ts else '-'}",
                       "confirmed", _ev(publishes[-2:])))
     if repos:
         recent = sorted(repos, key=lambda r: r["value"].get("pushed_at") or "", reverse=True)[:5]
@@ -276,7 +276,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         last90 = [p for p in posts if (p["published"] or p["first_seen"] or "") >= _days_ago(90)]
         types = Counter(p["ctype"] or "Blog" for p in last90)
         out.append(_f("positioning", "content", f"Content engine: {len(last90)} pieces in 90 days",
-                      ", ".join(f"{k} {v}" for k, v in types.most_common()) or "—", "confirmed",
+                      ", ".join(f"{k} {v}" for k, v in types.most_common()) or "-", "confirmed",
                       [{"url": p["url"], "observed_at": p["first_seen"], "method": "feed"} for p in posts[:2]]))
 
     # ── AI visibility
@@ -310,10 +310,10 @@ def _days_ago(n: int) -> str:
 def _summary(comp, out, motion, jobs, funding, launch, tools, subs) -> list[dict]:
     lat = sorted(funding, key=lambda f: f["value"].get("date") or "", reverse=True)
     return [
-        {"label": "Motion", "value": motion[0]["label"] if motion else "—"},
+        {"label": "Motion", "value": motion[0]["label"] if motion else "-"},
         {"label": "Launch probability", "value": f"{round((launch or {}).get('probability', 0) * 100)}%"},
         {"label": "Open roles", "value": str(len(jobs))},
-        {"label": "Latest funding", "value": lat[0]["label"] if lat else "—"},
+        {"label": "Latest funding", "value": lat[0]["label"] if lat else "-"},
         {"label": "GTM tools", "value": str(len(tools))},
         {"label": "Hostnames", "value": str(len(subs))},
     ]

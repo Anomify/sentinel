@@ -19,7 +19,7 @@ PRICE_RE = re.compile(
     r"(?:\s?(?:/|per)\s?(?:mo(?:nth)?|yr|year|user|seat|request|call|1[,.]?000|million|M|K|GB|hour|text record|unit)[\w ]{0,20})?",
     re.I,
 )
-# Module 9 — positioning vocabulary. Counts per page snapshot → buyer hierarchy & focus over time.
+# Module 9, positioning vocabulary. Counts per page snapshot → buyer hierarchy & focus over time.
 PERSONAS = {
     "CISO / security leaders": r"\bcisos?\b|chief information security|security leaders?|head of security|security executives?",
     "SOC / security teams": r"\bsoc\b|security (teams?|operations|analysts?)|incident response|threat hunters?",

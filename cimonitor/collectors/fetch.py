@@ -105,7 +105,7 @@ class Fetcher:
                 kw = {"executable_path": chromium_path()} if chromium_path() else {}
                 self._browser = self._pw.chromium.launch(**kw)
             except Exception as e:
-                log.warning("Playwright unavailable (%s) — falling back to HTTP", e)
+                log.warning("Playwright unavailable (%s), falling back to HTTP", e)
                 self.use_browser = False
         return self
 
@@ -144,7 +144,7 @@ class Fetcher:
                 guard.audit(url, "allowed", f"browser {f.status}")
                 return f
             except Exception as e:
-                log.info("browser fetch failed for %s: %s — retrying over HTTP", url, e)
+                log.info("browser fetch failed for %s: %s, retrying over HTTP", url, e)
         try:
             r = guard._session.get(url, timeout=self.timeout)
             guard.audit(url, "allowed", f"HTTP {r.status_code}")

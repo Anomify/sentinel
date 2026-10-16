@@ -24,7 +24,7 @@ export default function Overview() {
   const top = data ? Object.entries(data.launch).sort((a, b) => b[1].probability - a[1].probability)[0] : null;
   const headline = !data ? "" : data.kpis.critical
     ? `${data.kpis.critical} high-impact move${data.kpis.critical > 1 ? "s" : ""} this ${days === 7 ? "week" : `${days} days`}.`
-    : data.kpis.changes ? "Steady — nothing high-impact." : data.kpis.facts ? "Baseline recorded. Watching for changes." : "All quiet.";
+    : data.kpis.changes ? "Steady, nothing high-impact." : data.kpis.facts ? "Baseline recorded. Watching for changes." : "All quiet.";
 
   return (
     <div>
@@ -37,7 +37,7 @@ export default function Overview() {
               <Stat className="p-6" label="Signals" value={data.kpis.changes} sub={data.kpis.changes || data.kpis.changes_prev
                 ? <span className="inline-flex items-center gap-1.5"><Delta value={data.kpis.changes - data.kpis.changes_prev} neutral /> vs prior period</span>
                 : `Baseline · ${data.kpis.facts.toLocaleString()} facts on file`} />
-              <Stat className="p-6" label="High-impact" value={<span className={data.kpis.critical ? "text-crit" : ""}>{data.kpis.critical}</span>} sub={lead ? `Most active: ${lead.name}` : "—"} />
+              <Stat className="p-6" label="High-impact" value={<span className={data.kpis.critical ? "text-crit" : ""}>{data.kpis.critical}</span>} sub={lead ? `Most active: ${lead.name}` : "-"} />
               <Stat className="p-6" label="Launch risk" value={pct(data.kpis.launch_max)} sub={top && top[1].probability > 0 ? `${meta.entities.find((e) => e.id === top[0])?.name} · ${top[1].horizon}` : "No launch signals"} />
               <Stat className="p-6" label="AI share of voice" value={pct(data.kpis.ai_share)}
                 sub={data.kpis.ai_share != null ? <span className="inline-flex items-center gap-1.5">{data.kpis.ai_share_prev != null && <Delta value={Math.round((data.kpis.ai_share - data.kpis.ai_share_prev) * 100)} suffix=" pts" />}{data.kpis.ai_gaps} gaps</span> : <Link to="/ai" className="hover:text-ink">Connect engines →</Link>} />
@@ -87,7 +87,7 @@ export default function Overview() {
                 <div className="px-6 pb-6">
                   {Object.keys(data.by_module).length ? (
                     <BarList fmt={(v) => String(v)} rows={Object.entries(data.by_module).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ id: k, label: k, value: v, color: "var(--ink)" }))} />
-                  ) : <div className="py-6 text-center text-[13px] text-ink-3">—</div>}
+                  ) : <div className="py-6 text-center text-[13px] text-ink-3">-</div>}
                 </div>
               </Card>
               <Card>

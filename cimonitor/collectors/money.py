@@ -1,9 +1,9 @@
-"""Module 7 — Partners, channel & money.
+"""Module 7, Partners, channel & money.
 
   • Partner pages: partner names (logo grids/links) tracked over time → partner count series.
   • Marketplace listings (AWS, Azure, GCP, Databricks, Snowflake…): discovered from links
     on their own site plus configured listing URLs.
-  • Partner programme / reseller signals (programme pages, "become a partner" forms — detected, never submitted).
+  • Partner programme / reseller signals (programme pages, "become a partner" forms, detected, never submitted).
   • Press & funding via Google News RSS: rounds, investors, ARR / growth claims extracted.
 """
 from __future__ import annotations
@@ -103,8 +103,40 @@ def partner_names(html: str, page_url: str = "") -> list[str]:
     return sorted(trusted | {n for n in names if n.lower() not in {t.lower() for t in trusted}})
 
 
+# Business context an article must carry when it only names the competitor by an ordinary word ("Alice").
+CONTEXT_RX = re.compile(r"\b(AI|A\.I\.|artificial intelligence|LLMs?|GenAI|generative|agents?|agentic|security|cyber\w*|"
+                        r"guardrails?|safety|trust (and|&) safety|moderation|red[- ]team\w*|startup|raises?|raised|funding|"
+                        r"series [a-f]|seed|investors?|acquir\w*|acquisition|partner\w*|launch\w*|platform|enterprise|"
+                        r"CEO|CTO|founder|valuation|SaaS|software|customers?)\b", re.I)
+JUNK_RX = re.compile(r"obituar|funeral|cremation|memorial|passed away|in loving memory|legacy\.com|\| legacy|"
+                     r"high school|college (football|basketball)|sports|recipe|horoscope", re.I)
+
+
+def _plain_word(t: str) -> bool:
+    """A single ordinary word ("Alice", "Gandalf") is ambiguous; "WonderFence", "alice.io" or "Lakera Guard" are not."""
+    return bool(re.fullmatch(r"[A-Z]?[a-z]+", t))
+
+
+def news_terms(comp: Entity) -> tuple[list[str], list[str]]:
+    terms = {re.sub(r"\s*\(.*?\)", "", n).strip() for n in comp.names} | set(comp.domains)
+    terms = {t for t in terms if len(t) > 2}
+    return sorted(t for t in terms if not _plain_word(t)), sorted(t for t in terms if _plain_word(t))
+
+
+def relevant(comp: Entity, text: str) -> bool:
+    """Is this article about the competitor (the company), not a namesake?"""
+    if JUNK_RX.search(text):
+        return False
+    distinct, plain = news_terms(comp)
+    if any(re.search(rf"(?<![\w.]){re.escape(t)}(?![\w])", text, re.I) for t in distinct):
+        return True
+    return any(re.search(rf"\b{re.escape(t)}\b", text) for t in plain) and bool(CONTEXT_RX.search(text))
+
+
 def news(comp: Entity) -> list[dict]:
-    q = comp.news_query or f'"{re.sub(r"[()]", "", comp.name.split("(")[0]).strip()}"'
+    distinct, plain = news_terms(comp)
+    parts = [f'"{t}"' for t in distinct] + [f'("{t}" AI OR security)' for t in plain]
+    q = comp.news_query or " OR ".join(parts)
     url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl=en-US&gl=US&ceid=US:en"
     r = guard.get(url, respect_robots=False)
     root = ET.fromstring(r.content)
@@ -118,8 +150,22 @@ def news(comp: Entity) -> list[dict]:
         except (TypeError, ValueError):
             pub = None
         desc = BeautifulSoup(it.findtext("description") or "", "html.parser").get_text(" ")
-        out.append({"title": title, "url": link, "source": src, "published": pub, "text": f"{title}. {desc}", "feed": url})
+        item = {"title": title, "url": link, "source": src, "published": pub, "text": f"{title}. {desc}", "feed": url}
+        if relevant(comp, item["text"]):
+            out.append(item)
     return out
+
+
+def purge_irrelevant(con, comp: Entity) -> int:
+    """Remove press items already stored that fail the relevance check (e.g. obituaries of people called Alice)."""
+    n = 0
+    for table, col in (("events", "title"), ("facts", "label")):
+        for r in db.rows(con.execute(f"SELECT id, {col} AS t FROM {table} WHERE competitor=? AND module=? AND kind='press'",
+                                     (comp.id, MODULE))):
+            if not relevant(comp, (r["t"] or "").removeprefix("In the news: ")):
+                con.execute(f"DELETE FROM {table} WHERE id=?", (r["id"],))
+                n += 1
+    return n
 
 
 def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], list[Fact], list[Fact]]:
@@ -172,7 +218,7 @@ def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], 
 RULES = {
     "partner": Rule(severity="medium", title_add=lambda f: f"New partner listed: {f.label}", title_remove=lambda r: f"Partner removed: {r['label']}"),
     "marketplace": Rule(severity="high", title_add=lambda f: f"New marketplace listing: {f.label}",
-                        so_what=lambda f: "Marketplace listings let buyers burn committed cloud spend — a big enterprise procurement accelerator."),
+                        so_what=lambda f: "Marketplace listings let buyers burn committed cloud spend, a big enterprise procurement accelerator."),
     "partner_program": Rule(severity="high", title_add=lambda f: f"Partner programme signal: {f.label}",
                             so_what=lambda f: "A formal channel/reseller motion is being built."),
     "press": Rule(severity="low", on_remove=False, title_add=lambda f: f"In the news: {f.label}"),
@@ -184,6 +230,7 @@ RULES = {
 
 
 def run_one(con, comp: Entity) -> dict:
+    purged = purge_irrelevant(con, comp)
     obs: list[Fact] = []
     links, home_html = _home_links(comp)
     own = comp.domain.removeprefix("www.")
@@ -219,7 +266,7 @@ def run_one(con, comp: Entity) -> dict:
         items = []
     rx = comp.mention_regex()
     for n in items[:60]:
-        if rx.search(n["title"]):
+        if rx.search(n["title"]) and relevant(comp, n["title"]):
             obs.append(Fact("press", n["url"][:300], n["title"][:200], {"source": n["source"], "published": n["published"]},
                             facts.CONFIRMED, [ev(n["url"], "Google News RSS")]))
     fr, ar, aq = extract_money(items, rx)
@@ -231,7 +278,7 @@ def run_one(con, comp: Entity) -> dict:
     month = datetime.now(timezone.utc).strftime("%Y-%m")
     facts.metric(con, comp.id, MODULE, "partners", month, len(names_all))
     facts.metric(con, comp.id, MODULE, "marketplaces", month, len({f.label for f in obs if f.kind == "marketplace"}))
-    stats.update(partner_pages=ppages, partners=len(names_all), news=len(items), funding=len(fr))
+    stats.update(partner_pages=ppages, partners=len(names_all), news=len(items), funding=len(fr), irrelevant_purged=purged)
     return stats
 
 

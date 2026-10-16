@@ -1,4 +1,4 @@
-"""Module 6 — Hiring intelligence via the public job-board APIs (Greenhouse, Lever, Ashby).
+"""Module 6, Hiring intelligence via the public job-board APIs (Greenhouse, Lever, Ashby).
 
 Every role is tagged by function, seniority and region, and its description is mined for
 the tech stack. "Firsts" (first Partner Manager, first role in EMEA…) are the strongest
@@ -194,7 +194,7 @@ def run_one(con, comp: Entity) -> dict:
             obs.append(Fact("job", j["id"], j["title"], {**t, "location": j["location"], "department": j["department"],
                                                          "url": j["url"], "posted": j["posted"], "ats": ats},
                             facts.CONFIRMED, [ev(j["url"], f"{ats.title()} public API")]))
-    # Firsts — compare against everything ever seen for this competitor
+    # Firsts, compare against everything ever seen for this competitor
     hist = facts.history(con, comp.id, MODULE, "job")
     seen_fn = {h["value"].get("function") for h in hist}
     seen_reg = {h["value"].get("region") for h in hist}

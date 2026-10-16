@@ -78,7 +78,7 @@ def parse_listing(html: str, base: str, pattern: str) -> list[dict]:
 
 
 def _clean_title(a) -> str:
-    """Anchor text, or — for image-only card links — the nearest heading in the card."""
+    """Anchor text, or, for image-only card links, the nearest heading in the card."""
     node = a.find(["h2", "h3", "h4"]) or a
     t = re.sub(r"\s+", " ", node.get_text(" ")).strip()
     parent = a.parent

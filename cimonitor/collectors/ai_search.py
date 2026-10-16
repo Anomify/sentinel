@@ -105,7 +105,7 @@ def ask_gemini(model: str, q: str) -> tuple[str, list[dict]]:
         if re.fullmatch(r"[\w.-]+\.[a-z]{2,}", t):
             c["domain"] = t
     if not grounded:
-        text = "[Gemini answered without Google Search — search-grounding quota unavailable]\n" + text
+        text = "[Gemini answered without Google Search, search-grounding quota unavailable]\n" + text
     return text, cites
 
 
