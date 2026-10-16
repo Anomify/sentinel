@@ -375,6 +375,23 @@ def digest_create(deliver: bool = False):
     return {**r, "to": digest.recipients(c)}
 
 
+def _pdf(html_body: str, name: str) -> Response:
+    try:
+        data = digest.to_pdf(html_body)
+    except ImportError:
+        raise HTTPException(501, 'PDF export needs the browser extra: pip install -e ".[browser]" && playwright install chromium')
+    return Response(data, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
+
+
+@app.get("/api/digests/{did}/pdf")
+def digest_pdf(did: int):
+    with db.connect() as con:
+        r = db.row(con.execute("SELECT html, period_end FROM digests WHERE id=?", (did,)).fetchone())
+    if not r:
+        raise HTTPException(404)
+    return _pdf(r["html"], f"sentinel-digest-{(r['period_end'] or '')[:10] or did}")
+
+
 @app.get("/api/digests/preview", response_class=HTMLResponse)
 def digest_preview(days: int = 7):
     return digest.render_html(digest.build(cfg(), days))

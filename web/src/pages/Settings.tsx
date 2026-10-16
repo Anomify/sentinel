@@ -36,8 +36,6 @@ export default function Settings() {
           <div className="divide-y divide-line border-t border-line">
             {meta.engines.map((e) => <Row key={e.id} label={ENGINE_LABEL[e.id] ?? e.id} detail={`${e.model}${e.enabled ? "" : " · disabled in questions.yaml"}`} on={e.enabled && e.has_key} env={ENV[e.id]} />)}
             <Row label="AI analysis" detail={`So-what, Vs. us, weekly brief, accuracy grading${(meta as any).analysis_provider ? ` · using ${(meta as any).analysis_provider === "gemini" ? "Gemini" : "Claude"}` : ""}`} on={meta.analysis} env="GEMINI_API_KEY or ANTHROPIC_API_KEY" />
-            <Row label="Slack digest" detail="Incoming webhook" on={meta.channels.slack} env="SLACK_WEBHOOK_URL" />
-            <Row label="Email digest" detail={`To ${((meta as any).digest_to ?? []).join(", ") || "nobody yet"} · Google Workspace or any SMTP`} on={meta.channels.email} env="SMTP_USER, SMTP_PASS" />
             <Row label="Google ads library" detail="BigQuery public dataset (official)" on={false} env="GOOGLE_APPLICATION_CREDENTIALS" />
             <Row label="Meta ads library" detail="Ad Library API (official)" on={false} env="META_ADS_TOKEN" />
           </div>

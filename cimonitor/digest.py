@@ -230,6 +230,21 @@ def send(cfg: Config, d: dict, html_body: str) -> dict:
     return out
 
 
+def to_pdf(html_body: str) -> bytes:
+    """Render the digest HTML to an A4 PDF with the headless browser Sentinel already uses."""
+    from playwright.sync_api import sync_playwright
+
+    from .collectors.fetch import chromium_path
+    with sync_playwright() as pw:
+        b = pw.chromium.launch(**({"executable_path": chromium_path()} if chromium_path() else {}))
+        try:
+            page = b.new_page()
+            page.set_content(html_body, wait_until="networkidle")
+            return page.pdf(format="A4", print_background=True, margin={"top": "12mm", "bottom": "12mm", "left": "10mm", "right": "10mm"})
+        finally:
+            b.close()
+
+
 def run(cfg: Config, deliver: bool = True, days: int | None = None) -> dict:
     d = llm.no_dashes(build(cfg, days))
     body = llm.no_dashes(render_html(d))
