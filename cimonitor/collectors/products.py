@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from urllib.parse import urljoin, urlparse
@@ -73,7 +74,52 @@ def changelog_urls(comp: Entity, links: list[str]) -> list[str]:
     return list(dict.fromkeys(out + list(getattr(comp, "changelog", []) or [])))[:3]
 
 
-def release_entries(url: str, limit: int = 40) -> list[str]:
+MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec"
+DATE_RX = re.compile(rf"\b(\d{{4}}-\d{{2}}-\d{{2}}|\d{{1,2}}(?:st|nd|rd|th)? (?:{MONTHS})[a-z]*,? \d{{4}}|(?:{MONTHS})[a-z]* \d{{1,2}}(?:st|nd|rd|th)?,? \d{{4}})\b", re.I)
+
+
+def parse_date(text: str) -> str | None:
+    """First date in the text as YYYY-MM-DD, or None."""
+    from datetime import datetime
+    m = DATE_RX.search(text or "")
+    if not m:
+        return None
+    t = re.sub(r"(\d)(st|nd|rd|th)", r"\1", m.group(1)).replace(",", "")
+    t = re.sub(r"\b([Ss]ep)t\b", r"\1", t)
+    for fmt in ("%Y-%m-%d", "%d %b %Y", "%d %B %Y", "%b %d %Y", "%B %d %Y"):
+        try:
+            return datetime.strptime(t, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def _entry_date(h) -> str | None:
+    """A changelog date sits just above the heading (meta line), in it, or just below it."""
+    t = h.find("time")
+    if t and (t.get("datetime") or t.get_text()):
+        d = parse_date(t.get("datetime") or t.get_text())
+        if d:
+            return d
+    before = []
+    for el in h.find_all_previous(string=True, limit=8):
+        if el.parent and el.parent.name in ("h1", "h2", "h3"):
+            break
+        before.append(el)
+    after = []
+    for el in h.find_all_next(string=True, limit=8):
+        if el.parent and el.parent.name in ("h2", "h3") and el.parent is not h:
+            break
+        after.append(el)
+    for chunk in (h.get_text(" "), " ".join(before), " ".join(after)):
+        d = parse_date(chunk)
+        if d:
+            return d
+    return None
+
+
+def release_entries(url: str, limit: int = 40) -> list[tuple[str, str | None]]:
+    """[(heading, date or None)] for each entry on a changelog page."""
     try:
         r = guard.get(url)
     except Exception:
@@ -83,11 +129,12 @@ def release_entries(url: str, limit: int = 40) -> list[str]:
     soup = BeautifulSoup(r.text, "html.parser")
     for t in soup(["nav", "header", "footer", "script", "style"]):
         t.decompose()
-    out = []
+    out, seen = [], set()
     for h in soup.find_all(["h2", "h3"]):
         t = " ".join(h.get_text(" ", strip=True).split())
-        if 4 <= len(t) <= 120 and not HEADING_JUNK.match(t) and t not in out:
-            out.append(t)
+        if 4 <= len(t) <= 120 and not HEADING_JUNK.match(t) and t not in seen:
+            seen.add(t)
+            out.append((t, _entry_date(h)))
         if len(out) >= limit:
             break
     return out
@@ -106,15 +153,22 @@ def launch_items(con, comp: Entity, news: list[dict]) -> list[dict]:
     return out
 
 
+def _recent(f: Fact, days: int = 30) -> bool:
+    """Alert only on things actually released recently; an old item we just discovered is not news."""
+    from datetime import date, timedelta
+    d = parse_date(str(f.value.get("date") or f.value.get("published") or "")) or str(f.value.get("published") or "")[:10]
+    return not d or d >= (date.today() - timedelta(days=days)).isoformat()
+
+
 RULES = {
     "product_page": Rule(severity="high", on_remove=True,
                          title_add=lambda f: f"New product page: {f.label}",
                          title_remove=lambda r: f"Product page removed: {r['label']}",
                          so_what=lambda f: "A new product, platform or solution page usually means a new product or a newly packaged capability. Check how it is positioned and priced."),
-    "release": Rule(severity="medium", on_remove=False,
+    "release": Rule(severity="medium", on_remove=False, alert_if=_recent,
                     title_add=lambda f: f"Shipped: {f.label}",
                     so_what=lambda f: "A new entry in their release notes: a feature that is live now. Compare it with our roadmap."),
-    "launch": Rule(severity="high", on_remove=False,
+    "launch": Rule(severity="high", on_remove=False, alert_if=_recent,
                    title_add=lambda f: f"Launch announced: {f.label}",
                    so_what=lambda f: "A public launch announcement. Expect sales and marketing to push it; prepare a response for deals in flight."),
 }
@@ -132,9 +186,9 @@ def run_one(con, comp: Entity) -> dict:
     logs = changelog_urls(comp, links)
     n_rel = 0
     for u in logs:
-        for t in release_entries(u):
+        for t, d in release_entries(u):
             n_rel += 1
-            obs.append(Fact("release", f"{u}#{t.lower()}"[:300], t, {"page": u}, facts.CONFIRMED, [ev(u, "release notes / changelog")]))
+            obs.append(Fact("release", f"{u}#{t.lower()}"[:300], t, {"page": u, "date": d}, facts.CONFIRMED, [ev(u, "release notes / changelog")]))
     try:
         news = money.news(comp)
     except Exception as e:
@@ -145,6 +199,14 @@ def run_one(con, comp: Entity) -> dict:
         obs.append(Fact("launch", it["url"][:300], it["title"][:200], {"source": it["source"], "published": it["published"]},
                         facts.CONFIRMED if it["source"] == "their blog" else facts.LIKELY, [ev(it["url"], it["source"])]))
     stats = facts.sync(con, comp.id, MODULE, obs, ["product_page", "release", "launch"], RULES)
+    # Drop alerts raised earlier for items that turn out to be old (dates are now read from the page).
+    by_key = {(f.kind, f.key): f for f in obs}
+    for e in db.rows(con.execute("SELECT id, kind, data FROM events WHERE competitor=? AND module=? AND kind IN ('release_added','launch_added')",
+                                 (comp.id, MODULE))):
+        d = e["data"] if isinstance(e["data"], dict) else json.loads(e["data"] or "{}")
+        f = by_key.get((d.get("kind"), d.get("key")))
+        if f and not _recent(f):
+            con.execute("DELETE FROM events WHERE id=?", (e["id"],))
     stats.update(products=len(cat), changelogs=logs, releases=n_rel, launches=len(launches))
     return stats
 

@@ -368,7 +368,15 @@ function ProductCard({ id }: { id: string }) {
   const { data } = useApi<Fact[]>(`/api/facts?competitor=${id}&module=product`);
   if (!data) return <Skeleton className="h-40 rounded-2xl" />;
   const k = (kind: string) => data.filter((f) => f.kind === kind).sort((a, b) => (b.value.published ?? b.first_seen ?? "").localeCompare(a.value.published ?? a.first_seen ?? ""));
-  const recent = (f: Fact) => Date.now() - new Date(f.first_seen).getTime() < 30 * 864e5;
+  // "new" = released in the last 30 days. Use the item's own date when we have one (release notes, launches);
+  // otherwise only items that appeared after Sentinel's first scan count, so the baseline is never "new".
+  const MONTH = 30 * 864e5;
+  const baseline = data.reduce((m, f) => (f.first_seen < m ? f.first_seen : m), "9999").slice(0, 10);
+  const recent = (f: Fact) => {
+    const d = f.value.date ?? f.value.published;
+    if (d) return Date.now() - new Date(d).getTime() < MONTH;
+    return f.first_seen.slice(0, 10) > baseline && Date.now() - new Date(f.first_seen).getTime() < MONTH;
+  };
   const launches = k("launch"), pages = k("product_page"), rels = k("release");
   return (
     <Card className="p-6">
@@ -379,7 +387,7 @@ function ProductCard({ id }: { id: string }) {
           {launches.length ? launches.slice(0, 6).map((f) => (
             <a key={f.id} href={f.evidence[0]?.url ?? undefined} target="_blank" rel="noreferrer" className="mb-2 block hover:text-ink">
               <div className="text-[13px] leading-snug text-ink">{f.label}</div>
-              <div className="text-[11.5px] text-ink-3">{f.value.source} · {day(f.value.published ?? f.first_seen)}</div>
+              <div className="text-[11.5px] text-ink-3">{f.value.source} · {day(f.value.published ?? f.first_seen)}{recent(f) && <Chip className="ml-2">new</Chip>}</div>
             </a>)) : <div className="text-[12.5px] text-ink-3">None found yet</div>}
         </div>
         <div><div className="eyebrow mb-2">Products & solutions ({pages.length})</div>
@@ -388,9 +396,9 @@ function ProductCard({ id }: { id: string }) {
               <span className="truncate">{f.label}</span>{recent(f) && <Chip>new</Chip>}</a>)) : <div className="text-[12.5px] text-ink-3">No product pages found</div>}
         </div>
         <div><div className="eyebrow mb-2">Release notes</div>
-          {rels.length ? rels.sort((a, b) => b.first_seen.localeCompare(a.first_seen)).slice(0, 8).map((f) => (
+          {rels.length ? rels.sort((a, b) => (b.value.date ?? b.first_seen).localeCompare(a.value.date ?? a.first_seen)).slice(0, 8).map((f) => (
             <a key={f.id} href={f.value.page} target="_blank" rel="noreferrer" className="flex items-center gap-2 py-0.5 text-[13px] text-ink-2 hover:text-ink">
-              <span className="truncate">{f.label}</span>{recent(f) && <Chip>new</Chip>}</a>)) : <div className="text-[12.5px] text-ink-3">No public changelog found</div>}
+              <span className="truncate">{f.label}</span>{f.value.date && <span className="shrink-0 text-[11.5px] text-ink-3">{day(f.value.date)}</span>}{recent(f) && <Chip>new</Chip>}</a>)) : <div className="text-[12.5px] text-ink-3">No public changelog found</div>}
         </div>
       </div>
     </Card>
