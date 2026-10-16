@@ -198,7 +198,10 @@ def run_one(con, comp: Entity) -> dict:
     for it in launches:
         obs.append(Fact("launch", it["url"][:300], it["title"][:200], {"source": it["source"], "published": it["published"]},
                         facts.CONFIRMED if it["source"] == "their blog" else facts.LIKELY, [ev(it["url"], it["source"])]))
-    stats = facts.sync(con, comp.id, MODULE, obs, ["product_page", "release", "launch"], RULES)
+    # Only reconcile what we actually managed to read this time. A site that is slow or down must never
+    # make every known product look "removed".
+    kinds = [k for k in ("product_page", "release", "launch") if any(f.kind == k for f in obs)]
+    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES) if kinds else {"facts": 0, "added": 0, "removed": 0, "changed": 0}
     # Drop alerts raised earlier for items that turn out to be old (dates are now read from the page).
     by_key = {(f.kind, f.key): f for f in obs}
     for e in db.rows(con.execute("SELECT id, kind, data FROM events WHERE competitor=? AND module=? AND kind IN ('release_added','launch_added')",
