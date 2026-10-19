@@ -14,6 +14,7 @@ METHODS = [
     ("subdomains", ["subdomains"], "Subdomains & certificates", "Subdomain finders", "crt.sh + Cert Spotter (CT logs)", None),
     ("radar", ["radar"], "Pre-launch radar", "Manual staging checks", "Sitemaps, Webflow publish stamps, GitHub API", None),
     ("product", ["product"], "Product intelligence", "Manual changelog & launch watching", "Sitemaps, site navigation, release notes, blog + news", None),
+    ("social", ["social"], "Social media", "Checking LinkedIn, X and YouTube by hand", "YouTube RSS, Bluesky API, Medium RSS, X API, Hacker News API", None),
     ("hiring", ["hiring"], "Hiring intelligence", "LinkedIn Jobs browsing", "Greenhouse / Lever / Ashby APIs", None),
     ("money", ["money"], "Partners, channel & money", "Crunchbase / press trawling", "Partner pages, marketplaces, Google News RSS", None),
     ("ads", ["ads"], "Ads intelligence", "Ad library browsing", "Google Ads BigQuery dataset, Meta Ad Library API",

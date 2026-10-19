@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 
 def _c():
-    from .collectors import ads, ai_search, dns_infra, feeds, hiring, money, pages, products, radar, stack, subdomains
+    from .collectors import ads, ai_search, dns_infra, feeds, hiring, money, pages, products, radar, social, stack, subdomains
     return locals()
 
 
@@ -34,6 +34,7 @@ JOBS = {
     "hiring": lambda cfg, **kw: _c()["hiring"].run(cfg, kw.get("competitor")),
     "money": lambda cfg, **kw: _c()["money"].run(cfg, kw.get("competitor")),
     "ads": lambda cfg, **kw: _c()["ads"].run(cfg, kw.get("competitor")),
+    "social": lambda cfg, **kw: _c()["social"].run(cfg, kw.get("competitor")),
     "product": lambda cfg, **kw: _c()["products"].run(cfg, kw.get("competitor")),
     "ai": lambda cfg, **kw: _c()["ai_search"].run(cfg, kw.get("limit")),
     "deepdive": _deepdive,
@@ -42,7 +43,7 @@ JOBS = {
 def _all(cfg, **kw):
     """Refresh every section for every company (AI visibility is left to its schedule: it spends API quota)."""
     out = {}
-    for step in ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "hiring", "money", "ads", "deepdive"]:
+    for step in ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "social", "hiring", "money", "ads", "deepdive"]:
         try:
             out[step] = JOBS[step](config.load())
         except Exception as e:
@@ -53,10 +54,10 @@ def _all(cfg, **kw):
 
 JOBS["all"] = _all
 # Order for a full scan of one competitor (deep dive): dependencies first.
-FULL_SCAN = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "hiring", "money", "ads", "deepdive"]
+FULL_SCAN = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "social", "hiring", "money", "ads", "deepdive"]
 LABELS = {"pages": "Pages & pricing", "feeds": "Content", "stack": "GTM stack + tag manager", "dns": "DNS & email",
           "subdomains": "Subdomains & certificates", "radar": "Pre-launch radar", "hiring": "Hiring", "money": "Partners & money",
-          "ads": "Ads", "product": "Product launches", "ai": "AI visibility", "deepdive": "Deep dive", "digest": "Digest", "scan": "Full scan", "all": "Everything"}
+          "ads": "Ads", "product": "Product launches", "social": "Social media", "ai": "AI visibility", "deepdive": "Deep dive", "digest": "Digest", "scan": "Full scan", "all": "Everything"}
 
 _lock = threading.Lock()
 _running: dict[tuple[str, str], str] = {}

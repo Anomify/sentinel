@@ -46,17 +46,18 @@ export function CompetitorList() {
   );
 }
 
-type TabId = "signals" | "stack" | "tracking" | "dns" | "subdomains" | "radar" | "product" | "hiring" | "money" | "ads" | "pages";
+type TabId = "signals" | "stack" | "tracking" | "dns" | "subdomains" | "radar" | "product" | "social" | "hiring" | "money" | "ads" | "pages";
 const TABS: { id: TabId; label: string; module?: string }[] = [
   { id: "signals", label: "Signals" }, { id: "stack", label: "Stack", module: "stack" }, { id: "tracking", label: "Tracking", module: "gtm" },
   { id: "dns", label: "DNS & email", module: "dns" }, { id: "subdomains", label: "Subdomains", module: "subdomains" },
-  { id: "radar", label: "Pre-launch", module: "radar" }, { id: "product", label: "Product", module: "product" }, { id: "hiring", label: "Hiring", module: "hiring" },
+  { id: "radar", label: "Pre-launch", module: "radar" }, { id: "product", label: "Product", module: "product" }, { id: "social", label: "Social", module: "social" }, { id: "hiring", label: "Hiring", module: "hiring" },
   { id: "money", label: "Partners & money", module: "money" }, { id: "ads", label: "Ads", module: "ads" }, { id: "pages", label: "Pages" },
 ];
 const KIND_LABEL: Record<string, string> = {
   tool: "Tools", conversion_path: "Conversion paths", motion: "Motion", third_party: "Third-party domains", cookies: "Cookies",
   container: "GTM containers", tracking_id: "Tracking IDs", conversion: "Conversion events", gtm_tag: "GTM tags", sgtm: "Server-side tagging", funnel: "Funnel reading",
   verification: "TXT verifications", email_sender: "Email senders (SPF)", mx: "Mail routing", dmarc: "DMARC", dkim: "DKIM selectors", spf: "SPF", ns: "Nameservers", txt: "Raw TXT records",
+  profile: "Social accounts", post: "Social posts", mention: "Hacker News",
   product_page: "Product & solution pages", release: "Release notes", launch: "Launch announcements",
   subdomain: "Hostnames", wildcard: "Wildcard certificates", page_id: "IDs on subdomains",
   staging_site: "Staging sites", staging_page: "Pre-launch pages", publish: "Publishes", repo: "Public repos", site_page: "Production pages",

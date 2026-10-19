@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Command } from "cmdk";
 import {
-  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, FileSearch, Globe, Layers, LayoutGrid, Loader2, Mail, Package,
+  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, FileSearch, Globe, Layers, LayoutGrid, Loader2, Mail, MessagesSquare, Package,
   Menu, Network, Newspaper, Play, Rocket, Search, Settings, ShieldCheck, Swords, X,
 } from "lucide-react";
 import { api, invalidate, runJob, setWorkspace, workspace } from "../lib/api";
@@ -50,7 +50,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 /* ── Jobs ───────────────────────────────────────────────────────────────────── */
 export const JOB_LABEL: Record<string, string> = {
   pages: "Page scan", feeds: "Content sync", stack: "Stack & tag manager", dns: "DNS & email", subdomains: "Certificate transparency",
-  radar: "Pre-launch radar", product: "Product launches", hiring: "Hiring", money: "Partners & money", ads: "Ads", ai: "AI visibility", deepdive: "Deep dives", digest: "Digest", all: "Everything",
+  radar: "Pre-launch radar", product: "Product launches", social: "Social media", hiring: "Hiring", money: "Partners & money", ads: "Ads", ai: "AI visibility", deepdive: "Deep dives", digest: "Digest", all: "Everything",
 };
 // What each job refreshes, in the words of the sidebar.
 const JOB_HELP: Record<string, string> = {
@@ -58,8 +58,9 @@ const JOB_HELP: Record<string, string> = {
   subdomains: "New subdomains and certificates (Infrastructure)", dns: "Email tools and DNS verifications (Infrastructure)",
   stack: "Marketing tools and tracking (GTM stack)", pages: "Homepage, pricing and messaging changes (Positioning)",
   radar: "Staging sites, new pages, new repos (Launch radar)", product: "New products, release notes, launches (Product launches)",
+  social: "YouTube, Bluesky, Medium, X, Hacker News (Social & blogs)",
   hiring: "Open roles and first-of-their-kind hires (Hiring)", money: "Funding, partners, marketplaces, press (Partners & money)",
-  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Positioning)", ai: "What AI search engines say (AI visibility). Uses API quota.",
+  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Social & blogs)", ai: "What AI search engines say (AI visibility). Uses API quota.",
   deepdive: "Rewrites every deep dive from the latest data (Deep dives)", digest: "Saves a new weekly digest (Digest)",
 };
 // Count new findings in a run's stats, wherever the collector reported them.
@@ -116,6 +117,7 @@ export const NAV: { group: string; items: { to: string; label: string; icon: any
     { to: "/infrastructure", label: "Infrastructure", icon: Network },
     { to: "/radar", label: "Launch radar", icon: Rocket },
     { to: "/product", label: "Product launches", icon: Package },
+    { to: "/social", label: "Social & blogs", icon: MessagesSquare },
     { to: "/hiring", label: "Hiring", icon: Briefcase },
     { to: "/money", label: "Partners & money", icon: BadgeDollarSign },
     { to: "/positioning", label: "Positioning", icon: Newspaper },
@@ -240,7 +242,7 @@ function RunMenu() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
-  const items = ["all", "product", "pages", "feeds", "hiring", "money", "stack", "subdomains", "dns", "radar", "ads", "ai", "deepdive", "digest"];
+  const items = ["all", "product", "social", "feeds", "pages", "hiring", "money", "stack", "subdomains", "dns", "radar", "ads", "ai", "deepdive", "digest"];
   const meta = useMeta();
   const lastRun = (job: string) => meta.schedule.find((x) => x.job === job)?.last;
   return (

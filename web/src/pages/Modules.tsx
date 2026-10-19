@@ -351,6 +351,70 @@ function MoneyCard({ id }: { id: string }) {
   );
 }
 
+/* ── Social media & blogs ───────────────────────────────────────────────────── */
+const PLAT: Record<string, string> = { linkedin: "LinkedIn", x: "X", youtube: "YouTube", bluesky: "Bluesky", medium: "Medium", github: "GitHub",
+  instagram: "Instagram", facebook: "Facebook", reddit: "Reddit", discord: "Discord", hackernews: "Hacker News" };
+
+export function SocialPage() {
+  const meta = useMeta();
+  const cs = comps(meta);
+  return (
+    <div>
+      <PageHeader eyebrow="Social media & blogs" title="Social & blogs" sub="What each company publishes on its own blog and social channels, from official feeds and APIs. LinkedIn and Instagram don't allow automated reading, so those get a one-click link to check by hand." />
+      <div className="space-y-5">{cs.map((c) => <SocialCard key={c.id} id={c.id} />)}</div>
+    </div>
+  );
+}
+
+function SocialCard({ id }: { id: string }) {
+  const e = useEntity(id)!;
+  const { data } = useApi<Fact[]>(`/api/facts?competitor=${id}&module=social`);
+  const { data: blog } = useApi<any[]>(`/api/posts?days=0&competitor=${id}`);
+  if (!data) return <Skeleton className="h-40 rounded-2xl" />;
+  const when = (f: Fact) => f.value.published ?? f.first_seen;
+  const recent = (d?: string) => !!d && Date.now() - new Date(d).getTime() < 30 * 864e5;
+  const profiles = data.filter((f) => f.kind === "profile");
+  const posts = data.filter((f) => f.kind === "post").sort((a, b) => when(b).localeCompare(when(a)));
+  const hn = data.filter((f) => f.kind === "mention").sort((a, b) => when(b).localeCompare(when(a)));
+  const posts_ = (blog ?? []).slice().sort((a, b) => (b.published ?? b.first_seen).localeCompare(a.published ?? a.first_seen)).slice(0, 6);
+  return (
+    <Card className="p-6">
+      <div className="mb-4 flex items-center gap-2.5"><Monogram id={id} size={26} /><span className="text-[15px] text-ink">{e.name}{e.tier === "self" ? " (us)" : ""}</span>
+        <Link to={`/competitors/${id}`} className="ml-auto text-[12.5px] text-ink-3 hover:text-ink">All facts</Link></div>
+      <div className="mb-5 flex flex-wrap gap-2">
+        {profiles.length ? profiles.map((p) => (
+          <a key={p.id} href={p.value.manual ?? p.value.url} target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] text-ink-2 ring-1 ring-line hover:text-ink">
+            {p.label}<span className="text-ink-3">{p.value.automated ? "· tracked" : p.value.manual ? "· check by hand" : "· linked"}</span><ExternalLink size={10} />
+          </a>)) : <span className="text-[12.5px] text-ink-3">No social accounts linked from their site</span>}
+      </div>
+      <div className="grid gap-6 md:grid-cols-3">
+        <div><div className="eyebrow mb-2">Blog</div>
+          {posts_.length ? posts_.slice(0, 6).map((p) => (
+            <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="mb-2 block hover:text-ink">
+              <div className="text-[13px] leading-snug text-ink">{p.title}</div>
+              <div className="text-[11.5px] text-ink-3">{p.published ? day(p.published) : "date not shown"}{recent(p.published) && <Chip className="ml-2">new</Chip>}</div>
+            </a>)) : <div className="text-[12.5px] text-ink-3">No blog found</div>}
+        </div>
+        <div><div className="eyebrow mb-2">Social posts</div>
+          {posts.length ? posts.slice(0, 6).map((f) => (
+            <a key={f.id} href={f.key} target="_blank" rel="noreferrer" className="mb-2 block hover:text-ink">
+              <div className="line-clamp-3 text-[13px] leading-snug text-ink">{f.label}</div>
+              <div className="text-[11.5px] text-ink-3">{PLAT[f.value.platform] ?? f.value.platform} · {day(when(f))}{recent(f.value.published) && <Chip className="ml-2">new</Chip>}</div>
+            </a>)) : <div className="text-[12.5px] text-ink-3">{profiles.some((p) => p.value.automated) ? "No recent posts" : "No automatically readable accounts (see links above)"}</div>}
+        </div>
+        <div><div className="eyebrow mb-2">Hacker News</div>
+          {hn.length ? hn.slice(0, 5).map((f) => (
+            <a key={f.id} href={f.key} target="_blank" rel="noreferrer" className="mb-2 block hover:text-ink">
+              <div className="text-[13px] leading-snug text-ink">{f.label}</div>
+              <div className="text-[11.5px] text-ink-3">{f.value.engagement?.points ?? 0} points · {f.value.engagement?.comments ?? 0} comments · {day(when(f))}</div>
+            </a>)) : <div className="text-[12.5px] text-ink-3">No discussions found</div>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 /* ── Product intelligence ───────────────────────────────────────────────────── */
 export function ProductPage() {
   const meta = useMeta();

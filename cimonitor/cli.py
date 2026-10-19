@@ -16,6 +16,7 @@ MODULE_HELP = {
     "dns": "Module 3 · TXT/SPF/MX/DMARC/DKIM",
     "subdomains": "Module 4 · certificate transparency + hosting + screenshots",
     "radar": "Module 5 · staging, sitemaps, publishes, GitHub, launch probability",
+    "social": "Social media · YouTube, Bluesky, Medium, X (with API key), Hacker News, LinkedIn links",
     "product": "Product intelligence · new products, release notes, launch announcements",
     "hiring": "Module 6 · Greenhouse/Lever/Ashby",
     "money": "Module 7 · partners, marketplaces, funding, press",
@@ -72,7 +73,7 @@ def main(argv=None):
                 comp_id = comp.id
             out = jobs.run_job("scan", competitor=comp_id)
         elif a.cmd == "run":
-            order = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "hiring", "money", "ads", "ai", "deepdive"]
+            order = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "social", "hiring", "money", "ads", "ai", "deepdive"]
             out = [jobs.run_job(j) for j in order]
         elif a.cmd == "daemon":
             return jobs.daemon()

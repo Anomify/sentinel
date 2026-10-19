@@ -26,6 +26,7 @@ SECTIONS = [
     ("subdomains", "Subdomains & infrastructure"),
     ("radar", "Pre-launch radar"),
     ("product", "Product & feature launches"),
+    ("social", "Social media"),
     ("hiring", "Hiring"),
     ("money", "Partners, channel & money"),
     ("ads", "Advertising"),
@@ -73,6 +74,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         partners, mkts, prog, funding, arr, mna, press = (A("money", k) for k in ("partner", "marketplace", "partner_program", "funding", "arr_claim", "m_and_a", "press"))
         adch = A("ads", "ad_channel")
         prods, rels, launches = A("product", "product_page"), A("product", "release"), A("product", "launch")
+        socials, sposts, smentions = A("social", "profile"), A("social", "post"), A("social", "mention")
         launch = db.get_meta(con, f"launch:{comp.id}") or {}
         firsts = db.rows(con.execute("SELECT * FROM events WHERE competitor=? AND kind='first_role' ORDER BY detected_at DESC LIMIT 6", (comp.id,)))
         snap = db.row(con.execute("SELECT * FROM snapshots WHERE competitor=? AND kind='homepage' AND error IS NULL ORDER BY id DESC LIMIT 1", (comp.id,)).fetchone())
@@ -235,6 +237,23 @@ def build(cfg: Config, comp: Entity) -> dict:
         newest = sorted(rels, key=lambda f: f["first_seen"] or "", reverse=True)
         out.append(_f("product", "releases", f"Release notes: {len(rels)} entries tracked", "Latest: " + "; ".join(r["label"][:80] for r in newest[:4]),
                       "confirmed", _ev(newest[:1]), weight=3))
+
+    # ── Social
+    if socials:
+        auto = [p["label"] for p in socials if p["value"].get("automated")]
+        out.append(_f("social", "profiles", "On " + ", ".join(p["label"] for p in socials),
+                      ("Posts tracked automatically on " + ", ".join(auto) + ". " if auto else "") +
+                      "; ".join(f"{p['label']}: check by hand" for p in socials if p["value"].get("manual"))[:300],
+                      "confirmed", _ev(socials[:2]), weight=2))
+    recent = sorted(sposts, key=lambda f: f["value"].get("published") or "", reverse=True)
+    if recent:
+        from collections import Counter as _C
+        by = _C(p["value"].get("platform") for p in recent)
+        out.append(_f("social", "posts", f"{len(recent)} social posts tracked (" + ", ".join(f"{k} {v}" for k, v in by.most_common()) + ")",
+                      "Latest: " + "; ".join(p["label"][:90] for p in recent[:3]), "confirmed", _ev(recent[:2]), weight=3))
+    for m in sorted(smentions, key=lambda f: (f["value"].get("engagement") or {}).get("points", 0), reverse=True)[:3]:
+        pts = (m["value"].get("engagement") or {}).get("points", 0)
+        out.append(_f("social", f"hn:{m['key']}", f"Hacker News: {m['label']}", f"{pts} points", m["confidence"], m["evidence"], weight=3 if pts >= 50 else 2))
 
     # ── Money
     for f_ in sorted(funding, key=lambda f: f["value"].get("date") or "", reverse=True)[:3]:

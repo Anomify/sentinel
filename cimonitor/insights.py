@@ -12,7 +12,7 @@ from .signatures import CATEGORIES
 SEV_WEIGHT = {"critical": 10, "high": 5, "medium": 2, "low": 1, "noise": 0, "info": 0}
 MODULE_LABEL = {"pages": "Positioning", "stack": "GTM stack", "gtm": "Tracking", "gtm_links": "Tracking", "dns": "DNS & email",
                 "subdomains": "Subdomains", "radar": "Pre-launch", "hiring": "Hiring", "money": "Money & partners",
-                "ads": "Ads", "content": "Content", "ai": "AI search", "product": "Product"}
+                "ads": "Ads", "content": "Content", "ai": "AI search", "product": "Product", "social": "Social"}
 
 
 def since(days: int) -> str:
@@ -47,7 +47,8 @@ def changes(con, days=30, competitor=None, severity=None, limit=200) -> list[dic
 
 
 def posts(con, days=30, competitor=None, limit=200) -> list[dict]:
-    q, a = "SELECT * FROM posts WHERE first_seen >= ?", [since(days)]
+    # days=0: everything (posts backfilled without a publish date carry first_seen 1970)
+    q, a = ("SELECT * FROM posts WHERE first_seen >= ?", [since(days)]) if days else ("SELECT * FROM posts WHERE 1=1", [])
     if competitor:
         q += " AND competitor=?"; a.append(competitor)
     return db.rows(con.execute(q + " ORDER BY COALESCE(published, first_seen) DESC LIMIT ?", [*a, limit]))

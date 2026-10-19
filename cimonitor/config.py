@@ -45,6 +45,7 @@ class Entity:
     marketplaces: list[str] = field(default_factory=list)  # marketplace listing URLs
     ads: dict = field(default_factory=dict)                # {"linkedin_company_id": "...", "google_advertiser": "..."}
     news_query: str | None = None
+    social: dict = field(default_factory=dict)             # {"linkedin": url, "youtube": url, ...}; auto-discovered when blank
     profile: dict = field(default_factory=dict)            # brand only: positioning, strengths, facts
     source: str = "config"                                 # config | ui
 
@@ -93,7 +94,7 @@ def _read(name: str) -> dict:
     return (yaml.safe_load(p.read_text()) or {}) if p.exists() else {}
 
 
-EXT = ("staging", "github", "ats", "partner_pages", "marketplaces", "ads", "news_query")
+EXT = ("staging", "github", "ats", "partner_pages", "marketplaces", "ads", "news_query", "social")
 # Palette slots (validated categorical order) for competitors added without a colour
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#c2410c", "#0e7490"]
 

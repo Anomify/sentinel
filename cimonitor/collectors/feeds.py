@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
-from .. import db
+from .. import db, facts, guard
 from ..config import Config, Entity, Feed
 from .fetch import Fetcher
 
@@ -125,6 +125,52 @@ def pull(fetcher: Fetcher, feed: Feed) -> list[dict]:
     return items
 
 
+FEED_TYPES = re.compile(r"application/(rss|atom)\+xml", re.I)
+COMMON = ["/blog/rss.xml", "/blog/feed", "/rss.xml", "/feed", "/feed.xml", "/blog/feed.xml", "/atom.xml", "/index.xml"]
+
+
+def discover(con, comp: Entity) -> list[Feed]:
+    """Find a company's own blog feed when none is configured: <link rel=alternate> on the homepage or blog, then common paths."""
+    key = f"feeds:discovered:{comp.id}"
+    cached = db.get_meta(con, key)
+    if cached:  # an empty result is retried next run, in case they start a blog
+        return [Feed(**f) for f in cached]
+    found: list[str] = []
+    base = f"https://{comp.domain}"
+    for page in (base + "/", base + "/blog", base + "/news", base + "/resources/blog"):
+        try:
+            r = guard.get(page)
+        except Exception:
+            continue
+        if not r.ok:
+            continue
+        soup = BeautifulSoup(r.text, "html.parser")
+        found += [urljoin(r.url, l["href"]) for l in soup.find_all("link", href=True) if FEED_TYPES.search(l.get("type", ""))]
+        if found:
+            break
+    if not found:
+        for path in COMMON:
+            try:
+                r = guard.get(base + path)
+                if r.ok and re.search(r"<(rss|feed)\b", r.text[:2000]):
+                    found.append(r.url)
+                    break
+            except Exception:
+                continue
+    feeds = [{"type": "rss", "url": u} for u in dict.fromkeys(found) if "comments" not in u][:2]
+    if not feeds:  # no feed at all: read the blog page itself, keeping links to individual posts
+        for path in ("/blog", "/news", "/insights", "/resources/blog"):
+            try:
+                r = guard.get(base + path)
+            except Exception:
+                continue
+            if r.ok and len(parse_listing(r.text, r.url, rf"^{path}/[^/]+/?$")) >= 1:
+                feeds = [{"type": "listing", "url": r.url, "link_pattern": rf"^{path}/[^/]+/?$"}]
+                break
+    db.set_meta(con, key, feeds)
+    return [Feed(**f) for f in feeds]
+
+
 def run(cfg: Config, only: str | None = None) -> dict:
     new, errors = 0, []
     with db.connect() as con, Fetcher(cfg.settings) as fetcher:
@@ -132,7 +178,7 @@ def run(cfg: Config, only: str | None = None) -> dict:
             if only and comp.id != only:
                 continue
             baseline = con.execute("SELECT COUNT(*) FROM posts WHERE competitor=?", (comp.id,)).fetchone()[0] == 0
-            for feed in comp.feeds:
+            for feed in (comp.feeds or (discover(con, comp) if comp.domain else [])):
                 try:
                     items = pull(fetcher, feed)
                 except Exception as e:
@@ -149,6 +195,10 @@ def run(cfg: Config, only: str | None = None) -> dict:
                          # first sighting of a whole feed = backfill; date it by publish date so it isn't "new this week"
                          (i["published"] or "1970-01-01") if baseline else db.now(),
                          json.dumps(topics(cfg, i["title"] + " " + i["summary"])), ctype(i["url"], i["title"])))
-                    new += cur.rowcount if not baseline else 0
+                    if cur.rowcount and not baseline:
+                        new += 1
+                        facts.emit(con, comp.id, "content", "blog_post", "low", f"New blog post: {i['title'][:140]}",
+                                   detail=i["summary"][:300], evidence=[facts.ev(i["url"], "their blog feed")],
+                                   data={"url": i["url"], "published": i["published"]})
                 log.info("feed %-8s %3d items  %s", feed.type, len(items), feed.url)
     return {"new_posts": new, "errors": errors}

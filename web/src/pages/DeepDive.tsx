@@ -8,9 +8,9 @@ import { ago } from "../lib/format";
 import { Button, Card, Confidence, cx, Empty, EntityDot, EvidenceList, fade, Monogram, PageHeader, Skeleton, Thumb, useEntity, useMeta } from "../components/ui";
 import { useToast } from "../components/shell";
 
-const STEPS = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "hiring", "money", "ads", "deepdive"];
+const STEPS = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "social", "hiring", "money", "ads", "deepdive"];
 const STEP_LABEL: Record<string, string> = { dns: "DNS & email", subdomains: "Certificates & subdomains", stack: "Stack & tag manager", pages: "Pages & positioning",
-  feeds: "Content", radar: "Pre-launch radar", product: "Product launches", hiring: "Hiring", money: "Partners & money", ads: "Ads", deepdive: "Writing the deep dive" };
+  feeds: "Content", radar: "Pre-launch radar", product: "Product launches", social: "Social media", hiring: "Hiring", money: "Partners & money", ads: "Ads", deepdive: "Writing the deep dive" };
 type Scan = { step: string | null; label?: string; index?: number; total?: number; done?: boolean; finished?: string };
 
 /* ── list + "analyse a domain" ──────────────────────────────────────────────── */

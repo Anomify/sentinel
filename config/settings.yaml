@@ -7,6 +7,7 @@ schedule:              # used by `sentinel daemon` / `sentinel serve` (cron or G
   dns:        "daily 05:10"       # Module 3: TXT/SPF/MX/DMARC/DKIM
   stack:      "daily 05:40"       # Modules 1+2: stack fingerprint + GTM container
   radar:      "daily 06:20"       # Module 5: staging, sitemaps, publishes, GitHub, launch score
+  social:     "every 6h"          # social media: YouTube, Bluesky, Medium, X, Hacker News
   product:    "daily 06:35"       # product intelligence: new products, release notes, launches
   hiring:     "daily 06:50"       # Module 6: job boards
   money:      "daily 07:20"       # Module 7: partners, marketplaces, funding, press
