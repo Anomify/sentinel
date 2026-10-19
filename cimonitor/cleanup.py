@@ -113,6 +113,20 @@ def per_headline_deals(con) -> int:
     return n
 
 
+def removed_competitors(con, cfg) -> int:
+    """Data for a company that is no longer on the watchlist is deleted."""
+    keep = {c.id for c in cfg.competitors} | {"__brand__"}
+    n = 0
+    for t in ("facts", "events", "metrics", "posts", "snapshots", "changes"):
+        try:
+            for (cid,) in con.execute(f"SELECT DISTINCT competitor FROM {t}").fetchall():
+                if cid and cid not in keep:
+                    n += con.execute(f"DELETE FROM {t} WHERE competitor=?", (cid,)).rowcount
+        except Exception:
+            continue
+    return n
+
+
 def duplicate_digests(con) -> int:
     """Keep the newest digest per period."""
     n = 0
@@ -131,7 +145,8 @@ def run() -> dict:
     with db.connect() as con:
         for name, fn in (("scoped_noise", lambda: scoped_noise(con, cfg)), ("irrelevant_news", lambda: irrelevant_news(con, cfg)),
                          ("redated", lambda: redate_events(con)), ("off_voice_comments", lambda: off_voice_comments(con)),
-                         ("per_headline_deals", lambda: per_headline_deals(con)), ("duplicate_digests", lambda: duplicate_digests(con))):
+                         ("per_headline_deals", lambda: per_headline_deals(con)),
+                         ("removed_competitors", lambda: removed_competitors(con, cfg)), ("duplicate_digests", lambda: duplicate_digests(con))):
             try:
                 out[name] = fn()
             except Exception as e:  # a repair must never stop the app

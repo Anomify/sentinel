@@ -187,25 +187,6 @@ competitors:
     social: { linkedin: "https://www.linkedin.com/company/zenitysec", x: "https://x.com/zenitysec" }
     careers: "https://zenity.io/careers"   # Comeet board, found automatically
 
-  - id: aim-intelligence
-    name: AIM Intelligence
-    tier: secondary
-    color: "#df1f41"
-    aliases: ["AIM Intel", "AIM Red", "AIM Guard"]
-    domains: ["aim-intelligence.com"]
-    pages:
-      - { kind: homepage, url: "https://www.aim-intelligence.com/" }
-      - { kind: product,  url: "https://www.aim-intelligence.com/starfort" }
-      - { kind: product,  url: "https://www.aim-intelligence.com/stinger" }
-      - { kind: product,  url: "https://www.aim-intelligence.com/agentic" }
-      - { kind: product,  url: "https://www.aim-intelligence.com/guardrails" }
-    feeds:
-      - { type: rss, url: "https://www.aim-intelligence.com/blog/rss.xml" }
-    # LinkedIn page not linked from their site; this is the expected company URL (unverified)
-    social: { linkedin: "https://www.linkedin.com/company/aim-intelligence", x: "https://x.com/AIM_Intel", github: "https://github.com/AIM-Intelligence" }
-    github: ["AIM-Intelligence"]
-    careers: "https://career.aim-intelligence.com/ko/open-positions"
-
   - id: pluto
     name: Pluto Security
     tier: secondary
