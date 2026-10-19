@@ -14,6 +14,10 @@ brand:
   # monitor: true tracks Hyperfence with every module (Signals, stack, DNS, hiring, product...) as if it
   # were a competitor. Optional, same keys as a competitor: pages, feeds, staging, github, ats, news_query.
   monitor: true
+  feeds:
+    - type: listing
+      url: "https://hyperfence.io/blog/"
+      link_pattern: "^/blog/[^/]+/?$"
   # Used to write the "Vs. us" recommendation on every finding, and to grade the
   # narrative accuracy of AI-search answers about you. Plain sentences work best.
   positioning: "The AI security platform for enterprises deploying agents and LLM apps."   # ← change me

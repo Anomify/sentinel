@@ -125,6 +125,52 @@ def pull(fetcher: Fetcher, feed: Feed) -> list[dict]:
     return items
 
 
+DATE_META = re.compile(r'(?:article:published_time|og:published_time|datePublished|dateCreated)"?\s*(?:content=|:)\s*"([0-9]{4}-[0-9]{2}-[0-9]{2}[^"]*)"')
+
+
+def article_meta(url: str) -> dict:
+    """Real title, publish date and summary from the post itself (listing pages rarely carry them)."""
+    try:
+        r = guard.get(url)
+    except Exception:
+        return {}
+    if not r.ok:
+        return {}
+    soup = BeautifulSoup(r.text, "html.parser")
+    meta = lambda *ps: next((m.get("content") for p_ in ps for m in [soup.find("meta", property=p_) or soup.find("meta", attrs={"name": p_})] if m and m.get("content")), None)  # noqa: E731
+    date = None
+    m = DATE_META.search(r.text)
+    if m:
+        date = m.group(1)
+    else:
+        t = soup.find("article") and soup.find("article").find("time", datetime=True) or soup.find("time", datetime=True)
+        date = t["datetime"] if t else None
+    title = meta("og:title", "twitter:title") or (soup.title.get_text(strip=True) if soup.title else None)
+    if title:
+        title = re.split(r"\s+[|\u2013-]\s+(?=[^|\u2013-]*$)", title)[0].strip()  # drop " | Brand" suffix
+    return {"title": title, "published": _date(date) if date else None, "summary": (meta("og:description", "description") or "")[:320]}
+
+
+def enrich(con, comp_id: str, limit: int = 25) -> int:
+    """Fill in title/date for scraped posts that don't have a publish date yet."""
+    n = 0
+    rows = db.rows(con.execute("SELECT id, url, title, first_seen FROM posts WHERE competitor=? AND published IS NULL ORDER BY id DESC LIMIT ?",
+                               (comp_id, limit)))
+    con.commit()  # release the write lock before fetching
+    metas = [(r, article_meta(r["url"])) for r in rows]
+    for r, m in metas:
+        if not m:
+            continue
+        upd = {"published": m.get("published"), "summary": m.get("summary") or None}
+        if m.get("title") and len(m["title"]) >= 8:
+            upd["title"] = m["title"][:200]
+        if r["first_seen"] == "1970-01-01" and m.get("published"):
+            upd["first_seen"] = m["published"]  # backfilled post: date it by when it was published
+        db.update(con, "posts", r["id"], {k: v for k, v in upd.items() if v})
+        n += 1
+    return n
+
+
 FEED_TYPES = re.compile(r"application/(rss|atom)\+xml", re.I)
 COMMON = ["/blog/rss.xml", "/blog/feed", "/rss.xml", "/feed", "/feed.xml", "/blog/feed.xml", "/atom.xml", "/index.xml"]
 
@@ -172,7 +218,7 @@ def discover(con, comp: Entity) -> list[Feed]:
 
 
 def run(cfg: Config, only: str | None = None) -> dict:
-    new, errors = 0, []
+    new, errors, enriched = 0, [], 0
     with db.connect() as con, Fetcher(cfg.settings) as fetcher:
         for comp in cfg.competitors:
             if only and comp.id != only:
@@ -185,9 +231,19 @@ def run(cfg: Config, only: str | None = None) -> dict:
                     log.warning("feed failed %s: %s", feed.url, e)
                     errors.append({"url": feed.url, "error": str(e)})
                     continue
+                fresh = 0
                 for i in items:
                     if not i["guid"]:
                         continue
+                    if feed.type == "listing" and fresh < 25 and not con.execute(
+                            "SELECT 1 FROM posts WHERE guid=?", (i["guid"],)).fetchone():
+                        fresh += 1
+                        con.commit()  # release the write lock: fetching writes to the audit log
+                        m = article_meta(i["url"])
+                        if m.get("title") and len(m["title"]) >= 8:
+                            i["title"] = m["title"][:200]
+                        i["published"] = m.get("published") or i["published"]
+                        i["summary"] = m.get("summary") or i["summary"]
                     cur = con.execute(
                         "INSERT OR IGNORE INTO posts (competitor,guid,title,url,published,summary,first_seen,topics,ctype) "
                         "VALUES (?,?,?,?,?,?,?,?,?)",
@@ -201,4 +257,5 @@ def run(cfg: Config, only: str | None = None) -> dict:
                                    detail=i["summary"][:300], evidence=[facts.ev(i["url"], "their blog feed")],
                                    data={"url": i["url"], "published": i["published"]})
                 log.info("feed %-8s %3d items  %s", feed.type, len(items), feed.url)
-    return {"new_posts": new, "errors": errors}
+            enriched += enrich(con, comp.id)
+    return {"new_posts": new, "enriched": enriched, "errors": errors}
