@@ -31,7 +31,7 @@ MIN_INTERVAL = 1.5  # seconds between requests to the same host
 API_HOSTS = {
     "crt.sh", "api.certspotter.com", "dns.google", "boards-api.greenhouse.io", "api.lever.co", "api.ashbyhq.com",
     "api.github.com", "news.google.com", "www.googletagmanager.com", "api.perplexity.ai", "api.openai.com",
-    "generativelanguage.googleapis.com", "serpapi.com", "graph.facebook.com", "public.api.bsky.app", "hn.algolia.com", "api.x.com",
+    "generativelanguage.googleapis.com", "serpapi.com", "graph.facebook.com", "public.api.bsky.app", "hn.algolia.com", "api.x.com", "api.search.brave.com",
 }
 
 _lock = threading.Lock()

@@ -10,7 +10,8 @@ import Overview from "./pages/Overview";
 import Signals from "./pages/Signals";
 import { CompetitorDetailPage, CompetitorList } from "./pages/Competitors";
 import { DeepDive, DeepDives } from "./pages/DeepDive";
-import { HiringPage, InfrastructurePage, MoneyPage, PositioningPage, ProductPage, SocialPage, RadarPage, StackPage } from "./pages/Modules";
+import Messaging from "./pages/Messaging";
+import { HiringPage, InfrastructurePage, MoneyPage, PositioningPage, ProductPage, RadarPage, StackPage } from "./pages/Modules";
 import Coverage from "./pages/Coverage";
 import AiVisibility from "./pages/AiVisibility";
 import Digest from "./pages/Digest";
@@ -62,11 +63,12 @@ function Layout({ meta }: { meta: Meta }) {
                 <Route path="/infrastructure" element={<InfrastructurePage />} />
                 <Route path="/radar" element={<RadarPage />} />
                 <Route path="/product" element={<ProductPage />} />
-                <Route path="/social" element={<SocialPage />} />
+                <Route path="/messaging" element={<Messaging />} />
+                <Route path="/social" element={<Messaging />} />
                 <Route path="/hiring" element={<HiringPage />} />
                 <Route path="/money" element={<MoneyPage />} />
                 <Route path="/positioning" element={<PositioningPage />} />
-                <Route path="/content" element={<PositioningPage />} />
+                <Route path="/content" element={<Messaging />} />
                 <Route path="/coverage" element={<Coverage />} />
                 <Route path="/ai" element={<AiVisibility />} />
                 <Route path="/digest" element={<Digest />} />

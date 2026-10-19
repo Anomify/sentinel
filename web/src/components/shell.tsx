@@ -58,9 +58,9 @@ const JOB_HELP: Record<string, string> = {
   subdomains: "New subdomains and certificates (Infrastructure)", dns: "Email tools and DNS verifications (Infrastructure)",
   stack: "Marketing tools and tracking (GTM stack)", pages: "Homepage, pricing and messaging changes (Positioning)",
   radar: "Staging sites, new pages, new repos (Launch radar)", product: "New products, release notes, launches (Product launches)",
-  social: "YouTube, Bluesky, Medium, X, Hacker News (Social & blogs)",
+  social: "LinkedIn, X, YouTube, Medium, Bluesky, Hacker News (Messaging)",
   hiring: "Open roles and first-of-their-kind hires (Hiring)", money: "Funding, partners, marketplaces, press (Partners & money)",
-  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Social & blogs)", ai: "What AI search engines say (AI visibility). Uses API quota.",
+  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Messaging)", ai: "What AI search engines say (AI visibility). Uses API quota.",
   deepdive: "Rewrites every deep dive from the latest data (Deep dives)", digest: "Saves a new weekly digest (Digest)",
 };
 // Count new findings in a run's stats, wherever the collector reported them.
@@ -117,7 +117,7 @@ export const NAV: { group: string; items: { to: string; label: string; icon: any
     { to: "/infrastructure", label: "Infrastructure", icon: Network },
     { to: "/radar", label: "Launch radar", icon: Rocket },
     { to: "/product", label: "Product launches", icon: Package },
-    { to: "/social", label: "Social & blogs", icon: MessagesSquare },
+    { to: "/messaging", label: "Messaging", icon: MessagesSquare },
     { to: "/hiring", label: "Hiring", icon: Briefcase },
     { to: "/money", label: "Partners & money", icon: BadgeDollarSign },
     { to: "/positioning", label: "Positioning", icon: Newspaper },

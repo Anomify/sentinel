@@ -197,6 +197,40 @@ def list_posts(days: int = 90, competitor: str | None = None):
         return insights.posts(con, days, competitor, limit=500)
 
 
+@app.get("/api/messaging")
+def messaging():
+    """Every blog post and social post for every company, in one feed, plus how each channel is tracked."""
+    from .collectors import social
+    c = cfg()
+    with db.connect() as con:
+        blog = db.rows(con.execute("SELECT * FROM posts"))
+        soc = db.rows(con.execute("SELECT * FROM facts WHERE module='social' AND removed_at IS NULL"))
+    ok = {e.id for e in c.competitors}
+    items = []
+    for p in blog:
+        if p["competitor"] not in ok:
+            continue
+        d = p["published"] or (p["first_seen"] if not str(p["first_seen"]).startswith("1970") else None)
+        items.append({"id": f"b{p['id']}", "competitor": p["competitor"], "channel": "blog", "title": p["title"], "text": p["summary"] or "",
+                      "url": p["url"], "date": d, "type": p.get("ctype") or "Article", "topics": p.get("topics") or [], "engagement": None,
+                      "first_seen": p["first_seen"], "via": "blog feed"})
+    channels: dict[str, list] = {}
+    for f in soc:
+        if f["competitor"] not in ok:
+            continue
+        v = f["value"] or {}
+        if f["kind"] == "profile":
+            channels.setdefault(f["competitor"], []).append({"platform": v.get("platform"), "label": f["label"], "url": v.get("url"),
+                                                              "manual": v.get("manual"), "how": v.get("how") or ("official feed" if v.get("automated") else "link only")})
+            continue
+        ch = "hackernews" if f["kind"] == "mention" else v.get("platform", "social")
+        items.append({"id": f"s{f['id']}", "competitor": f["competitor"], "channel": ch, "title": f["label"], "text": "",
+                      "url": f["key"], "date": v.get("published"), "type": "Discussion" if ch == "hackernews" else "Post", "topics": [],
+                      "engagement": v.get("engagement"), "first_seen": f["first_seen"], "via": v.get("via") or "official feed"})
+    items.sort(key=lambda i: str(i["date"] or i["first_seen"] or ""), reverse=True)
+    return {"items": items, "channels": channels, "search_key": social.search_key(), "x_api": bool(os.environ.get("X_BEARER_TOKEN"))}
+
+
 @app.get("/api/visibility")
 def visibility(run_id: str | None = None):
     c = cfg()

@@ -145,9 +145,16 @@ def article_meta(url: str) -> dict:
     else:
         t = soup.find("article") and soup.find("article").find("time", datetime=True) or soup.find("time", datetime=True)
         date = t["datetime"] if t else None
+    if not date:  # last resort: the first written date near the top of the post ("April 20, 2026")
+        from .products import parse_date
+        for tag in soup(["nav", "header", "footer", "script", "style"]):
+            tag.decompose()
+        body = soup.find("article") or soup.find("main") or soup.body or soup
+        date = parse_date(body.get_text(" ")[:4000])
     title = meta("og:title", "twitter:title") or (soup.title.get_text(strip=True) if soup.title else None)
     if title:
-        title = re.split(r"\s+[|\u2013-]\s+(?=[^|\u2013-]*$)", title)[0].strip()  # drop " | Brand" suffix
+        first = re.split(r"\s+[|\u2013\u2014]\s+|\s+-\s+(?=[^-]*$)", title)[0].strip()  # drop " | Brand – tagline" suffixes
+        title = first if len(first) >= 15 else title
     return {"title": title, "published": _date(date) if date else None, "summary": (meta("og:description", "description") or "")[:320]}
 
 
@@ -219,6 +226,11 @@ def discover(con, comp: Entity) -> list[Feed]:
 
 def run(cfg: Config, only: str | None = None) -> dict:
     new, errors, enriched = 0, [], 0
+    with db.connect() as con:  # tidy titles stored before suffix stripping (" | Lakera – tagline")
+        for r in db.rows(con.execute("SELECT id, title FROM posts WHERE title LIKE '% | %' OR title LIKE '% \u2013 %'")):
+            t = re.split(r"\s+[|\u2013\u2014]\s+", r["title"])[0].strip()
+            if len(t) >= 15:
+                con.execute("UPDATE posts SET title=? WHERE id=?", (t, r["id"]))
     with db.connect() as con, Fetcher(cfg.settings) as fetcher:
         for comp in cfg.competitors:
             if only and comp.id != only:

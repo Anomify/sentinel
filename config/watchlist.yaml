@@ -14,6 +14,7 @@ brand:
   # monitor: true tracks Hyperfence with every module (Signals, stack, DNS, hiring, product...) as if it
   # were a competitor. Optional, same keys as a competitor: pages, feeds, staging, github, ats, news_query.
   monitor: true
+  social: { linkedin: "https://www.linkedin.com/company/hyperfenced", x: "https://x.com/hyperfenced" }
   feeds:
     - type: listing
       url: "https://hyperfence.io/blog/"
@@ -68,6 +69,7 @@ competitors:
       - type: listing
         url: "https://www.hiddenlayer.com/innovation-hub/research"
         link_pattern: "^/(insight|research|sai-security-advisory)/[^/]+/?$"
+    social: { linkedin: "https://www.linkedin.com/company/hiddenlayersec", x: "https://x.com/hiddenlayersec" }
 
   - id: alice
     name: Alice (WonderFence)
@@ -80,6 +82,7 @@ competitors:
       - { kind: product,  url: "https://alice.io/products/wonderfence" }
     feeds:
       - { type: rss, url: "https://alice.io/blog/rss.xml" }
+    social: { linkedin: "https://www.linkedin.com/company/alice-io", x: "https://x.com/alice_dot_io" }
 
   - id: lakera
     name: Lakera
@@ -93,6 +96,7 @@ competitors:
       - type: listing
         url: "https://www.lakera.ai/blog"
         link_pattern: "^/blog/[a-z0-9-]+/?$"
+    social: { linkedin: "https://www.linkedin.com/company/lakeraai", x: "https://x.com/lakeraai" }
 
   - id: aws-bedrock
     name: AWS Bedrock Guardrails
@@ -104,8 +108,9 @@ competitors:
       - { kind: product, url: "https://aws.amazon.com/bedrock/guardrails/" }
       - { kind: pricing, url: "https://aws.amazon.com/bedrock/pricing/", focus: "(?i)guardrail" }
     feeds:
-      - { type: rss, url: "https://aws.amazon.com/blogs/security/feed/", filter: "(?i)guardrail|bedrock|generative|LLM|agent" }
-      - { type: rss, url: "https://aws.amazon.com/blogs/machine-learning/feed/", filter: "(?i)guardrail|safety|prompt injection" }
+      - { type: rss, url: "https://aws.amazon.com/blogs/aws/category/artificial-intelligence/amazon-machine-learning/amazon-bedrock/feed/" }
+    # No dedicated Bedrock accounts: the AWS company accounts, filtered to Bedrock / guardrails posts.
+    social: { linkedin: "https://www.linkedin.com/company/amazon-web-services", x: "https://x.com/awscloud", filter: "(?i)bedrock|guardrail" }
 
   - id: google-model-armor
     name: Google Model Armor
@@ -117,7 +122,8 @@ competitors:
       - { kind: product, url: "https://cloud.google.com/security/products/model-armor" }
       - { kind: pricing, url: "https://cloud.google.com/security-command-center/pricing", focus: "(?i)model armor|AI protection" }
     feeds:
-      - { type: rss, url: "https://cloudblog.withgoogle.com/products/identity-security/rss/", filter: "(?i)model armor|AI|agent|gemini" }
+      - { type: rss, url: "https://cloudblog.withgoogle.com/products/ai-machine-learning/rss/" }
+    social: { linkedin: "https://www.linkedin.com/company/google-cloud", x: "https://x.com/googlecloud", filter: "(?i)model armor|AI security|agent|guardrail|safety|gemini" }
 
   - id: azure-content-safety
     name: Azure AI Content Safety
@@ -128,4 +134,5 @@ competitors:
     pages:
       - { kind: product, url: "https://azure.microsoft.com/en-us/products/ai-services/ai-content-safety" }
     feeds:
-      - { type: rss, url: "https://azure.microsoft.com/en-us/blog/feed/", filter: "(?i)content safety|prompt shield|guardrail|responsible AI" }
+      - { type: rss, url: "https://azure.microsoft.com/en-us/blog/product/azure-ai/feed/" }
+    social: { linkedin: "https://www.linkedin.com/showcase/microsoft-azure", x: "https://x.com/azure", filter: "(?i)content safety|prompt shield|guardrail|responsible AI|AI Foundry|AI safety" }

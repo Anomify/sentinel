@@ -5,7 +5,7 @@ import { useApi } from "../lib/api";
 import type { Fact, Launch } from "../lib/types";
 import { ago, day, pct } from "../lib/format";
 import { BarList, LineChart } from "../components/charts";
-import { Card, CardHeader, Chip, Confidence, cx, Empty, EntityDot, Monogram, PageHeader, Skeleton, Thumb, useEntity, useMeta, useSeries } from "../components/ui";
+import { Card, CardHeader, Chip, Confidence, cx, Empty, EntityDot, Monogram, PageHeader, Skeleton, Thumb, useEntity, useMeta } from "../components/ui";
 
 const comps = (meta: ReturnType<typeof useMeta>) => meta.entities.filter((e) => !e.is_brand);
 
@@ -351,70 +351,6 @@ function MoneyCard({ id }: { id: string }) {
   );
 }
 
-/* ── Social media & blogs ───────────────────────────────────────────────────── */
-const PLAT: Record<string, string> = { linkedin: "LinkedIn", x: "X", youtube: "YouTube", bluesky: "Bluesky", medium: "Medium", github: "GitHub",
-  instagram: "Instagram", facebook: "Facebook", reddit: "Reddit", discord: "Discord", hackernews: "Hacker News" };
-
-export function SocialPage() {
-  const meta = useMeta();
-  const cs = comps(meta);
-  return (
-    <div>
-      <PageHeader eyebrow="Social media & blogs" title="Social & blogs" sub="What each company publishes on its own blog and social channels, from official feeds and APIs. LinkedIn and Instagram don't allow automated reading, so those get a one-click link to check by hand." />
-      <div className="space-y-5">{cs.map((c) => <SocialCard key={c.id} id={c.id} />)}</div>
-    </div>
-  );
-}
-
-function SocialCard({ id }: { id: string }) {
-  const e = useEntity(id)!;
-  const { data } = useApi<Fact[]>(`/api/facts?competitor=${id}&module=social`);
-  const { data: blog } = useApi<any[]>(`/api/posts?days=0&competitor=${id}`);
-  if (!data) return <Skeleton className="h-40 rounded-2xl" />;
-  const when = (f: Fact) => f.value.published ?? f.first_seen;
-  const recent = (d?: string) => !!d && Date.now() - new Date(d).getTime() < 30 * 864e5;
-  const profiles = data.filter((f) => f.kind === "profile");
-  const posts = data.filter((f) => f.kind === "post").sort((a, b) => when(b).localeCompare(when(a)));
-  const hn = data.filter((f) => f.kind === "mention").sort((a, b) => when(b).localeCompare(when(a)));
-  const posts_ = (blog ?? []).slice().sort((a, b) => (b.published ?? b.first_seen).localeCompare(a.published ?? a.first_seen)).slice(0, 6);
-  return (
-    <Card className="p-6">
-      <div className="mb-4 flex items-center gap-2.5"><Monogram id={id} size={26} /><span className="text-[15px] text-ink">{e.name}{e.tier === "self" ? " (us)" : ""}</span>
-        <Link to={`/competitors/${id}`} className="ml-auto text-[12.5px] text-ink-3 hover:text-ink">All facts</Link></div>
-      <div className="mb-5 flex flex-wrap gap-2">
-        {profiles.length ? profiles.map((p) => (
-          <a key={p.id} href={p.value.manual ?? p.value.url} target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] text-ink-2 ring-1 ring-line hover:text-ink">
-            {p.label}<span className="text-ink-3">{p.value.automated ? "· tracked" : p.value.manual ? "· check by hand" : "· linked"}</span><ExternalLink size={10} />
-          </a>)) : <span className="text-[12.5px] text-ink-3">No social accounts linked from their site</span>}
-      </div>
-      <div className="grid gap-6 md:grid-cols-3">
-        <div><div className="eyebrow mb-2">Blog</div>
-          {posts_.length ? posts_.slice(0, 6).map((p) => (
-            <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="mb-2 block hover:text-ink">
-              <div className="text-[13px] leading-snug text-ink">{p.title}</div>
-              <div className="text-[11.5px] text-ink-3">{p.published ? day(p.published) : "date not shown"}{recent(p.published) && <Chip className="ml-2">new</Chip>}</div>
-            </a>)) : <div className="text-[12.5px] text-ink-3">No blog found</div>}
-        </div>
-        <div><div className="eyebrow mb-2">Social posts</div>
-          {posts.length ? posts.slice(0, 6).map((f) => (
-            <a key={f.id} href={f.key} target="_blank" rel="noreferrer" className="mb-2 block hover:text-ink">
-              <div className="line-clamp-3 text-[13px] leading-snug text-ink">{f.label}</div>
-              <div className="text-[11.5px] text-ink-3">{PLAT[f.value.platform] ?? f.value.platform} · {day(when(f))}{recent(f.value.published) && <Chip className="ml-2">new</Chip>}</div>
-            </a>)) : <div className="text-[12.5px] text-ink-3">{profiles.some((p) => p.value.automated) ? "No recent posts" : "No automatically readable accounts (see links above)"}</div>}
-        </div>
-        <div><div className="eyebrow mb-2">Hacker News</div>
-          {hn.length ? hn.slice(0, 5).map((f) => (
-            <a key={f.id} href={f.key} target="_blank" rel="noreferrer" className="mb-2 block hover:text-ink">
-              <div className="text-[13px] leading-snug text-ink">{f.label}</div>
-              <div className="text-[11.5px] text-ink-3">{f.value.engagement?.points ?? 0} points · {f.value.engagement?.comments ?? 0} comments · {day(when(f))}</div>
-            </a>)) : <div className="text-[12.5px] text-ink-3">No discussions found</div>}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
 /* ── Product intelligence ───────────────────────────────────────────────────── */
 export function ProductPage() {
   const meta = useMeta();
@@ -472,13 +408,10 @@ function ProductCard({ id }: { id: string }) {
 /* ── Positioning & content ──────────────────────────────────────────────────── */
 export function PositioningPage() {
   const meta = useMeta();
-  const series = useSeries();
   const { data } = useApi<{ competitors: any[] }>("/api/positioning");
-  const { data: posts } = useApi<any[]>("/api/posts?days=90");
-  const [open, setOpen] = useState<string | null>(null);
   return (
     <div>
-      <PageHeader eyebrow="Module 9" title="Positioning & content" sub="Who they sell to (the buyer hierarchy), which industries and use cases they lead with, and how their content engine is running, tracked from copy and feeds over time." />
+      <PageHeader eyebrow="Module 9" title="Positioning" sub="Who they sell to (the buyer hierarchy) and which industries and use cases they lead with, tracked from their website copy over time. Blog and social content is under Messaging." />
       {!data ? <Skeleton className="h-96 rounded-2xl" /> : (
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -494,35 +427,14 @@ export function PositioningPage() {
                   <div className="eyebrow mb-2 mt-5">Leads with</div>
                   <div className="flex flex-wrap gap-1.5">{Object.keys(r.use_cases).slice(0, 5).map((u) => <span key={u} className="rounded-full bg-sunken px-2.5 py-0.5 text-[11.5px] text-ink-2">{u}</span>)}</div>
                   {Object.keys(r.industries).length > 0 && <div className="mt-3 text-[12px] text-ink-3">Industries: {Object.keys(r.industries).slice(0, 4).join(", ")}</div>}
-                  <div className="eyebrow mb-2 mt-5">Content, last 12 months</div>
-                  <div className="text-[12.5px] text-ink-2">{r.cadence.length ? r.cadence.reduce((a: number, m: any) => a + Object.entries(m).filter(([k]) => k !== "month").reduce((x, [, v]) => x + (v as number), 0), 0) + " pieces · " + topTypes(r.cadence) : "-"}</div>
                 </Card>
               );
             })}
           </div>
-          <Card className="overflow-hidden">
-            <CardHeader title="Content feed" sub="Last 90 days" />
-            <div className="divide-y divide-line border-t border-line">
-              {(posts ?? []).slice(0, 40).map((p) => (
-                <a key={p.id} href={p.url} target="_blank" rel="noreferrer" onMouseEnter={() => setOpen(p.id)} className="grid grid-cols-[auto_1fr_auto] items-center gap-4 px-6 py-3 hover:bg-hover/60">
-                  <EntityDot color={series.find((s) => s.id === p.competitor)?.color ?? "#999"} size={7} />
-                  <span className={cx("truncate text-[13.5px]", open === p.id ? "text-ink" : "text-ink")}>{p.title}</span>
-                  <span className="text-[11.5px] text-ink-3">{p.ctype ?? "Blog"} · {day(p.published || p.first_seen)}</span>
-                </a>
-              ))}
-              {!(posts ?? []).length && <Empty title="No posts in the last 90 days" />}
-            </div>
-          </Card>
         </div>
       )}
     </div>
   );
-}
-
-function topTypes(cad: any[]): string {
-  const t: Record<string, number> = {};
-  for (const m of cad) for (const [k, v] of Object.entries(m)) if (k !== "month") t[k] = (t[k] ?? 0) + (v as number);
-  return Object.entries(t).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v}`).join(", ");
 }
 
 export { pct };
