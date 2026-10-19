@@ -25,7 +25,9 @@ PERSONAS = {
     "SOC / security teams": r"\bsoc\b|security (teams?|operations|analysts?)|incident response|threat hunters?",
     "AI / ML leaders": r"(ai|ml) leaders?|heads? of (ai|ml)|chief (ai|data) officer|\bcaio\b|\bcdo\b|ai (teams?|governance leads?)",
     "Data scientists / ML engineers": r"data scientists?|ml engineers?|machine learning engineers?|mlops",
-    "Developers / AppSec": r"\bdevelopers?\b|appsec|application security|engineering teams?|devsecops|\bbuilders?\b",
+    "Developers / AppSec": r"\bdevelopers?\b|appsec|application security|engineering teams?|devsecops|\bbuilders?\b|"
+                           r"teams? (getting started|building|shipping) with (llms?|ai)|llm (apps?|applications)|your (app|application)\b|"
+                           r"\bsdk\b|api key|base url|one line of (code|config)",
     "CIO / CTO / IT": r"\bcios?\b|\bctos?\b|chief (information|technology) officer|\bit (leaders?|teams?)\b",
     "GRC / compliance": r"\bgrc\b|compliance (teams?|officers?|leaders?)|risk (teams?|officers?|leaders?)|governance, risk",
     "Product leaders": r"product (leaders?|teams?|managers?)",

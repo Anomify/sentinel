@@ -14,6 +14,12 @@ brand:
   # monitor: true tracks Hyperfence with every module (Signals, stack, DNS, hiring, product...) as if it
   # were a competitor. Optional, same keys as a competitor: pages, feeds, staging, github, ats, news_query.
   monitor: true
+  pages:
+    - { kind: homepage, url: "https://hyperfence.io/" }
+    - { kind: pricing,  url: "https://hyperfence.io/pricing" }
+    - { kind: product,  url: "https://hyperfence.io/solutions" }
+    - { kind: product,  url: "https://hyperfence.io/use-cases" }
+    - { kind: docs,     url: "https://hyperfence.io/docs" }
   social: { linkedin: "https://www.linkedin.com/company/hyperfenced", x: "https://x.com/hyperfenced" }
   feeds:
     - type: listing
@@ -161,3 +167,57 @@ competitors:
       - { type: rss, url: "https://azure.microsoft.com/en-us/blog/product/azure-ai/feed/" }
     scope: { keywords: "(?i)content safety|prompt shield|guardrail|responsible AI|AI safety|groundedness|jailbreak|protected material|AI security" }
     social: { linkedin: "https://www.linkedin.com/showcase/microsoft-azure", x: "https://x.com/azure" }
+
+  - id: zenity
+    name: Zenity
+    tier: primary
+    color: "#c2410c"
+    aliases: ["Zenity Labs", "AI Total"]
+    domains: ["zenity.io"]
+    pages:
+      - { kind: homepage, url: "https://zenity.io/" }
+      - { kind: product,  url: "https://zenity.io/platform" }
+      - { kind: product,  url: "https://zenity.io/platform/ai-security-posture-management" }
+      - { kind: product,  url: "https://zenity.io/platform/ai-detection-and-response" }
+      - { kind: product,  url: "https://zenity.io/platform/mcp-security" }
+    feeds:
+      - type: listing
+        url: "https://zenity.io/blog"
+        link_pattern: "^/blog/[^/]+/?$"
+    social: { linkedin: "https://www.linkedin.com/company/zenitysec", x: "https://x.com/zenitysec" }
+    careers: "https://zenity.io/careers"   # Comeet board, found automatically
+
+  - id: aim-intelligence
+    name: AIM Intelligence
+    tier: secondary
+    color: "#df1f41"
+    aliases: ["AIM Intel", "AIM Red", "AIM Guard"]
+    domains: ["aim-intelligence.com"]
+    pages:
+      - { kind: homepage, url: "https://www.aim-intelligence.com/" }
+      - { kind: product,  url: "https://www.aim-intelligence.com/starfort" }
+      - { kind: product,  url: "https://www.aim-intelligence.com/stinger" }
+      - { kind: product,  url: "https://www.aim-intelligence.com/agentic" }
+      - { kind: product,  url: "https://www.aim-intelligence.com/guardrails" }
+    feeds:
+      - { type: rss, url: "https://www.aim-intelligence.com/blog/rss.xml" }
+    # LinkedIn page not linked from their site; this is the expected company URL (unverified)
+    social: { linkedin: "https://www.linkedin.com/company/aim-intelligence", x: "https://x.com/AIM_Intel", github: "https://github.com/AIM-Intelligence" }
+    github: ["AIM-Intelligence"]
+    careers: "https://career.aim-intelligence.com/ko/open-positions"
+
+  - id: pluto
+    name: Pluto Security
+    tier: secondary
+    color: "#0e7490"
+    aliases: []
+    domains: ["pluto.security"]
+    pages:
+      - { kind: homepage, url: "https://pluto.security/" }
+      - { kind: about,    url: "https://pluto.security/about-us/" }
+    feeds:
+      - type: listing
+        url: "https://pluto.security/blog/"
+        link_pattern: "^/blog/(?!author/|page/|category/|tag/)[^/]+/?$"
+    social: { linkedin: "https://www.linkedin.com/company/plutosecurity", x: "https://x.com/pluto_security" }
+    careers: "https://pluto.security/careers/"   # Comeet board, found automatically

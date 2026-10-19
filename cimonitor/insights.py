@@ -15,6 +15,19 @@ MODULE_LABEL = {"pages": "Positioning", "stack": "GTM stack", "gtm": "Tracking",
                 "ads": "Ads", "content": "Content", "ai": "AI search", "product": "Product", "social": "Social"}
 
 
+def hero(h1s: list[str]) -> str | None:
+    """The homepage headline. Animated heroes split one sentence over several <h1>s ("Safe" + "for everyone"): rejoin them."""
+    parts = []
+    for h in h1s or []:
+        if not h:
+            continue
+        parts.append(h)
+        if len(" ".join(parts).split()) >= 3:
+            break
+    text = " ".join(parts).strip()
+    return text if len(text.split()) >= 2 else None
+
+
 def since(days: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
 
@@ -145,11 +158,17 @@ def overview(cfg: Config, con, days=7) -> dict:
     ev = events(con, days, limit=2000)
     prev = db.rows(con.execute("SELECT severity, competitor, module FROM events WHERE detected_at >= ? AND detected_at < ?",
                                (since(days * 2), since(days))))
-    ps = posts(con, days)
+    # The overview ranks and counts competitors only: our own activity ("(us)") is shown elsewhere, not in "Who's moving".
+    rivals = {c.id for c in cfg.competitors if c.tier != "self"}
+    ev = [x for x in ev if x["competitor"] in rivals]
+    prev = [x for x in prev if x["competitor"] in rivals]
+    ps = [p for p in posts(con, days) if p["competitor"] in rivals]
     vis = visibility(cfg, con)
     launch = launch_scores(cfg, con)
     comp = []
     for c in cfg.competitors:
+        if c.id not in rivals:
+            continue
         mine = [x for x in ev if x["competitor"] == c.id]
         heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in mine) + 1.5 * sum(p["competitor"] == c.id for p in ps)
         prev_heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in prev if x["competitor"] == c.id)
@@ -276,5 +295,5 @@ def positioning_view(cfg: Config, con) -> dict:
                 cad[m][p["ctype"] or "Blog"] += 1
         out.append({"id": c.id, "personas": agg("personas"), "industries": agg("industries"), "use_cases": agg("use_cases"),
                     "persona_history": hist[-40:], "cadence": [{"month": m, **dict(v)} for m, v in sorted(cad.items())],
-                    "hero": next((v.get("h1", [None])[0] for k, v in latest.items() if k == "homepage"), None)})
+                    "hero": hero(next((v.get("h1") or [] for k, v in latest.items() if k == "homepage"), []))})
     return {"competitors": out}

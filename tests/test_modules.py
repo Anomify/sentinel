@@ -213,3 +213,65 @@ def test_subdomain_alerts_only_for_recent_certificates_and_never_removed():
         titles = [r["title"] for r in db.rows(con.execute("SELECT title FROM events"))]
     assert titles == ["New subdomain: launch.x.com"]  # old host recorded silently; www absence not a removal alert
 
+
+
+# ── Trust fixes ──────────────────────────────────────────────────────────────
+def test_news_relevance_rejects_namesakes():
+    from cimonitor.collectors.money import relevant
+    c = cfg()
+    assert not relevant(c.competitor("alice"), "Alice Weidel says AfD will win the vote")
+    assert not relevant(c.competitor("alice"), "New Alice store opens downtown")
+    assert not relevant(c.competitor("lakera"), "Pope warns about Gandalf-like AI in new letter")
+    assert not relevant(c.competitor("hiddenlayer"), "Browns offense finds the hidden layer of the defense")
+    assert not relevant(c.competitor("pluto"), "NASA shares new images of Pluto")
+    assert relevant(c.competitor("hiddenlayer"), "HiddenLayer raises $100M Series B")
+    assert relevant(c.competitor("lakera"), "Check Point completes acquisition of Lakera to secure AI agents")
+    assert relevant(c.competitor("alice"), "ActiveFence rebrands as Alice")
+
+
+def test_cloud_providers_are_scoped_to_their_guardrails_product():
+    c = cfg()
+    g = c.competitor("google-model-armor")
+    assert g.scoped and g.in_scope("Model Armor adds prompt injection filters") and not g.in_scope("Building virtual vehicles on Google Cloud")
+    assert not c.competitor("hiddenlayer").scoped
+    from cimonitor import jobs
+    assert "google-model-armor" not in {x.id for x in jobs._unscoped(c).competitors}
+
+
+def test_comeet_board_discovered_from_widget():
+    import re
+    from cimonitor.collectors.hiring import COMEET_RX
+    html = "COMEET.init({ token: '5D51D29347D2EA828D3347DBAA2EA85D522FE', 'company-uid': 'D5.005', 'company-name': 'ActiveFence' });"
+    wp = 'var comeetvar = {"comeet_token":"B775041672FB775041003953B772265","comeet_uid":"7B.007"};'
+    assert re.findall(COMEET_RX[0], html, re.I | re.S) == [("5D51D29347D2EA828D3347DBAA2EA85D522FE", "D5.005")]
+    assert re.findall(COMEET_RX[1], wp, re.I | re.S) == [("B775041672FB775041003953B772265", "7B.007")]
+
+
+def test_split_hero_headline_is_rejoined():
+    from cimonitor.insights import hero
+    assert hero(["Safe", "for everyone"]) == "Safe for everyone"
+    assert hero(["Safe"]) is None
+
+
+def test_acquisition_coverage_merges_into_one_deal():
+    import re
+    from cimonitor.collectors.money import extract_money
+    items = [{"text": t, "title": t, "url": f"https://n/{i}", "source": "X", "published": d} for i, (t, d) in enumerate([
+        ("Check Point acquires Lakera - CTech", "2025-09-16T07:00:00+00:00"),
+        ("Check Point to acquire Lakera, redefining AI security - Check Point Blog", "2025-09-16T07:00:00+00:00"),
+        ("Check Point completes acquisition of Lakera - ET", "2025-11-11T08:00:00+00:00")])]
+    _, _, aq = extract_money(items, re.compile("Lakera"))
+    assert len(aq) == 1 and aq[0].value["completed"].startswith("2025-11") and aq[0].label == "Check Point acquires Lakera"
+
+
+def test_old_news_is_never_critical_and_dated_when_it_happened():
+    from cimonitor.facts import _happened
+    assert _happened({"published": "2025-09-16T07:00:00+00:00"}).startswith("2025-09-16")
+    assert _happened({"date": "2025-09-16"}) == "2025-09-16T00:00:00+00:00"
+    assert _happened({}) is None
+
+
+def test_brand_voice_is_developer_first():
+    from cimonitor import llm
+    ctx = llm.brand_context(cfg())
+    assert "no sales team" in ctx.lower() and "developer" in ctx.lower()

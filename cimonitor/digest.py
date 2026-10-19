@@ -249,8 +249,17 @@ def run(cfg: Config, deliver: bool = True, days: int | None = None) -> dict:
     d = llm.no_dashes(build(cfg, days))
     body = llm.no_dashes(render_html(d))
     delivered = send(cfg, d, body) if deliver else {}
+    row = {"created_at": db.now(), "period_start": d["period_start"], "period_end": d["period_end"],
+           "headline": d["brief"].get("headline"), "html": body, "payload": d, "delivered": delivered}
     with db.connect() as con:
-        did = db.insert(con, "digests", {"created_at": db.now(), "period_start": d["period_start"],
-                                         "period_end": d["period_end"], "headline": d["brief"].get("headline"),
-                                         "html": body, "payload": d, "delivered": delivered})
+        # One digest per period: regenerating the same week replaces it instead of piling up copies.
+        same = [r["id"] for r in db.rows(con.execute("SELECT id, period_start, period_end FROM digests"))
+                if str(r["period_start"])[:10] == str(d["period_start"])[:10] and str(r["period_end"])[:10] == str(d["period_end"])[:10]]
+        if same:
+            did = same[0]
+            db.update(con, "digests", did, row)
+            for extra in same[1:]:
+                con.execute("DELETE FROM digests WHERE id=?", (extra,))
+        else:
+            did = db.insert(con, "digests", row)
     return {"digest_id": did, "headline": d["brief"].get("headline"), "delivered": delivered}

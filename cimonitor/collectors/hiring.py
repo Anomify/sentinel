@@ -115,7 +115,47 @@ def fetch_ashby(token: str) -> list[dict]:
     return out
 
 
-FETCH = {"greenhouse": fetch_greenhouse, "lever": fetch_lever, "ashby": fetch_ashby}
+def fetch_comeet(token: str) -> list[dict]:
+    """Comeet's public careers API. token is "<company-uid>:<api token>", both published in the careers-page widget."""
+    uid, tok = token.split(":", 1)
+    j = guard.get_json(f"https://www.comeet.co/careers-api/2.0/company/{uid}/positions?token={tok}&details=true", respect_robots=False)
+    out = []
+    for x in j if isinstance(j, list) else []:
+        loc = (x.get("location") or {})
+        where = loc.get("name") or ", ".join(filter(None, [loc.get("city"), loc.get("country")]))
+        desc = " ".join(_text(d.get("value") or "") for d in x.get("details") or [] if isinstance(d, dict))
+        out.append({"id": f"cm:{x.get('uid')}", "title": x.get("name", ""), "location": where + (" Remote" if loc.get("is_remote") else ""),
+                    "department": x.get("department") or "", "url": x.get("url_active_page") or x.get("url_comeet_hosted_page"),
+                    "posted": x.get("time_updated"), "text": desc})
+    return out
+
+
+def fetch_greetinghr(url: str) -> list[dict]:
+    """GreetingHR career sites (common in Korea): each opening is a link to /o/<id>; title first, then team and terms."""
+    from bs4 import BeautifulSoup
+    from urllib.parse import urljoin
+    r = guard.get(url)
+    soup = BeautifulSoup(r.text, "html.parser")
+    out, seen = [], set()
+    for a in soup.find_all("a", href=re.compile(r"/o/\d+")):
+        href = urljoin(r.url, a["href"])
+        parts = [x.strip() for x in a.stripped_strings]
+        if not parts or href in seen:
+            continue
+        seen.add(href)
+        out.append({"id": f"gh-kr:{re.search(r'/o/(\d+)', href).group(1)}", "title": parts[0], "location": parts[-1] if len(parts) > 2 else "",
+                    "department": " / ".join(parts[1:3]) if len(parts) > 2 else "", "url": href, "posted": None, "text": " ".join(parts)})
+    return out
+
+
+FETCH = {"greenhouse": fetch_greenhouse, "lever": fetch_lever, "ashby": fetch_ashby, "comeet": fetch_comeet, "greetinghr": fetch_greetinghr}
+API_URL = {"greenhouse": "https://boards-api.greenhouse.io/v1/boards/{t}/jobs", "lever": "https://api.lever.co/v0/postings/{t}",
+           "ashby": "https://api.ashbyhq.com/posting-api/job-board/{t}", "comeet": "https://www.comeet.co/careers-api/2.0/company/{t}/positions",
+           "greetinghr": "{t}"}
+COMEET_RX = [  # widget init styles: COMEET.init({token, company-uid}) and the WordPress plugin's comeetvar
+    r"""token["']?\s*:\s*["']([0-9A-F]{20,})["'][^}]{0,200}?company-uid["']?\s*:\s*["']([0-9A-F]{1,3}\.[0-9A-F]{3})["']""",
+    r"""comeet_token["']?\s*:\s*["']([0-9A-F]{20,})["'][^}]{0,200}?comeet_uid["']?\s*:\s*["']([0-9A-F]{1,3}\.[0-9A-F]{3})["']""",
+]
 BOARD_RX = [("greenhouse", r"(?:boards|job-boards)\.greenhouse\.io/(?:embed/job_board\?for=)?([a-z0-9_-]+)"),
             ("greenhouse", r"boards-api\.greenhouse\.io/v1/boards/([a-z0-9_-]+)"),
             ("lever", r"jobs\.lever\.co/([a-z0-9_-]+)"), ("ashby", r"jobs\.ashbyhq\.com/([a-z0-9_.-]+)"),
@@ -127,7 +167,8 @@ def discover(con, comp: Entity) -> list[tuple[str, str]]:
         return list(comp.ats.items())
     found = []
     # 1) links / requests already captured by Module 1, plus the careers page
-    pages = [f"https://{comp.domain}/careers", f"https://{comp.domain}/company/careers", f"https://{comp.domain}/jobs"]
+    pages = [*([comp.careers] if getattr(comp, "careers", None) else []), f"https://{comp.domain}/careers", f"https://{comp.domain}/careers/",
+             f"https://{comp.domain}/company/careers", f"https://{comp.domain}/jobs"]
     blob = " ".join(f["key"] for f in facts.active(con, comp.id, "stack", "third_party"))
     for u in pages:
         try:
@@ -141,7 +182,18 @@ def discover(con, comp: Entity) -> list[tuple[str, str]]:
         for m in re.findall(rx, blob, re.I):
             if m not in ("embed", "v1"):
                 found.append((ats, m.lower()))
-    # 2) official APIs with likely tokens
+    plain = blob.replace('\\"', '"').replace("\\", "")
+    for rx in COMEET_RX:
+        for tok, uid in re.findall(rx, plain, re.I | re.S):
+            found.append(("comeet", f"{uid}:{tok}"))
+    # 2) a careers site that lists openings itself (GreetingHR)
+    if not found and getattr(comp, "careers", None):
+        try:
+            if fetch_greetinghr(comp.careers):
+                found.append(("greetinghr", comp.careers))
+        except Exception:
+            pass
+    # 3) official APIs with likely tokens
     if not found:
         root = comp.domain.removeprefix("www.").split(".")[0]
         cands = list(dict.fromkeys([comp.id, root, re.sub(r"[^a-z0-9]", "", comp.name.lower().split("(")[0])]))
@@ -184,9 +236,9 @@ def run_one(con, comp: Entity) -> dict:
         except Exception as e:
             log.info("%s %s failed: %s", ats, token, e)
             continue
-        api = {"greenhouse": f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs", "lever": f"https://api.lever.co/v0/postings/{token}",
-               "ashby": f"https://api.ashbyhq.com/posting-api/job-board/{token}"}[ats]
-        obs.append(Fact("board", f"{ats}:{token}", f"{ats.title()} · {token}", {"ats": ats, "token": token, "jobs": len(got)},
+        shown = token if ats == "greetinghr" else token.split(":")[0]
+        api = API_URL[ats].format(t=shown)
+        obs.append(Fact("board", f"{ats}:{shown}", f"{ats.title()} · {shown}", {"ats": ats, "token": shown, "jobs": len(got)},
                         facts.CONFIRMED, [ev(api, f"{ats.title()} public job-board API")]))
         for j in got:
             t = tag(j["title"], j["department"], j["location"], j["title"] + " " + j["text"])
