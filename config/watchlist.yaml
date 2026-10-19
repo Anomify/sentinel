@@ -7,8 +7,8 @@
 
 # Your own brand, used for AI-search share-of-voice ("are WE in the answer?").
 brand:
-  name: "Hyperfence"            # ← change me
-  aliases: []                     # e.g. ["YourCo", "YourProduct"]
+  name: "Hyperfence"
+  aliases: []
   domains: ["hyperfence.io"]       # used to match AI citations (bare hostname)
   color: "#6250d6"
   # monitor: true tracks Hyperfence with every module (Signals, stack, DNS, hiring, product...) as if it
@@ -19,12 +19,32 @@ brand:
     - type: listing
       url: "https://hyperfence.io/blog/"
       link_pattern: "^/blog/[^/]+/?$"
-  # Used to write the "Vs. us" recommendation on every finding, and to grade the
-  # narrative accuracy of AI-search answers about you. Plain sentences work best.
-  positioning: "The AI security platform for enterprises deploying agents and LLM apps."   # ← change me
-  icp: "CISOs and AI platform leaders at regulated enterprises"                          # ← change me
-  strengths: []          # e.g. ["Fastest time-to-value", "Deployed in customer VPC", "SOC 2 Type II"]
-  facts: []              # ground truth for AI-answer accuracy, e.g. ["We offer a free tier", "We are SOC 2 Type II certified"]
+  # Used to write every "Vs. us" recommendation, the weekly brief and change analysis, and to grade what AI
+  # search engines say about us. Every AI-written comment is written from this point of view.
+  positioning: "The security layer AI doesn't come with: a transparent proxy between your app and any LLM provider that blocks prompt injection, off-topic and policy-violating prompts and responses deterministically, in milliseconds, without a second guard LLM."
+  icp: "Developers and engineering teams shipping LLM-powered apps and agents who want protection in minutes, without a sales call."
+  motion: "Developer-first and self-serve. Free plan, no credit card, two-minute integration. There is no sales team: growth comes from the product, docs, the live demo, content and integrations."
+  products: ["Hyperfence proxy", "Preset Hyperfences (prompt injection, topic, HAP)", "Custom vector Hyperfences (Pro)", "Usage and blocked-event analytics", "Live demo"]
+  strengths:
+    - "Two-minute integration: change one value, the base URL. No SDK, no code changes"
+    - "Deterministic, purpose-built ML classifiers; no guard LLM in the loop, so faster and cheaper"
+    - "Millisecond latency, with full support for streaming responses"
+    - "Zero retention of conversation data"
+    - "Free plan with no credit card; live demo with no sign-up"
+    - "Works with OpenAI, Anthropic, Google Gemini, DeepSeek, xAI and more"
+  facts:   # ground truth for grading AI-search answers about us
+    - "Hyperfence is an AI security platform: a transparent proxy that sits between an application and any LLM provider"
+    - "Hyperfence blocks prompt injection and enforces topic and content policies on both prompts and responses"
+    - "Hyperfence does not use a second guard LLM; it uses purpose-built ML classifiers and adds milliseconds of latency"
+    - "Integration takes about two minutes and requires changing only the base URL; no SDK or code changes"
+    - "Hyperfence has a free plan with no credit card required; Pro is coming soon and Enterprise is custom"
+    - "Hyperfence retains no conversation data"
+    - "Hyperfence supports OpenAI, Anthropic, Google Gemini, DeepSeek and xAI, including streaming responses"
+    - "Hyperfence is self-serve and developer-first; it is not sold through a sales team"
+  voice:   # rules for every AI-written recommendation
+    - "Recommend product, docs, content, pricing, integration and community moves. Never recommend sales actions (no reps, SDRs, outbound, battlecards for sellers, renewals or account targeting): we have no sales team"
+    - "Our audience is developers, not CISOs or procurement. Don't suggest targeting executives or regulated-enterprise buyers"
+    - "Be concrete and short: what to build, write, publish or change, and why it beats the competitor's move"
 
 # Terms whose frequency on competitor pages signals a messaging pivot.
 watch_terms:
@@ -112,7 +132,8 @@ competitors:
     feeds:
       - { type: rss, url: "https://aws.amazon.com/blogs/aws/category/artificial-intelligence/amazon-machine-learning/amazon-bedrock/feed/" }
     # No dedicated Bedrock accounts: the AWS company accounts, filtered to Bedrock / guardrails posts.
-    social: { linkedin: "https://www.linkedin.com/company/amazon-web-services", x: "https://x.com/awscloud", filter: "(?i)bedrock|guardrail" }
+    scope: { keywords: "(?i)guardrail|bedrock guardrails|responsible AI|AI safety|prompt (attack|injection)|jailbreak|content filter|toxicity|hallucination|automated reasoning" }
+    social: { linkedin: "https://www.linkedin.com/company/amazon-web-services", x: "https://x.com/awscloud" }
 
   - id: google-model-armor
     name: Google Model Armor
@@ -125,7 +146,8 @@ competitors:
       - { kind: pricing, url: "https://cloud.google.com/security-command-center/pricing", focus: "(?i)model armor|AI protection" }
     feeds:
       - { type: rss, url: "https://cloudblog.withgoogle.com/products/ai-machine-learning/rss/" }
-    social: { linkedin: "https://www.linkedin.com/company/google-cloud", x: "https://x.com/googlecloud", filter: "(?i)model armor|AI security|agent|guardrail|safety|gemini" }
+    scope: { keywords: "(?i)model armor|guardrail|AI security|AI safety|prompt injection|jailbreak|responsible AI|AI protection" }
+    social: { linkedin: "https://www.linkedin.com/company/google-cloud", x: "https://x.com/googlecloud" }
 
   - id: azure-content-safety
     name: Azure AI Content Safety
@@ -137,4 +159,5 @@ competitors:
       - { kind: product, url: "https://azure.microsoft.com/en-us/products/ai-services/ai-content-safety" }
     feeds:
       - { type: rss, url: "https://azure.microsoft.com/en-us/blog/product/azure-ai/feed/" }
-    social: { linkedin: "https://www.linkedin.com/showcase/microsoft-azure", x: "https://x.com/azure", filter: "(?i)content safety|prompt shield|guardrail|responsible AI|AI Foundry|AI safety" }
+    scope: { keywords: "(?i)content safety|prompt shield|guardrail|responsible AI|AI safety|groundedness|jailbreak|protected material|AI security" }
+    social: { linkedin: "https://www.linkedin.com/showcase/microsoft-azure", x: "https://x.com/azure" }

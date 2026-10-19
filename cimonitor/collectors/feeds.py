@@ -238,7 +238,7 @@ def run(cfg: Config, only: str | None = None) -> dict:
             baseline = con.execute("SELECT COUNT(*) FROM posts WHERE competitor=?", (comp.id,)).fetchone()[0] == 0
             for feed in (comp.feeds or (discover(con, comp) if comp.domain else [])):
                 try:
-                    items = pull(fetcher, feed)
+                    items = [i for i in pull(fetcher, feed) if comp.in_scope(i["title"] + " " + i["summary"])]
                 except Exception as e:
                     log.warning("feed failed %s: %s", feed.url, e)
                     errors.append({"url": feed.url, "error": str(e)})

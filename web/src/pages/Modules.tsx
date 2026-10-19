@@ -320,8 +320,9 @@ function MoneyCard({ id }: { id: string }) {
       <div className="mb-5 flex items-center gap-2.5"><Monogram id={id} size={26} /><span className="text-[15px] text-ink">{e.name}</span>
         <Link to={`/competitors/${id}`} className="ml-auto text-[12.5px] text-ink-3 hover:text-ink">All facts</Link></div>
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <div><div className="eyebrow mb-2">Funding</div>
-          {funding.length ? funding.slice(0, 4).map((f) => <div key={f.id} className="mb-2"><div className="text-[14px] text-ink">{f.label}</div><div className="text-[12px] text-ink-3">{f.value.date?.slice(0, 10)}{f.value.investors?.length ? ` · ${f.value.investors.join(", ")}` : ""} · <Confidence c={f.confidence} /></div></div>) : <div className="text-[12.5px] text-ink-3">None found in coverage</div>}
+        <div><div className="eyebrow mb-2">Funding & M&A</div>
+          {k("m_and_a").sort((a, b) => (b.value.date ?? "").localeCompare(a.value.date ?? "")).slice(0, 2).map((f) => <div key={f.id} className="mb-2"><div className="text-[14px] leading-snug text-ink">{f.label}</div><div className="text-[12px] text-ink-3">{f.value.date?.slice(0, 10)}{f.value.completed && f.value.completed !== f.value.date ? ` · completed ${f.value.completed.slice(0, 10)}` : ""} · <Confidence c={f.confidence} /></div></div>)}
+          {funding.length ? funding.slice(0, 3).map((f) => <div key={f.id} className="mb-2"><div className="text-[14px] text-ink">{f.label}</div><div className="text-[12px] text-ink-3">{f.value.date?.slice(0, 10)}{f.value.investors?.length ? ` · ${f.value.investors.join(", ")}` : ""} · <Confidence c={f.confidence} /></div></div>) : !k("m_and_a").length && <div className="text-[12.5px] text-ink-3">None found in coverage</div>}
           {k("arr_claim").map((a) => <div key={a.id} className="mt-2 text-[12.5px] text-ink-2">{a.label}</div>)}
         </div>
         <div><div className="eyebrow mb-2">Partner programme</div>

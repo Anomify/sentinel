@@ -45,6 +45,9 @@ class Entity:
     marketplaces: list[str] = field(default_factory=list)  # marketplace listing URLs
     ads: dict = field(default_factory=dict)                # {"linkedin_company_id": "...", "google_advertiser": "..."}
     news_query: str | None = None
+    # Big platforms (AWS, Google, Azure) share a company-wide domain. scope.keywords limits every module to the
+    # product we compete with; company-wide modules (DNS, subdomains, stack, radar, hiring, money, ads) are skipped.
+    scope: dict = field(default_factory=dict)
     social: dict = field(default_factory=dict)             # {"linkedin": url, "youtube": url, ...}; auto-discovered when blank
     profile: dict = field(default_factory=dict)            # brand only: positioning, strengths, facts
     source: str = "config"                                 # config | ui
@@ -52,6 +55,14 @@ class Entity:
     @property
     def names(self) -> list[str]:
         return [self.name, *self.aliases]
+
+    @property
+    def scoped(self) -> bool:
+        return bool((self.scope or {}).get("keywords"))
+
+    def in_scope(self, text: str) -> bool:
+        """True when this item is about the product we track (always true for unscoped companies)."""
+        return not self.scoped or bool(re.search(self.scope["keywords"], text or ""))
 
     @property
     def domain(self) -> str:
@@ -94,7 +105,7 @@ def _read(name: str) -> dict:
     return (yaml.safe_load(p.read_text()) or {}) if p.exists() else {}
 
 
-EXT = ("staging", "github", "ats", "partner_pages", "marketplaces", "ads", "news_query", "social")
+EXT = ("staging", "github", "ats", "partner_pages", "marketplaces", "ads", "news_query", "social", "scope")
 # Palette slots (validated categorical order) for competitors added without a colour
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#c2410c", "#0e7490"]
 
@@ -127,7 +138,7 @@ def load() -> Config:
     b = wl.get("brand") or {}
     brand = Entity(id="__brand__", name=b.get("name", "Your Company"), color=b.get("color", "#6250d6"),
                    aliases=b.get("aliases") or [], domains=[clean_domain(d) for d in b.get("domains") or []], is_brand=True, tier="brand",
-                   profile={k: b[k] for k in ("positioning", "strengths", "products", "facts", "icp") if k in b})
+                   profile={k: b[k] for k in ("positioning", "strengths", "products", "facts", "icp", "motion", "voice") if k in b})
     comps = [entity_from(c) for c in wl.get("competitors") or []]
     if b.get("monitor", True) and brand.domains:
         # Track ourselves with every module, exactly as if we were a competitor.

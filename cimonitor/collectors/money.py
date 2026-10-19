@@ -104,33 +104,43 @@ def partner_names(html: str, page_url: str = "") -> list[str]:
 
 
 # Business context an article must carry when it only names the competitor by an ordinary word ("Alice").
-CONTEXT_RX = re.compile(r"\b(AI|A\.I\.|artificial intelligence|LLMs?|GenAI|generative|agents?|agentic|security|cyber\w*|"
-                        r"guardrails?|safety|trust (and|&) safety|moderation|red[- ]team\w*|startup|raises?|raised|funding|"
-                        r"series [a-f]|seed|investors?|acquir\w*|acquisition|partner\w*|launch\w*|platform|enterprise|"
-                        r"CEO|CTO|founder|valuation|SaaS|software|customers?)\b", re.I)
+# The category an article must be about. A bare "AI" is not enough (it's in every headline now).
+CATEGORY_RX = re.compile(r"\b(AI security|AI safety|security|secure|cyber\w*|guardrails?|LLMs?|GenAI|generative AI|large language model|"
+                         r"prompt injection|jailbreak\w*|red[- ]team\w*|agentic|AI agents?|agent security|MCP|model scanning|"
+                         r"machine learning|ML models?|trust (and|&) safety|content moderation|moderation|deepfake\w*|"
+                         r"threat\w*|vulnerabilit\w*|CISO|SOC|data protection|AI governance|responsible AI)\b", re.I)
+CONTEXT_RX = CATEGORY_RX  # kept for callers that import the old name
 JUNK_RX = re.compile(r"obituar|funeral|cremation|memorial|passed away|in loving memory|legacy\.com|\| legacy|"
-                     r"high school|college (football|basketball)|sports|recipe|horoscope", re.I)
+                     r"high school|college (football|basketball)|\bNFL\b|\bNBA\b|\bMLB\b|\bNHL\b|football|quarterback|touchdown|"
+                     r"\bsports?\b|recipe|horoscope|\bAfD\b|Bundestag|election|\bpope\b|vatican|Tolkien|Lord of the Rings|"
+                     r"\bstore\b.*\b(opening|hours|sale)\b|celebrity|actress|singer|album", re.I)
 
 
-def _plain_word(t: str) -> bool:
-    """A single ordinary word ("Alice", "Gandalf") is ambiguous; "WonderFence", "alice.io" or "Lakera Guard" are not."""
-    return bool(re.fullmatch(r"[A-Z]?[a-z]+", t))
+def _unique_token(t: str) -> bool:
+    """A coined, case-distinctive name ("HiddenLayer", "WonderFence"): safe to match on its own, case-sensitively."""
+    return " " not in t and bool(re.search(r"[a-z][A-Z]", t))
 
 
 def news_terms(comp: Entity) -> tuple[list[str], list[str]]:
-    terms = {re.sub(r"\s*\(.*?\)", "", n).strip() for n in comp.names} | set(comp.domains)
-    terms = {t for t in terms if len(t) > 2}
-    return sorted(t for t in terms if not _plain_word(t)), sorted(t for t in terms if _plain_word(t))
+    """(distinct, needs_category): domains and coined names match alone; every other name needs a category keyword."""
+    names = {re.sub(r"\s*\(.*?\)", "", n).strip() for n in comp.names}
+    names = {t for t in names if len(t) > 2}
+    distinct = sorted(set(comp.domains) | {t for t in names if _unique_token(t)})
+    return distinct, sorted(names - set(distinct))
 
 
 def relevant(comp: Entity, text: str) -> bool:
-    """Is this article about the competitor (the company), not a namesake?"""
-    if JUNK_RX.search(text):
+    """Is this article about the competitor (the company), not a namesake? Domain or coined name, or name + category."""
+    if JUNK_RX.search(text or ""):
         return False
-    distinct, plain = news_terms(comp)
-    if any(re.search(rf"(?<![\w.]){re.escape(t)}(?![\w])", text, re.I) for t in distinct):
-        return True
-    return any(re.search(rf"\b{re.escape(t)}\b", text) for t in plain) and bool(CONTEXT_RX.search(text))
+    distinct, other = news_terms(comp)
+    for t in distinct:
+        if "." in t and re.search(rf"(?<![\w.]){re.escape(t)}(?![\w])", text, re.I):
+            return True
+        if "." not in t and re.search(rf"(?<!\w){re.escape(t)}(?!\w)", text):  # case-sensitive
+            return True
+    named = any(re.search(rf"(?<!\w){re.escape(t)}(?!\w)", text, 0 if re.fullmatch(r"[A-Z][a-z]+", t) else re.I) for t in other)
+    return named and bool(CATEGORY_RX.search(text))
 
 
 def news(comp: Entity) -> list[dict]:
@@ -211,7 +221,25 @@ def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], 
         "sources": sorted(set(filter(None, v["sources"])))[:6]},
         facts.CONFIRMED if len(set(v["sources"])) >= 2 else facts.LIKELY, v["evidence"][:4]) for k, v in rounds.items()]
     ar = [Fact("arr_claim", k[:150], v["claim"], {"headline": v["headline"], "date": v["date"]}, facts.LIKELY, v["evidence"]) for k, v in arr.items()]
-    aq = [Fact("m_and_a", k, v["headline"], {"date": v["date"]}, facts.LIKELY, v["evidence"]) for k, v in acq.items()]
+    # One fact per deal: coverage of the same acquisition within ~4 months (announcement, close) is merged.
+    deals: list[dict] = []
+    for v in sorted(acq.values(), key=lambda v: v["date"] or "9999"):
+        d = datetime.fromisoformat(v["date"]) if v["date"] else None
+        prev = deals[-1] if deals else None
+        if prev and d and prev["d"] and (d - prev["d"]).days <= 120:
+            prev["headlines"].append(v["headline"]); prev["evidence"] += v["evidence"]
+            if re.search(r"\bcomplet", v["headline"], re.I):
+                prev["completed"] = v["date"]
+        else:
+            deals.append({"d": d, "date": v["date"], "headlines": [v["headline"]], "evidence": list(v["evidence"]),
+                          "completed": v["date"] if re.search(r"\bcomplet", v["headline"], re.I) else None})
+    aq = []
+    for dl in deals:
+        clean = [re.sub(r"\s+-\s+[^-]+$", "", h).strip() for h in dl["headlines"]]
+        label = min(clean, key=len)  # the plainest headline ("Check Point acquires Lakera ...")
+        aq.append(Fact("m_and_a", f"deal:{(dl['date'] or 'undated')[:7]}", label,
+                       {"date": dl["date"], "completed": dl["completed"], "sources": len(dl["headlines"])},
+                       facts.CONFIRMED if len(dl["headlines"]) >= 2 else facts.LIKELY, dl["evidence"][:4]))
     return fr, ar, aq
 
 

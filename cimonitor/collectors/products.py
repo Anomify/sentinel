@@ -170,7 +170,7 @@ RULES = {
                     so_what=lambda f: "A new entry in their release notes: a feature that is live now. Compare it with our roadmap."),
     "launch": Rule(severity="high", on_remove=False, alert_if=_recent,
                    title_add=lambda f: f"Launch announced: {f.label}",
-                   so_what=lambda f: "A public launch announcement. Expect sales and marketing to push it; prepare a response for deals in flight."),
+                   so_what=lambda f: "A public launch announcement. Expect a marketing push; check whether Hyperfence already covers it and say so in a post or comparison page."),
 }
 
 
@@ -179,7 +179,7 @@ def run_one(con, comp: Entity) -> dict:
         return {"skipped": "no domain"}
     links, _ = money._home_links(comp)
     obs: list[Fact] = []
-    cat = catalogue(comp, links)
+    cat = {p: l for p, l in catalogue(comp, links).items() if comp.in_scope(p.replace('-', ' ') + ' ' + l)}
     base = f"https://{comp.domain}"
     for p, label in cat.items():
         obs.append(Fact("product_page", p, label, {"url": urljoin(base, p)}, facts.CONFIRMED, [ev(urljoin(base, p), "sitemap / site navigation")]))
@@ -187,6 +187,8 @@ def run_one(con, comp: Entity) -> dict:
     n_rel = 0
     for u in logs:
         for t, d in release_entries(u):
+            if not comp.in_scope(t):
+                continue
             n_rel += 1
             obs.append(Fact("release", f"{u}#{t.lower()}"[:300], t, {"page": u, "date": d}, facts.CONFIRMED, [ev(u, "release notes / changelog")]))
     try:
@@ -194,7 +196,7 @@ def run_one(con, comp: Entity) -> dict:
     except Exception as e:
         log.info("news failed for %s: %s", comp.id, e)
         news = []
-    launches = launch_items(con, comp, news)
+    launches = [it for it in launch_items(con, comp, news) if comp.in_scope(it["title"])]
     for it in launches:
         obs.append(Fact("launch", it["url"][:300], it["title"][:200], {"source": it["source"], "published": it["published"]},
                         facts.CONFIRMED if it["source"] == "their blog" else facts.LIKELY, [ev(it["url"], it["source"])]))

@@ -116,7 +116,7 @@ def hacker_news(comp: Entity) -> list[dict]:
     out = []
     for h in j.get("hits", []):
         title = h.get("title") or ""
-        if title and money.relevant(comp, title + " " + (h.get("url") or "")):
+        if title and money.relevant(comp, title + " " + (h.get("url") or "")) and comp.in_scope(title):
             out.append({"platform": "hackernews", "url": f"https://news.ycombinator.com/item?id={h['objectID']}", "text": title,
                         "published": h.get("created_at"), "engagement": {"points": h.get("points", 0), "comments": h.get("num_comments", 0)}})
     return out
@@ -175,7 +175,8 @@ def run_one(con, comp: Entity) -> dict:
             errors[pid] = str(e)[:120]
             continue
         # Big vendors link company-wide channels; keep only posts on the product we track (same filter as their blog feeds).
-        flt = (comp.social or {}).get(f"filter_{pid}") or (comp.social or {}).get("filter")  # per-platform filter wins
+        flt = ((comp.social or {}).get(f"filter_{pid}") or (comp.social or {}).get("filter")
+               or (comp.scope or {}).get("keywords"))  # per-platform filter wins, then the product scope
         rx = re.compile(flt) if flt else None
         for it in items:
             if rx and not rx.search(it["text"]):

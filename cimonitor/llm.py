@@ -16,7 +16,7 @@ CHANGE_SCHEMA = {
         "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "noise"]},
         "summary": {"type": "string", "description": "2 sentences: the concrete change"},
         "so_what": {"type": "string", "description": "1-2 sentences: why it matters to us competitively"},
-        "action": {"type": "string", "description": "One concrete next step for battlecard/messaging/launch"},
+        "action": {"type": "string", "description": "One concrete next step for our product, docs, content or messaging"},
     },
     "required": ["headline", "category", "severity", "summary", "so_what", "action"],
     "additionalProperties": False,
@@ -137,16 +137,33 @@ def _claude_json(model: str, system: str, prompt: str, schema: dict, effort: str
     return json.loads(text) if text else None
 
 
+def brand_context(cfg) -> str:
+    """Who "we" are, for every prompt. Without this the model assumes a sales-led enterprise vendor."""
+    p = cfg.brand.profile or {}
+    parts = [f"We are {cfg.brand.name}."]
+    if p.get("positioning"):
+        parts.append(f"Positioning: {p['positioning']}")
+    if p.get("icp"):
+        parts.append(f"Our users: {p['icp']}")
+    if p.get("motion"):
+        parts.append(f"How we grow: {p['motion']}")
+    if p.get("strengths"):
+        parts.append("Strengths: " + "; ".join(p["strengths"]))
+    if p.get("voice"):
+        parts.append("Rules for your recommendations: " + " ".join(p["voice"]))
+    return " ".join(parts)
+
+
 def analyze_change(cfg, competitor: str, url: str, kind: str, removed: list[str], added: list[str],
                    signals: dict) -> dict | None:
     if not available(cfg):
         return None
     a = cfg.settings.get("analysis", {})
     system = (
-        f"You are a competitive-intelligence analyst for {cfg.brand.name}, an AI security company. "
-        "You read diffs of competitor web pages and explain them crisply to a product marketing lead "
-        "who is about to launch. Be specific, quote numbers, never pad. If the change is boilerplate, "
-        "nav reshuffles or date bumps, mark severity 'noise' and category 'cosmetic'."
+        f"You are a competitive-intelligence analyst for {cfg.brand.name}. {brand_context(cfg)} "
+        "You read diffs of competitor web pages and explain them crisply to our product marketing lead. "
+        "Be specific, quote numbers, never pad. 'so_what' and 'action' must be written from our point of view and follow "
+        "the rules above. If the change is boilerplate, nav reshuffles or date bumps, mark severity 'noise' and category 'cosmetic'."
     )
     prompt = (
         f"Competitor: {competitor}\nPage ({kind}): {url}\n\n"
@@ -166,7 +183,7 @@ def write_brief(cfg, facts: dict) -> dict | None:
         return None
     a = cfg.settings.get("analysis", {})
     system = (
-        f"You write the weekly competitive brief for {cfg.brand.name}'s product marketing lead. "
+        f"You write the weekly competitive brief for {cfg.brand.name}'s product marketing lead. {brand_context(cfg)} "
         "Lead with what changes decisions. 3-5 TL;DR bullets max, each ≤ 25 words, each naming a competitor. "
         "watch_next: 2-3 things to keep an eye on. No filler, no hedging."
     )
@@ -225,12 +242,9 @@ def vs_us(cfg, competitor: str, findings: list[dict]) -> dict[str, str]:
     if not available(cfg) or not findings:
         return {}
     a = cfg.settings.get("analysis", {})
-    p = cfg.brand.profile
-    system = (f"You are the competitive strategist at {cfg.brand.name}. For each competitor finding, write the "
-              "recommended response for our product marketing / sales team: what to do, say or change. Be specific "
-              "and practical; reference our strengths when relevant; never invent facts about us. "
-              f"Our positioning: {p.get('positioning', 'n/a')}. Our strengths: {', '.join(p.get('strengths', [])) or 'n/a'}. "
-              f"Our ICP: {p.get('icp', 'n/a')}.")
+    system = (f"You are the competitive strategist at {cfg.brand.name}. {brand_context(cfg)} For each competitor finding, "
+              "write our recommended response: what we should build, write, publish or change. Be specific and practical; "
+              "reference our strengths when relevant; never invent facts about us; follow the rules above strictly.")
     prompt = f"Competitor: {competitor}\nFindings (JSON):\n" + json.dumps(
         [{"id": f["id"], "section": f["section"], "finding": f["title"], "detail": f.get("detail", "")} for f in findings])[:30000]
     try:

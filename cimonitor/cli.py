@@ -24,6 +24,7 @@ MODULE_HELP = {
     "ai": "Module 10 · AI-search visibility",
     "deepdive": "Intelligence layer · regenerate deep dives",
     "digest": "Build & deliver the weekly digest",
+    "cleanup": "Repair stored data so it matches today's rules (runs automatically on serve)",
 }
 
 
@@ -33,7 +34,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     for name, help_ in MODULE_HELP.items():
         s = sub.add_parser(name, help=help_)
-        if name not in ("ai", "digest"):
+        if name not in ("ai", "digest", "cleanup"):
             s.add_argument("--competitor")
         if name == "ai":
             s.add_argument("--limit", type=int, help="only the first N questions (cheap smoke test)")
@@ -84,6 +85,10 @@ def main(argv=None):
             out = demo.clear() if a.clear else demo.seed(config.load())
         elif a.cmd == "serve":
             import uvicorn
+            from . import cleanup
+            for w in [x["slug"] for x in tenancy.list_workspaces()] or [tenancy.current()]:
+                with tenancy.use(w):
+                    cleanup.run()
             if not a.no_scheduler:
                 threading.Thread(target=jobs.daemon, daemon=True).start()
             uvicorn.run("cimonitor.api:app", host=a.host, port=a.port, log_level="info")

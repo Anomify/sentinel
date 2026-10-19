@@ -103,7 +103,7 @@ def build(cfg: Config, comp: Entity) -> dict:
             out.append(_f("stack", "preconsent", f"{len(pre)} tracking tools fire before cookie consent",
                           "Loaded before the consent banner was accepted: " + ", ".join(t["label"] for t in pre),
                           "confirmed", _ev(pre), first_seen=_first(pre),
-                          vs_us="Privacy-sensitive buyers (EU, regulated) notice this. Make our own consent-first tracking a quiet trust point in security reviews.", weight=2))
+                          vs_us="Privacy-minded developers notice this. Our zero-retention, no-extra-LLM design is a trust point; say it on the site and in docs.", weight=2))
         out.append(_f("stack", "count", f"{len(stack_tools)} marketing/web tools detected across {len(third)} third-party domains",
                       "Full inventory in the Stack tab.", "confirmed", _ev(stack_tools[:2]), weight=1))
     if motion:
@@ -119,7 +119,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         names = [c["key"] for c in gtm_conv]
         out.append(_f("tracking", "conversions", "Tracked conversions: " + ", ".join(names[:8]),
                       (funnel[0]["label"] if funnel else ""), "confirmed", _ev(gtm_conv), first_seen=_first(gtm_conv),
-                      vs_us="Their ad platforms optimise toward these events. Match the high-intent moment (e.g. demo booking) with a faster path on our side and compare in win/loss.", weight=4))
+                      vs_us="Their ads optimise toward these conversion events. Our high-intent moment is sign-up and first block; make that path shorter than theirs.", weight=4))
     if gtm_ids:
         ids = sorted({f["value"]["type"] + " " + f["value"]["id"] for f in gtm_ids if f["value"]["type"] != "gtm"})
         out.append(_f("tracking", "ids", "Tracking IDs: " + ", ".join(ids[:8]), f"{len(gtm_c)} GTM container(s) parsed.", "confirmed", _ev(gtm_ids)))
@@ -127,7 +127,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         out.append(_f("tracking", "sgtm", "Server-side tagging: " + ", ".join(sorted({s['key'] for s in sgtm})),
                       "First-party tagging endpoint: their attribution survives ad blockers and Safari ITP, so their reported ad performance is more complete than most.",
                       min((s["confidence"] for s in sgtm), key=lambda c: CONF_RANK[c]), _ev(sgtm), first_seen=_first(sgtm),
-                      vs_us="Expect their paid channels to be well-optimised. Don't assume you can out-bid them on retargeting; compete on positioning instead.", weight=3))
+                      vs_us="Expect their paid channels to be well-optimised. Don't try to out-spend them; win on docs, content and the live demo.", weight=3))
     if linked:
         out.append(_f("tracking", "linked", "Sister sites sharing tracking IDs: " + ", ".join(l["key"] for l in linked),
                       "Same analytics/ads IDs on other domains: campaign microsites or related brands.", "likely", _ev(linked), first_seen=_first(linked), weight=3))
@@ -186,7 +186,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         p = launch.get("probability", 0)
         out.append(_f("radar", "launch", f"Launch probability {round(p * 100)}%" + (f" · likely within {launch['horizon']}" if p >= 0.3 else ""),
                       "; ".join(s["signal"] + ": " + s["title"] for s in launch.get("signals", [])[:4]) or "No launch signals in the last 45 days.",
-                      "inferred", [], data=launch, vs_us="Prepare a response plan: messaging counter, sales talk track and a pricing stance." if p >= 0.5 else None,
+                      "inferred", [], data=launch, vs_us="A launch looks close. Prepare a response: a blog or changelog post on how Hyperfence handles the same problem, and an updated comparison page." if p >= 0.5 else None,
                       weight=5 if p >= 0.5 else 1))
     for s in stg:
         out.append(_f("radar", f"stg:{s['key']}", f"Staging site: {s['key']}", s["value"].get("crawl") or "Public staging mirror monitored for pre-launch pages.",
@@ -212,7 +212,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         out.append(_f("hiring", "mix", f"{len(jobs)} open roles · {round(gtm_share * 100)}% go-to-market",
                       "By function: " + ", ".join(f"{k} {v}" for k, v in fn.most_common()) + ". By region: " + ", ".join(f"{k} {v}" for k, v in reg.most_common()),
                       "confirmed", _ev(boards), weight=3, data={"functions": dict(fn), "regions": dict(reg), "seniority": dict(sen)},
-                      vs_us=("They're scaling sales capacity. Expect more outbound into our accounts; arm reps with the battlecard and a displacement offer."
+                      vs_us=("They're scaling sales capacity: a slower, demo-gated motion. Lean into ours: free plan, two-minute setup, no calls. Make that contrast explicit in comparison content."
                              if gtm_share >= 0.5 else "R&D-heavy hiring: product velocity will rise. Watch the radar for launches.")))
         senior = [j for j in jobs if j["value"]["seniority"] in ("VP", "C-level", "Head / Director")]
         if senior:
@@ -222,7 +222,7 @@ def build(cfg: Config, comp: Entity) -> dict:
             out.append(_f("hiring", "tech", "Tech named in job descriptions: " + ", ".join(t for t, _ in tech.most_common(12)), "", "confirmed", _ev(jobs[:2])))
     for e in firsts:
         out.append(_f("hiring", f"first:{e['id']}", e["title"], e.get("so_what") or "", "confirmed", e["evidence"], first_seen=e["detected_at"],
-                      vs_us="A first-of-its-kind role marks a new motion or market. Pre-empt it in the accounts it will target.", weight=4))
+                      vs_us="A first-of-its-kind role marks a new motion or market. Publish docs and content for that audience before they do.", weight=4))
 
     # ── Product
     by_date = lambda xs: sorted(xs, key=lambda f: f["value"].get("published") or f["first_seen"] or "", reverse=True)  # noqa: E731
@@ -261,7 +261,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         out.append(_f("money", f"fund:{f_['key']}", f"{f_['label']}" + (f" · {v['date'][:10]}" if v.get("date") else ""),
                       ("Investors: " + ", ".join(v["investors"]) if v.get("investors") else "") + (f" · Sources: {', '.join(v.get('sources', [])[:3])}" if v.get("sources") else ""),
                       f_["confidence"], f_["evidence"], first_seen=f_["first_seen"],
-                      vs_us="Fresh capital → aggressive hiring, launches and discounting over the next 2–3 quarters. Lock in renewals early." if (v.get("date") or "") > "2025" else None,
+                      vs_us="Fresh capital: expect more hiring, launches and marketing over the next few quarters. Keep shipping visibly (changelog, blog) and keep the free plan the easiest place to start." if (v.get("date") or "") > "2025" else None,
                       weight=4 if (v.get("date") or "") > "2025" else 1))
     for a in arr[:3]:
         out.append(_f("money", f"arr:{a['key']}", f"Growth claim: {a['label']}", a["value"].get("headline", ""), a["confidence"], a["evidence"], weight=3))
@@ -274,7 +274,7 @@ def build(cfg: Config, comp: Entity) -> dict:
     if mkts:
         out.append(_f("money", "mkts", "Marketplace listings: " + ", ".join(sorted({m['label'] for m in mkts})),
                       "Buyers can purchase through committed cloud spend.", "confirmed", _ev(mkts), first_seen=_first(mkts),
-                      vs_us="If we're not co-listed on the same marketplaces, procurement-led deals will tilt to them. Prioritise matching listings.", weight=4))
+                      vs_us="Marketplace listings make them easy to buy with cloud credits. Consider listing Hyperfence on the same marketplaces once the paid plans launch.", weight=4))
     if press:
         out.append(_f("money", "press", f"{len(press)} press mentions tracked", "Latest: " + "; ".join(p["label"][:90] for p in sorted(press, key=lambda p: p['value'].get('published') or '', reverse=True)[:3]),
                       "confirmed", _ev(press[:2])))
@@ -295,7 +295,7 @@ def build(cfg: Config, comp: Entity) -> dict:
             out.append(_f("positioning", "buyers", "Buyer hierarchy: " + " → ".join(k for k, _ in pers[:4]),
                           "Ranked by how often each buyer is addressed on the homepage.", "inferred",
                           [{"url": f"https://{comp.domain}/", "observed_at": snap["fetched_at"], "method": "copy analysis"}],
-                          vs_us="If their primary buyer differs from ours, lean into the gap; if it's the same, sharpen our proof for that persona.", weight=3))
+                          vs_us="Our buyer is the developer shipping the LLM app. If they target executives, own the developer; if they target developers too, sharpen our proof on speed and simplicity.", weight=3))
         ind = sorted((sig.get("industries") or {}).items(), key=lambda kv: -kv[1])
         uc = sorted((sig.get("use_cases") or {}).items(), key=lambda kv: -kv[1])
         if ind or uc:
@@ -331,7 +331,7 @@ def build(cfg: Config, comp: Entity) -> dict:
                 f["vs_us_by"] = llm.provider(cfg) or "ai"
     except Exception:
         log.exception("vs us")
-    summary = _summary(comp, out, motion, jobs, funding, launch, stack_tools, subs)
+    summary = _summary(comp, out, motion, jobs, funding, launch, stack_tools, subs, mna)
     return {"competitor": comp.id, "name": comp.name, "domain": comp.domain, "generated_at": db.now(),
             "summary": summary, "sections": [{"id": s, "title": t, "findings": sorted([f for f in out if f["section"] == s], key=lambda f: -f["weight"])}
                                              for s, t in SECTIONS if any(f["section"] == s for f in out)],
@@ -342,40 +342,46 @@ def _days_ago(n: int) -> str:
     return datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() - n * 86400, timezone.utc).isoformat()
 
 
-def _summary(comp, out, motion, jobs, funding, launch, tools, subs) -> list[dict]:
-    lat = sorted(funding, key=lambda f: f["value"].get("date") or "", reverse=True)
+def _short(s: str, n: int) -> str:
+    return s if len(s) <= n else s[:n].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
+def _summary(comp, out, motion, jobs, funding, launch, tools, subs, mna=()) -> list[dict]:
+    # Latest money event wins: an acquisition supersedes the funding rounds before it.
+    lat = sorted([*funding, *mna], key=lambda f: f["value"].get("date") or "", reverse=True)
     return [
         {"label": "Motion", "value": motion[0]["label"] if motion else "-"},
         {"label": "Launch probability", "value": f"{round((launch or {}).get('probability', 0) * 100)}%"},
         {"label": "Open roles", "value": str(len(jobs))},
-        {"label": "Latest funding", "value": lat[0]["label"] if lat else "-"},
+        {"label": "Latest funding / M&A", "value": (_short(lat[0]["label"], 70) + (f" ({lat[0]['value']['date'][:7]})" if lat[0]["value"].get("date") else "")) if lat else "-"},
         {"label": "GTM tools", "value": str(len(tools))},
         {"label": "Hostnames", "value": str(len(subs))},
     ]
 
 
+# Written for Hyperfence: developer-first, self-serve, no sales team. Responses are product, docs, content and pricing moves.
 VSUS_STACK = {
-    "abm": "They de-anonymise visitors and route accounts to SDRs. Expect fast, targeted outbound after anyone from our pipeline visits their site; warn champions and get ahead with our own follow-up.",
-    "ads": "Paid acquisition is live. Audit our share of voice on their branded and category keywords, and make sure our comparison pages rank.",
-    "scheduling": "Instant demo booking shortens their time-to-meeting. Match it with an instant-booking flow on our demo form.",
-    "chat": "Conversational capture on-site. Make sure our own site answers the same questions faster.",
-    "demo": "Buyers can self-tour their product. Publish an interactive tour of ours so we're not the 'talk to sales first' option.",
-    "partner": "A channel programme is forming. Get to the top resellers/MSSPs first and offer better margins or deal registration.",
-    "product": "Product-led instrumentation on the marketing site: a self-serve funnel. Consider a free tier or sandbox to compete on developer adoption.",
-    "map": None, "testing": "They personalise per account. Expect tailored landing pages for named accounts.",
-    "payments": "Self-serve purchase exists. Price-sensitive and SMB buyers can buy without talking to sales.",
+    "abm": "They de-anonymise visitors and hand accounts to SDRs: a sales-led funnel. Our answer is the opposite: let developers try Hyperfence in two minutes with no call, and say so plainly on our site.",
+    "ads": "Paid acquisition is live. Make sure our docs, comparison pages and blog rank for the same category terms; developers search before they click ads.",
+    "scheduling": "Their path to value starts with booking a meeting. Ours starts with one line of config. Put the live demo and free sign-up even closer to the top of every page.",
+    "chat": "Conversational capture on-site. Make sure our docs and FAQ answer the same questions instantly, without a human.",
+    "demo": "Buyers can self-tour their product. Our live demo already runs a real Hyperfence; keep it one click from every page and in every comparison.",
+    "partner": "A channel programme is forming. For us, the equivalent is integrations: be listed in the LLM gateways, frameworks and marketplaces developers already use.",
+    "product": "They instrument a self-serve funnel too. Compete on time-to-first-block, free-plan generosity and docs quality, and measure our own activation.",
+    "map": None, "testing": "They personalise per account. Keep our message simple and identical for every developer: what it blocks, how fast, how to add it.",
+    "payments": "They now take card payments self-serve. Keep our free plan clearly more generous and our pricing page simpler.",
 }
 VSUS_MOTION = {
-    "Sales-led": "Compete on time-to-value: offer a frictionless trial or sandbox that sidesteps their demo gate, and arm sales for enterprise bake-offs.",
-    "Product-led": "Expect bottom-up adoption inside our accounts. Win the economic buyer with enterprise controls, security reviews and ROI proof.",
-    "Hybrid": "They hedge both motions. Find which one is actually converting (watch conversion events and hiring mix) and attack the weaker side.",
+    "Sales-led": "They gate access behind a demo. Win on time-to-value: free plan, two-minute integration and a live demo with no sign-up. Call this out in comparison pages.",
+    "Product-led": "They compete for the same developers we do. Win on integration speed (one base-URL change), latency (milliseconds, no guard LLM) and a more generous free plan.",
+    "Hybrid": "They run demos and self-serve. Make the self-serve path the obvious one on our side: no forms, no calls, protection in two minutes.",
 }
 VSUS_VERIF = {
-    "Partner": "They are standing up a partner programme. Recruit the same partners first, with better margins and deal registration.",
-    "AI": "They are adopting frontier AI internally. Expect faster content and product velocity.",
-    "Product analytics": "Investing in in-product guidance: a product-led onboarding push is likely.",
-    "Advertising": "Ad accounts verified: expect paid campaigns on that platform.",
-    "Payments": "Billing infrastructure: a self-serve or usage-based pricing plan may be coming.",
+    "Partner": "They are building a partner channel. Our counter is integrations: get Hyperfence into the gateways, frameworks and marketplaces developers already use.",
+    "AI": "They are adopting frontier AI internally. Expect faster content and product velocity; keep our changelog and blog cadence visible.",
+    "Product analytics": "Investing in in-product guidance: a product-led onboarding push is likely. Benchmark our own sign-up to first-block flow against theirs.",
+    "Advertising": "Ad accounts verified: expect paid campaigns on that platform. Make sure our organic content ranks for the same terms.",
+    "Payments": "Billing infrastructure: a self-serve or usage-based plan may be coming. Keep our free plan and pricing page clearly simpler.",
 }
 
 

@@ -24,25 +24,35 @@ def _deepdive(cfg, **kw):
     return deepdive.run(cfg, kw.get("competitor"))
 
 
+# Modules that describe a whole company; meaningless for a product inside AWS / Google / Azure.
+COMPANY_WIDE = {"stack", "dns", "subdomains", "radar", "hiring", "money", "ads"}
+
+
+def _unscoped(cfg):
+    import dataclasses
+    return dataclasses.replace(cfg, competitors=[c for c in cfg.competitors if not c.scoped])
+
+
 JOBS = {
     "pages": lambda cfg, **kw: _c()["pages"].run(cfg, kw.get("competitor")),
     "feeds": lambda cfg, **kw: _c()["feeds"].run(cfg, kw.get("competitor")),
-    "stack": lambda cfg, **kw: _c()["stack"].run(cfg, kw.get("competitor")),
-    "dns": lambda cfg, **kw: _c()["dns_infra"].run(cfg, kw.get("competitor")),
-    "subdomains": lambda cfg, **kw: _c()["subdomains"].run(cfg, kw.get("competitor")),
-    "radar": lambda cfg, **kw: _c()["radar"].run(cfg, kw.get("competitor")),
-    "hiring": lambda cfg, **kw: _c()["hiring"].run(cfg, kw.get("competitor")),
-    "money": lambda cfg, **kw: _c()["money"].run(cfg, kw.get("competitor")),
-    "ads": lambda cfg, **kw: _c()["ads"].run(cfg, kw.get("competitor")),
+    "stack": lambda cfg, **kw: _c()["stack"].run(_unscoped(cfg), kw.get("competitor")),
+    "dns": lambda cfg, **kw: _c()["dns_infra"].run(_unscoped(cfg), kw.get("competitor")),
+    "subdomains": lambda cfg, **kw: _c()["subdomains"].run(_unscoped(cfg), kw.get("competitor")),
+    "radar": lambda cfg, **kw: _c()["radar"].run(_unscoped(cfg), kw.get("competitor")),
+    "hiring": lambda cfg, **kw: _c()["hiring"].run(_unscoped(cfg), kw.get("competitor")),
+    "money": lambda cfg, **kw: _c()["money"].run(_unscoped(cfg), kw.get("competitor")),
+    "ads": lambda cfg, **kw: _c()["ads"].run(_unscoped(cfg), kw.get("competitor")),
     "social": lambda cfg, **kw: _c()["social"].run(cfg, kw.get("competitor")),
     "product": lambda cfg, **kw: _c()["products"].run(cfg, kw.get("competitor")),
     "ai": lambda cfg, **kw: _c()["ai_search"].run(cfg, kw.get("limit")),
     "deepdive": _deepdive,
     "digest": lambda cfg, **kw: digest.run(cfg, deliver=kw.get("deliver", True)),
+    "cleanup": lambda cfg, **kw: __import__("cimonitor.cleanup", fromlist=["run"]).run(),
 }
 def _all(cfg, **kw):
     """Refresh every section for every company (AI visibility is left to its schedule: it spends API quota)."""
-    out = {}
+    out = {"cleanup": JOBS["cleanup"](cfg)}
     for step in ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "social", "hiring", "money", "ads", "deepdive"]:
         try:
             out[step] = JOBS[step](config.load())
