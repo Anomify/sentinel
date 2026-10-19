@@ -4,15 +4,13 @@
   • YouTube: the channel's public RSS feed (official).
   • Bluesky: the public AppView API (official, no login).
   • Medium: the profile/publication RSS feed (official).
-  • X / Twitter: the official API when X_BEARER_TOKEN is set (X's API is paid; there is no free public feed).
+  • X / Twitter and LinkedIn: no free, permitted way to read posts (X's API is paid; LinkedIn forbids automated
+    access), so Sentinel records the accounts and gives a one-click link to their latest posts.
   • Hacker News: posts that name the company, via the official Algolia HN API.
-  • LinkedIn: LinkedIn prohibits automated access (robots.txt and terms) and its API only serves pages you
-    administer, so Sentinel records the company page and gives a one-click link to its latest posts.
 """
 from __future__ import annotations
 
 import logging
-import os
 import re
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
@@ -111,21 +109,6 @@ def medium(url: str) -> list[dict]:
     return _rss(f"https://medium.com/feed/{path}", "medium")
 
 
-def x_posts(url: str) -> list[dict]:
-    token = os.environ.get("X_BEARER_TOKEN")
-    if not token:
-        return []
-    user = url.rstrip("/").split("/")[-1]
-    h = {"Authorization": f"Bearer {token}"}
-    u = guard.get_json(f"https://api.x.com/2/users/by/username/{user}", respect_robots=False, headers=h).get("data") or {}
-    if not u.get("id"):
-        return []
-    j = guard.get_json(f"https://api.x.com/2/users/{u['id']}/tweets?max_results=20&exclude=replies,retweets&tweet.fields=created_at,public_metrics",
-                       respect_robots=False, headers=h)
-    return [{"platform": "x", "url": f"https://x.com/{user}/status/{t['id']}", "text": t.get("text", "")[:280],
-             "published": t.get("created_at"), "engagement": t.get("public_metrics", {})} for t in j.get("data") or []]
-
-
 def hacker_news(comp: Entity) -> list[dict]:
     distinct, plain = money.news_terms(comp)
     q = (distinct or plain or [comp.name])[0]
@@ -139,82 +122,11 @@ def hacker_news(comp: Entity) -> list[dict]:
     return out
 
 
-def _search(query: str) -> list[dict]:
-    """Recent web results from an official search API: Brave (free tier) or SerpAPI. [] when neither key is set."""
-    if os.environ.get("BRAVE_SEARCH_API_KEY"):
-        j = guard.get_json(f"https://api.search.brave.com/res/v1/web/search?q={quote(query)}&count=20&freshness=pm",
-                           respect_robots=False, headers={"X-Subscription-Token": os.environ["BRAVE_SEARCH_API_KEY"], "Accept": "application/json"})
-        return [{"url": r.get("url", ""), "title": r.get("title", ""), "snippet": r.get("description", ""),
-                 "date": r.get("page_age") or r.get("age")} for r in (j.get("web") or {}).get("results", [])]
-    if os.environ.get("SERPAPI_API_KEY"):
-        j = guard.get_json(f"https://serpapi.com/search.json?engine=google&q={quote(query)}&num=20&tbs=qdr:m&api_key={os.environ['SERPAPI_API_KEY']}",
-                           respect_robots=False)
-        return [{"url": r.get("link", ""), "title": r.get("title", ""), "snippet": r.get("snippet", ""), "date": r.get("date")}
-                for r in j.get("organic_results", [])]
-    return []
-
-
-def search_key() -> bool:
-    return bool(os.environ.get("BRAVE_SEARCH_API_KEY") or os.environ.get("SERPAPI_API_KEY"))
-
-
-def _clean(text: str) -> str:
-    text = re.sub(r"<[^>]+>", "", text or "")
-    text = re.sub(r"\s*(\| LinkedIn|on LinkedIn|/ X|on X|\.\.\.)\s*$", "", text.strip())
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def _when(d: str | None) -> str | None:
-    if not d:
-        return None
-    m = re.match(r"(\d{4}-\d{2}-\d{2})", d)
-    if m:
-        return m.group(1)
-    m = re.match(r"(\d+)\s+(minute|hour|day|week|month)s?\s+ago", d, re.I)
-    if m:
-        n, unit = int(m.group(1)), m.group(2).lower()
-        days = {"minute": 0, "hour": 0, "day": 1, "week": 7, "month": 30}[unit] * n
-        return (date.today() - timedelta(days=days)).isoformat()
-    from .products import parse_date
-    return parse_date(d)
-
-
-def linkedin_posts(url: str) -> list[dict]:
-    """LinkedIn company posts as indexed by search engines (we never contact LinkedIn itself)."""
-    slug = url.rstrip("/").split("/")[-1]
-    out = []
-    for r in _search(f'site:linkedin.com/posts "{slug}"'):
-        if f"/posts/{slug}_".lower() in r["url"].lower() or f"/posts/{slug}-".lower() in r["url"].lower():
-            text = _clean(r["snippet"]) or _clean(r["title"])
-            out.append({"platform": "linkedin", "url": r["url"].split("?")[0], "text": text[:300], "published": _when(r["date"]), "via": "search"})
-    return out
-
-
-def x_search(url: str) -> list[dict]:
-    """X posts as indexed by search engines, used when there is no X API key."""
-    handle = url.rstrip("/").split("/")[-1]
-    out = []
-    for r in _search(f"site:x.com/{handle}/status"):
-        if re.search(rf"(x|twitter)\.com/{re.escape(handle)}/status/\d+", r["url"], re.I):
-            text = _clean(r["snippet"]) or _clean(r["title"])
-            out.append({"platform": "x", "url": re.sub(r"twitter\.com", "x.com", r["url"].split("?")[0]), "text": text[:300],
-                        "published": _when(r["date"]), "via": "search"})
-    return out
-
-
-def x_any(url: str) -> list[dict]:
-    return x_posts(url) if os.environ.get("X_BEARER_TOKEN") else x_search(url)
-
-
-READERS = {"youtube": youtube, "bluesky": bluesky, "medium": medium, "x": x_any, "linkedin": linkedin_posts}
+READERS = {"youtube": youtube, "bluesky": bluesky, "medium": medium}
 
 
 def how(pid: str) -> str:
-    """How a platform is read, for the UI."""
-    if pid == "x" and os.environ.get("X_BEARER_TOKEN"):
-        return "official API"
-    if pid in ("linkedin", "x"):
-        return "web search" if search_key() else "needs search key"
+    """How a platform is read, for the UI. LinkedIn and X have no free, permitted way to read posts: link only."""
     return "official feed" if pid in READERS else "link only"
 MANUAL = {  # where to look by hand (always offered for LinkedIn and X, alongside automated tracking)
     "linkedin": lambda u: u.rstrip("/") + "/posts/?feedView=all",

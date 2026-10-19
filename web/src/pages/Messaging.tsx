@@ -3,17 +3,17 @@ import { ExternalLink, Search, X as Close } from "lucide-react";
 import { useApi } from "../lib/api";
 import { day } from "../lib/format";
 import { StackedBars } from "../components/charts";
-import { Card, CardHeader, Chip, cx, Empty, EntityDot, Monogram, PageHeader, Segmented, Skeleton, useMeta } from "../components/ui";
+import { Card, CardHeader, Chip, Empty, EntityDot, Monogram, PageHeader, Segmented, Skeleton, useMeta } from "../components/ui";
 
 interface Item {
   id: string; competitor: string; channel: string; title: string; text: string; url: string; date: string | null;
   type: string; topics: string[]; engagement: Record<string, number> | null; first_seen: string; via: string;
 }
 interface Channel { platform: string; label: string; url: string; manual: string | null; how: string }
-interface Data { items: Item[]; channels: Record<string, Channel[]>; search_key: boolean; x_api: boolean }
+interface Data { items: Item[]; channels: Record<string, Channel[]> }
 
 const CH: Record<string, string> = { blog: "Blog", linkedin: "LinkedIn", x: "X", youtube: "YouTube", medium: "Medium", bluesky: "Bluesky", hackernews: "Hacker News" };
-const ORDER = ["blog", "linkedin", "x", "youtube", "medium", "bluesky", "hackernews"];
+const ORDER = ["blog", "youtube", "medium", "bluesky", "hackernews"];
 const PERIODS = [{ value: 7, label: "7d" }, { value: 30, label: "30d" }, { value: 90, label: "90d" }, { value: 365, label: "1y" }, { value: 0, label: "All" }];
 const DAY = 864e5;
 
@@ -88,9 +88,9 @@ export default function Messaging() {
                       <div className="text-[12.5px] text-ink">{c.name}{c.tier === "self" ? " (us)" : ""}</div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         {(data.channels[c.id] ?? []).filter((x) => ["linkedin", "x", "youtube", "medium", "bluesky"].includes(x.platform)).map((x) => (
-                          <a key={x.platform} href={x.manual ?? x.url} target="_blank" rel="noreferrer" title={x.how}
-                            className={cx("rounded-full px-2 py-0.5 text-[11px] ring-1 ring-inset", x.how === "needs search key" ? "text-ink-3 ring-line" : "text-ink-2 ring-line hover:text-ink")}>
-                            {CH[x.platform] ?? x.label}{x.how === "needs search key" ? " · not yet" : ""}
+                          <a key={x.platform} href={x.manual ?? x.url} target="_blank" rel="noreferrer" title={x.how === "link only" ? "Opens their latest posts" : "Tracked automatically"}
+                            className="rounded-full px-2 py-0.5 text-[11px] text-ink-2 ring-1 ring-inset ring-line hover:text-ink">
+                            {CH[x.platform] ?? x.label}{x.how === "link only" ? " ↗" : " · tracked"}
                           </a>))}
                         {!(data.channels[c.id] ?? []).length && <span className="text-[11px] text-ink-3">No accounts found</span>}
                       </div>
@@ -98,11 +98,9 @@ export default function Messaging() {
                   </div>
                 ))}
               </div>
-              {!data.search_key && (
-                <div className="border-t border-line bg-sunken px-5 py-3 text-[11.5px] leading-relaxed text-ink-2">
-                  LinkedIn and X posts need a search API key. Add <code className="font-mono">BRAVE_SEARCH_API_KEY</code> (free tier) or <code className="font-mono">SERPAPI_API_KEY</code> to .env{data.x_api ? "" : ", or X_BEARER_TOKEN for X"}.
-                </div>
-              )}
+              <div className="border-t border-line bg-sunken px-5 py-3 text-[11.5px] leading-relaxed text-ink-2">
+                LinkedIn and X don't offer a free way to read company posts, so those open the account's latest posts in a new tab.
+              </div>
             </Card>
           </div>
 

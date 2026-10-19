@@ -213,19 +213,3 @@ def test_subdomain_alerts_only_for_recent_certificates_and_never_removed():
         titles = [r["title"] for r in db.rows(con.execute("SELECT title FROM events"))]
     assert titles == ["New subdomain: launch.x.com"]  # old host recorded silently; www absence not a removal alert
 
-
-def test_linkedin_and_x_from_search(monkeypatch):
-    from cimonitor.collectors import social
-    results = [
-        {"url": "https://www.linkedin.com/posts/lakeraai_agentic-ai-security-activity-7381-abc?utm=x", "title": "Lakera on LinkedIn",
-         "snippet": "We just launched Lakera Red for agents ...", "date": "3 days ago"},
-        {"url": "https://www.linkedin.com/posts/someone-else_lakeraai-activity-1", "title": "x", "snippet": "y", "date": None},
-        {"url": "https://x.com/lakeraai/status/1888", "title": "Lakera on X", "snippet": "Gandalf: Agent Breaker is live", "date": "2026-10-10"},
-        {"url": "https://x.com/other/status/1", "title": "no", "snippet": "no", "date": None},
-    ]
-    monkeypatch.setattr(social, "_search", lambda q: results)
-    li = social.linkedin_posts("https://www.linkedin.com/company/lakeraai")
-    assert [p["url"] for p in li] == ["https://www.linkedin.com/posts/lakeraai_agentic-ai-security-activity-7381-abc"]
-    assert li[0]["text"].startswith("We just launched") and li[0]["published"]
-    xs = social.x_search("https://x.com/lakeraai")
-    assert len(xs) == 1 and xs[0]["published"] == "2026-10-10"

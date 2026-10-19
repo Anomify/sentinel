@@ -200,7 +200,6 @@ def list_posts(days: int = 90, competitor: str | None = None):
 @app.get("/api/messaging")
 def messaging():
     """Every blog post and social post for every company, in one feed, plus how each channel is tracked."""
-    from .collectors import social
     c = cfg()
     with db.connect() as con:
         blog = db.rows(con.execute("SELECT * FROM posts"))
@@ -228,7 +227,7 @@ def messaging():
                       "url": f["key"], "date": v.get("published"), "type": "Discussion" if ch == "hackernews" else "Post", "topics": [],
                       "engagement": v.get("engagement"), "first_seen": f["first_seen"], "via": v.get("via") or "official feed"})
     items.sort(key=lambda i: str(i["date"] or i["first_seen"] or ""), reverse=True)
-    return {"items": items, "channels": channels, "search_key": social.search_key(), "x_api": bool(os.environ.get("X_BEARER_TOKEN"))}
+    return {"items": items, "channels": channels}
 
 
 @app.get("/api/visibility")
