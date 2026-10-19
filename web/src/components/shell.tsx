@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { api, invalidate, runJob, setWorkspace, workspace } from "../lib/api";
 import type { Run } from "../lib/types";
+import { ago } from "../lib/format";
 import { cx, EntityDot, Kbd, useMeta } from "./ui";
 
 /* ── Toasts ─────────────────────────────────────────────────────────────────── */
@@ -49,8 +50,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 /* ── Jobs ───────────────────────────────────────────────────────────────────── */
 export const JOB_LABEL: Record<string, string> = {
   pages: "Page scan", feeds: "Content sync", stack: "Stack & tag manager", dns: "DNS & email", subdomains: "Certificate transparency",
-  radar: "Pre-launch radar", product: "Product launches", hiring: "Hiring", money: "Partners & money", ads: "Ads", ai: "AI visibility", deepdive: "Deep dives", digest: "Digest",
+  radar: "Pre-launch radar", product: "Product launches", hiring: "Hiring", money: "Partners & money", ads: "Ads", ai: "AI visibility", deepdive: "Deep dives", digest: "Digest", all: "Everything",
 };
+// What each job refreshes, in the words of the sidebar.
+const JOB_HELP: Record<string, string> = {
+  all: "Every section below, for every company. Takes 10 to 20 minutes.",
+  subdomains: "New subdomains and certificates (Infrastructure)", dns: "Email tools and DNS verifications (Infrastructure)",
+  stack: "Marketing tools and tracking (GTM stack)", pages: "Homepage, pricing and messaging changes (Positioning)",
+  radar: "Staging sites, new pages, new repos (Launch radar)", product: "New products, release notes, launches (Product launches)",
+  hiring: "Open roles and first-of-their-kind hires (Hiring)", money: "Funding, partners, marketplaces, press (Partners & money)",
+  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Positioning)", ai: "What AI search engines say (AI visibility). Uses API quota.",
+  deepdive: "Rewrites every deep dive from the latest data (Deep dives)", digest: "Saves a new weekly digest (Digest)",
+};
+// Count new findings in a run's stats, wherever the collector reported them.
+const countAdded = (s: any): number => !s || typeof s !== "object" ? 0
+  : Object.entries(s).reduce((n, [k, v]) => n + (k === "added" && typeof v === "number" ? v : countAdded(v)), 0);
 const JobCtx = createContext<{ running: string[]; start: (job: string, opts?: { deliver?: boolean }) => void; poll: () => void }>({ running: [], start: () => {}, poll: () => {} });
 export const useJobs = () => useContext(JobCtx);
 
@@ -67,7 +81,10 @@ export function JobProvider({ children }: { children: ReactNode }) {
           const last = r.runs.find((x) => x.job === job);
           const label = JOB_LABEL[job] ?? (job.startsWith("scan:") ? "Full scan" : job);
           if (last?.status === "error") toast({ title: `${label} failed`, body: last.error ?? undefined, tone: "err" });
-          else toast({ title: `${label} complete` });
+          else {
+            const n = countAdded(last?.stats);
+            toast({ title: `${label} finished`, body: n ? `${n} new finding${n === 1 ? "" : "s"}. The pages have been refreshed; new items are in Signals.` : "Nothing new since the last run. The pages are up to date." });
+          }
           invalidate();
         }
         return now;
@@ -78,7 +95,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
   useEffect(() => { poll(); return () => window.clearTimeout(timer.current); }, [poll]);
   const start = useCallback((job: string, opts?: { deliver?: boolean }) => {
     runJob(job, opts).then((r) => {
-      toast({ title: r.status === "already_running" ? `${JOB_LABEL[job]} already running` : `${JOB_LABEL[job]} started`, tone: "info" });
+      toast({ title: r.status === "already_running" ? `${JOB_LABEL[job]} is already running` : `${JOB_LABEL[job]} started`, body: r.status === "already_running" ? undefined : "Collecting fresh data in the background. This usually takes 1 to 5 minutes; you'll get a message here when it's done.", tone: "info" });
       setRunning((p) => Array.from(new Set([...p, job])));
       window.setTimeout(poll, 1200);
     }).catch((e) => toast({ title: "Couldn't start job", body: String(e), tone: "err" }));
@@ -223,25 +240,33 @@ function RunMenu() {
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, []);
-  const items = ["subdomains", "dns", "stack", "pages", "radar", "product", "hiring", "money", "ads", "feeds", "ai", "deepdive", "digest"];
+  const items = ["all", "product", "pages", "feeds", "hiring", "money", "stack", "subdomains", "dns", "radar", "ads", "ai", "deepdive", "digest"];
+  const meta = useMeta();
+  const lastRun = (job: string) => meta.schedule.find((x) => x.job === job)?.last;
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)}
         className="inline-flex h-9 items-center gap-2 rounded-full bg-ink px-4 text-[13px] text-white transition-colors hover:bg-[#2a2a2e] focus-ring">
         {running.length ? <Loader2 size={14} className="animate-spin" /> : <Play size={13} />}
-        <span className="hidden sm:inline">{running.length ? "Collecting" : "Run"}</span>
+        <span className="hidden sm:inline">{running.length ? `Refreshing ${running.length === 1 ? (JOB_LABEL[running[0]] ?? "scan").toLowerCase() : `${running.length} sections`}…` : "Refresh data"}</span>
         <ChevronDown size={13} className="opacity-60" />
       </button>
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.14 }}
-            className="absolute right-0 top-11 z-30 w-64 rounded-2xl border border-line bg-elev p-1.5 shadow-[0_16px_48px_-16px_rgba(0,0,0,0.2)]">
+            className="absolute right-0 top-11 z-30 max-h-[80vh] w-[340px] overflow-y-auto rounded-2xl border border-line bg-elev p-1.5 shadow-[0_16px_48px_-16px_rgba(0,0,0,0.2)]">
+            <div className="px-3 pb-2 pt-2 text-[12px] leading-relaxed text-ink-3">Sentinel refreshes everything on a schedule. Use this to collect fresh data now instead of waiting.</div>
             {items.map((job) => {
               const busy = running.includes(job);
+              const last = lastRun(job);
               return (
                 <button key={job} disabled={busy} onClick={() => { start(job); setOpen(false); }}
-                  className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] text-ink-2 hover:bg-hover hover:text-ink disabled:opacity-50">
-                  {JOB_LABEL[job]}{busy && <Loader2 size={13} className="animate-spin" />}
+                  className={cx("flex w-full items-start justify-between gap-3 rounded-xl px-3 py-2 text-left hover:bg-hover disabled:opacity-50", job === "all" && "mb-1 border-b border-line pb-2.5")}>
+                  <span>
+                    <span className="block text-[13px] text-ink">{job === "all" ? "Refresh everything" : JOB_LABEL[job]}</span>
+                    <span className="block text-[11.5px] leading-snug text-ink-3">{JOB_HELP[job]}</span>
+                  </span>
+                  <span className="shrink-0 pt-0.5 text-[11px] text-ink-3">{busy ? <Loader2 size={13} className="animate-spin" /> : last ? ago(last) : ""}</span>
                 </button>
               );
             })}

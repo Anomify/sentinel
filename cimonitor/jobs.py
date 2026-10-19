@@ -39,11 +39,24 @@ JOBS = {
     "deepdive": _deepdive,
     "digest": lambda cfg, **kw: digest.run(cfg, deliver=kw.get("deliver", True)),
 }
+def _all(cfg, **kw):
+    """Refresh every section for every company (AI visibility is left to its schedule: it spends API quota)."""
+    out = {}
+    for step in ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "hiring", "money", "ads", "deepdive"]:
+        try:
+            out[step] = JOBS[step](config.load())
+        except Exception as e:
+            log.exception("all: %s failed", step)
+            out[step] = {"error": str(e)[:200]}
+    return out
+
+
+JOBS["all"] = _all
 # Order for a full scan of one competitor (deep dive): dependencies first.
 FULL_SCAN = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "hiring", "money", "ads", "deepdive"]
 LABELS = {"pages": "Pages & pricing", "feeds": "Content", "stack": "GTM stack + tag manager", "dns": "DNS & email",
           "subdomains": "Subdomains & certificates", "radar": "Pre-launch radar", "hiring": "Hiring", "money": "Partners & money",
-          "ads": "Ads", "product": "Product launches", "ai": "AI visibility", "deepdive": "Deep dive", "digest": "Digest", "scan": "Full scan"}
+          "ads": "Ads", "product": "Product launches", "ai": "AI visibility", "deepdive": "Deep dive", "digest": "Digest", "scan": "Full scan", "all": "Everything"}
 
 _lock = threading.Lock()
 _running: dict[tuple[str, str], str] = {}
@@ -169,6 +182,8 @@ def schedule_status(cfg) -> list[dict]:
     now = datetime.now()
     with db.connect() as con:
         last_runs = db.get_meta(con, "last_scheduled", {})
+        manual = {r["job"]: r["t"] for r in db.rows(con.execute(
+            "SELECT job, MAX(finished_at) t FROM runs WHERE status='ok' GROUP BY job"))}
     out = []
     r = running()
     for job, spec in (cfg.settings.get("schedule") or {}).items():
@@ -177,6 +192,7 @@ def schedule_status(cfg) -> list[dict]:
             nxt = next_due(spec, last, now)
         except ValueError:
             nxt = None
-        out.append({"job": job, "label": LABELS.get(job, job), "spec": spec, "last": last.isoformat() if last else None,
+        ran = max(filter(None, [last.isoformat() if last else None, manual.get(job)]), default=None)
+        out.append({"job": job, "label": LABELS.get(job, job), "spec": spec, "last": ran,
                     "next": nxt.isoformat() if nxt else None, "running": job in r})
     return out
