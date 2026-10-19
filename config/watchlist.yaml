@@ -96,7 +96,9 @@ competitors:
       - type: listing
         url: "https://www.lakera.ai/blog"
         link_pattern: "^/blog/[a-z0-9-]+/?$"
-    social: { linkedin: "https://www.linkedin.com/company/lakeraai", x: "https://x.com/lakeraai" }
+    # Acquired by Check Point: Lakera now posts on Check Point's LinkedIn, so keep only posts about Lakera / AI security there.
+    social: { linkedin: "https://www.linkedin.com/company/check-point-software-technologies", x: "https://x.com/lakeraai",
+              filter_linkedin: "(?i)lakera|gandalf|AI security|GenAI|LLM|agentic|prompt injection|AI agent" }
 
   - id: aws-bedrock
     name: AWS Bedrock Guardrails

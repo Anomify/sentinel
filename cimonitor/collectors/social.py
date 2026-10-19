@@ -47,7 +47,7 @@ TWITTER_META = re.compile(r'name="twitter:(?:site|creator)"[^>]*content="@?([A-Z
 
 def profiles(comp: Entity, links: list[str], html: str = "") -> dict[str, str]:
     """{platform: profile url}, configured ones first, then the first matching link on their homepage."""
-    out = {k: v for k, v in (getattr(comp, "social", None) or {}).items() if v and k != "filter"}
+    out = {k: v for k, v in (getattr(comp, "social", None) or {}).items() if v and not k.startswith("filter")}
     for u in links:
         p = urlparse(u)
         host, path = (p.hostname or "").lower(), p.path or "/"
@@ -263,7 +263,8 @@ def run_one(con, comp: Entity) -> dict:
             errors[pid] = str(e)[:120]
             continue
         # Big vendors link company-wide channels; keep only posts on the product we track (same filter as their blog feeds).
-        rx = re.compile(comp.social["filter"]) if (comp.social or {}).get("filter") else None
+        flt = (comp.social or {}).get(f"filter_{pid}") or (comp.social or {}).get("filter")  # per-platform filter wins
+        rx = re.compile(flt) if flt else None
         for it in items:
             if rx and not rx.search(it["text"]):
                 continue
