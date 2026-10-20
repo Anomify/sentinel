@@ -152,15 +152,36 @@ def enabled_engines(cfg: Config) -> list[tuple[str, str]]:
 
 
 # ── scoring ───────────────────────────────────────────────────────────────────
+PLAIN_WORD = re.compile(r"[A-Z][a-z]+")  # "Alice": also an ordinary name, unlike "HiddenLayer" or "Lakera Guard"
+# Security explainers use stock characters ("Alice sends Bob a message"): those sentences aren't about a vendor.
+PERSONAS = re.compile(r"\b(Bob|Eve|Mallory|Trudy|Charlie)\b")
+
+
+def mentions(e, text: str) -> list[int]:
+    """Positions where the answer names this company. A plain-word name only counts when written as a name
+    (capitalised) and not in a sentence about stock example characters."""
+    plain = {t for t in (re.sub(r"\s*\(.*?\)", "", n).strip() for n in e.names) if PLAIN_WORD.fullmatch(t)}
+    out = []
+    for m in e.mention_regex().finditer(text or ""):
+        word = next((t for t in plain if t.lower() == m.group(1).lower()), None)
+        if word:
+            start = max(text.rfind(c, 0, m.start()) for c in ".!?\n") + 1
+            ends = [i for i in (text.find(c, m.end()) for c in ".!?\n") if i >= 0]
+            sentence = text[start:min(ends) if ends else len(text)]
+            if m.group(1) != word or PERSONAS.search(sentence):
+                continue
+        out.append(m.start())
+    return out
+
+
 def score(cfg: Config, answer: str, cites: list[dict]) -> dict:
     """Per entity: mentioned?, first position in answer, rank among entities, citation count."""
     found = []
     for e in cfg.entities:
-        m = e.mention_regex().search(answer or "")
+        pos = mentions(e, answer or "")
         doms = [c["url"] for c in cites if c.get("url") and
                 any((c.get("domain") or urlparse(c["url"]).netloc).endswith(d) for d in e.domains)]
-        found.append({"id": e.id, "pos": m.start() if m else None, "count": len(e.mention_regex().findall(answer or "")),
-                      "cited": len(doms)})
+        found.append({"id": e.id, "pos": pos[0] if pos else None, "count": len(pos), "cited": len(doms)})
     ranked = sorted((f for f in found if f["pos"] is not None), key=lambda f: f["pos"])
     for i, f in enumerate(ranked, 1):
         f["rank"] = i

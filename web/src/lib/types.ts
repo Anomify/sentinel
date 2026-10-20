@@ -65,8 +65,9 @@ export interface Overview {
 }
 
 export interface Visibility {
-  runs: { run_id: string; run_at: string; answers: number; engines: string }[];
-  latest: { run_id: string; run_at: string } | null;
+  runs: { run_id: string; run_at: string; answers: number; errors: number; questions: number; complete: boolean; engines: string }[];
+  latest: { run_id: string; run_at: string; answers: number; errors: number; complete: boolean; measured: number;
+    no_answer: number; branded_excluded: string[] } | null;
   engines: string[];
   share: Share[];
   per_engine: Record<string, Share[]>;

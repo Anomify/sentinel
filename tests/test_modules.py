@@ -495,3 +495,62 @@ def test_digest_leaves_out_our_own_activity():
                                   "title": "Our pricing page changed", "detected_at": _ago(0), "evidence": [], "data": {}})
     d = digest.build(c, 7)
     assert all(ch["competitor"] != us for ch in d["changes"]) and us not in {l["id"] for l in d["launch"]}
+
+
+# ── AI visibility ────────────────────────────────────────────────────────────
+def _ai(con, run, at, qid, mentioned, err=None, answer="x", cites=()):
+    from cimonitor import db
+    db.insert(con, "ai_results", {"run_id": run, "run_at": at, "engine": "perplexity", "model": "m", "question_id": qid,
+                                  "question": qid, "answer": "" if err else answer, "citations": list(cites),
+                                  "mentions": {} if err else {"__brand__": {"mentioned": mentioned, "rank": 1 if mentioned else None},
+                                                              "hiddenlayer": {"mentioned": True, "rank": 2}},
+                                  "brand_rank": None, "error": err, "accuracy": None})
+
+
+def test_failed_and_partial_ai_runs_do_not_replace_the_latest_complete_run():
+    from cimonitor import db, insights
+    c = cfg()
+    qs = [q.id for q in c.questions]
+    branded = insights.branded_questions(c)
+    measured = [q for q in qs if q not in branded]
+    with db.connect() as con:
+        for q in qs:
+            _ai(con, "good", _ago(2), q, q in measured[: len(measured) // 2])
+        for q in qs:
+            _ai(con, "outage", _ago(1), q, False, err="429 quota")
+        _ai(con, "smoke", _ago(0), qs[0], True)
+        v = insights.visibility(c, con)
+    assert v["latest"]["run_id"] == "good" and v["latest"]["measured"] == len(measured)
+    assert next(s for s in v["share"] if s["id"] == "__brand__")["share"] == round((len(measured) // 2) / len(measured), 3)
+    assert [t["run_id"] for t in v["trend"]] == ["good"]
+    assert {r["run_id"]: r["complete"] for r in v["runs"]} == {"good": True, "outage": False, "smoke": False}
+
+
+def test_questions_naming_a_vendor_are_left_out_of_share():
+    from cimonitor import insights
+    c = cfg()
+    texts = {q.id: q.text for q in c.questions}
+    assert all("HiddenLayer" in texts[q] or "Lakera" in texts[q] for q in insights.branded_questions(c))
+    assert insights.branded_questions(c)
+
+
+def test_source_gaps_skip_vendor_sites_and_redirect_links():
+    from cimonitor import db, insights
+    c = cfg()
+    cites = [{"url": "https://www.hiddenlayer.com/x"}, {"url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/a"},
+             {"url": "https://owasp.org/llm-top-10"}]
+    with db.connect() as con:
+        for q in c.questions:
+            _ai(con, "r", _ago(0), q.id, False, cites=cites)
+        v = insights.visibility(c, con)
+    assert [g["domain"] for g in v["source_gaps"]] == ["owasp.org"]
+
+
+def test_alice_and_bob_is_not_a_competitor_mention():
+    from cimonitor.collectors import ai_search
+    c = cfg()
+    m = ai_search.score(c, "Prompt injection: Alice sends a message to Bob, and an attacker hides instructions.", [])
+    assert not m["alice"]["mentioned"]
+    m = ai_search.score(c, "Top tools: HiddenLayer, Alice (formerly ActiveFence) and Lakera Guard.", [])
+    assert m["alice"]["mentioned"] and m["hiddenlayer"]["rank"] == 1 and m["alice"]["rank"] == 2
+    assert not ai_search.score(c, "the alice library is unrelated", [])["alice"]["mentioned"]

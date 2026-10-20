@@ -34,7 +34,7 @@ def matrix(cfg: Config) -> dict:
         posts = db.rows(con.execute("SELECT competitor, COUNT(*) n, MAX(first_seen) last FROM posts GROUP BY competitor"))
         ai_any = con.execute("SELECT MAX(run_at) FROM ai_results").fetchone()[0]
         blocked = db.rows(con.execute("SELECT host, COUNT(*) n, MAX(reason) reason FROM guard_log WHERE action='blocked' GROUP BY host ORDER BY n DESC LIMIT 50"))
-        runs = {r["job"]: r for r in db.rows(con.execute("SELECT job, MAX(finished_at) finished_at, status FROM runs GROUP BY job"))}
+        runs = {r["job"]: r for r in db.rows(con.execute("SELECT job, MAX(finished_at) finished_at FROM runs GROUP BY job"))}
     idx = {(r["competitor"], r["module"]): r for r in fact_rows}
     out = []
     for comp in cfg.competitors:

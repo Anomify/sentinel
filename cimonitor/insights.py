@@ -67,25 +67,46 @@ def posts(con, days=30, competitor=None, limit=200) -> list[dict]:
     return db.rows(con.execute(q + " ORDER BY COALESCE(published, first_seen) DESC LIMIT ?", [*a, limit]))
 
 
-def ai_runs(con) -> list[dict]:
-    return db.rows(con.execute(
-        "SELECT run_id, MIN(run_at) run_at, COUNT(*) answers, GROUP_CONCAT(DISTINCT engine) engines "
+def ai_runs(con, n_questions: int = 0) -> list[dict]:
+    """Every AI-visibility run, flagged `complete` when it asked every question and most requests succeeded.
+    Only complete runs are comparable: a smoke test (--limit) or an outage would otherwise move the share."""
+    runs = db.rows(con.execute(
+        "SELECT run_id, MIN(run_at) run_at, COUNT(*) answers, SUM(CASE WHEN error IS NULL THEN 0 ELSE 1 END) errors, "
+        "COUNT(DISTINCT question_id) questions, GROUP_CONCAT(DISTINCT engine) engines "
         "FROM ai_results GROUP BY run_id ORDER BY MIN(run_at)"))
+    for r in runs:
+        r["complete"] = r["questions"] >= n_questions and r["errors"] * 2 < r["answers"]
+    return runs
+
+
+# Grounding links that redirect to the real source: they are not a cited domain.
+REDIRECT_HOSTS = ("vertexaisearch.cloud.google.com",)
+NO_ANSWER = "[No AI Overview shown"  # Google showed no AI Overview: nothing to measure, not a "no mention"
 
 
 def _dom(c: dict) -> str:
-    return (c.get("domain") or urlparse(c.get("url") or "").netloc).removeprefix("www.")
+    d = (c.get("domain") or urlparse(c.get("url") or "").netloc).removeprefix("www.")
+    return "" if d in REDIRECT_HOSTS else d
+
+
+def branded_questions(cfg: Config) -> set[str]:
+    """Questions that name a tracked vendor ("HiddenLayer alternatives") guarantee it a mention, so they're left out of share."""
+    return {q.id for q in cfg.questions if any(e.mention_regex().search(q.text) for e in cfg.entities if not e.is_brand)}
 
 
 def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
-    runs = ai_runs(con)
+    runs = ai_runs(con, len(cfg.questions))
     empty = {"runs": [], "latest": None, "share": [], "matrix": [], "trend": [], "citations": [], "engines": [], "per_engine": {},
              "source_gaps": [], "accuracy": None}
     if not runs:
         return empty
-    run_id = run_id or runs[-1]["run_id"]
-    res = db.rows(con.execute("SELECT * FROM ai_results WHERE run_id=? AND error IS NULL", (run_id,)))
+    complete = [r for r in runs if r["complete"]]
+    run_id = run_id or (complete or runs)[-1]["run_id"]
+    res = [r for r in db.rows(con.execute("SELECT * FROM ai_results WHERE run_id=? AND error IS NULL", (run_id,)))
+           if not (r["answer"] or "").startswith(NO_ANSWER)]
     ids = [e.id for e in cfg.entities]
+    branded = branded_questions(cfg)
+    unbranded = lambda rows: [r for r in rows if r["question_id"] not in branded] or rows  # noqa: E731
 
     def share(rows):
         n = len(rows) or 1
@@ -110,20 +131,22 @@ def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
         matrix.append({"id": q.id, "text": q.text, "category": q.category, "cells": cell})
 
     trend = []
-    for rn in runs[-30:]:
-        rr = db.rows(con.execute("SELECT mentions FROM ai_results WHERE run_id=? AND error IS NULL", (rn["run_id"],)))
-        trend.append({"run_id": rn["run_id"], "date": rn["run_at"][:10], **{s["id"]: s["share"] for s in share(rr)}})
+    for rn in complete[-30:]:
+        rr = db.rows(con.execute("SELECT question_id, mentions, answer FROM ai_results WHERE run_id=? AND error IS NULL", (rn["run_id"],)))
+        rr = [r for r in rr if not (r["answer"] or "").startswith(NO_ANSWER)]
+        trend.append({"run_id": rn["run_id"], "date": rn["run_at"][:10], **{s["id"]: s["share"] for s in share(unbranded(rr))}})
 
     domains = Counter(_dom(c) for r in res for c in (r["citations"] or []) if _dom(c))
-    # Source gaps: domains cited in answers that name a competitor but not us.
+    # Source gaps: third-party domains cited in answers that name a competitor but not us. Vendors' own sites aren't
+    # somewhere we can earn coverage, so every tracked company's domains are left out.
     gap = Counter()
-    brand_domains = tuple(cfg.brand.domains)
+    vendor_domains = tuple({d for e in [*cfg.entities, *cfg.competitors] for d in e.domains}) or ("__none__",)
     for r in res:
         m = r["mentions"] or {}
         if not (m.get("__brand__") or {}).get("mentioned") and any((v or {}).get("mentioned") for k, v in m.items() if k != "__brand__"):
             for c in r["citations"] or []:
                 d = _dom(c)
-                if d and not d.endswith(brand_domains or ("__none__",)):
+                if d and not d.endswith(vendor_domains):
                     gap[d] += 1
     acc = [r["accuracy"] for r in res if isinstance(r.get("accuracy"), dict)]
     accuracy = None
@@ -132,8 +155,13 @@ def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
                     "verdicts": dict(Counter(a.get("verdict") for a in acc)),
                     "issues": [i for a in acc for i in a.get("issues", [])][:20]}
     engines = sorted({r["engine"] for r in res})
-    return {"runs": runs, "latest": next(r for r in runs if r["run_id"] == run_id), "engines": engines,
-            "share": share(res), "per_engine": {e: share([r for r in res if r["engine"] == e]) for e in engines},
+    measured = unbranded(res)
+    latest = {**next(r for r in runs if r["run_id"] == run_id), "measured": len(measured),
+              "no_answer": con.execute("SELECT COUNT(*) FROM ai_results WHERE run_id=? AND error IS NULL AND answer LIKE ?",
+                                       (run_id, NO_ANSWER + "%")).fetchone()[0],
+              "branded_excluded": sorted(branded) if len(measured) < len(res) else []}
+    return {"runs": runs, "latest": latest, "engines": engines,
+            "share": share(measured), "per_engine": {e: share([r for r in measured if r["engine"] == e]) for e in engines},
             "matrix": matrix, "trend": trend,
             "citations": [{"domain": d, "count": n} for d, n in domains.most_common(15)],
             "source_gaps": [{"domain": d, "count": n} for d, n in gap.most_common(12)], "accuracy": accuracy}

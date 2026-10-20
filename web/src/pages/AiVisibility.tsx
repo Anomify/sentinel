@@ -51,7 +51,7 @@ export default function AiVisibility() {
           {data && data.runs.length > 1 && (
             <select value={run ?? data.latest?.run_id} onChange={(e) => setRun(e.target.value)}
               className="h-8 rounded-lg bg-sunken px-2 text-[12px] text-ink-2 ring-1 ring-inset ring-line outline-none">
-              {[...data.runs].reverse().map((r) => <option key={r.run_id} value={r.run_id}>Run of {day(r.run_at)}</option>)}
+              {[...data.runs].reverse().map((r) => <option key={r.run_id} value={r.run_id}>Run of {day(r.run_at)}{r.complete ? "" : " (incomplete)"}</option>)}
             </select>
           )}
           {data && data.engines.length > 1 && <Segmented value={engine} onChange={setEngine} options={[{ value: "all", label: "All engines" }, ...data.engines.map((e) => ({ value: e, label: ENGINE_LABEL[e] ?? e }))]} />}
@@ -69,8 +69,17 @@ export default function AiVisibility() {
                   {prev != null && engine === "all" && !run && <div className="mb-2"><Delta value={Math.round(((brandShare?.share ?? 0) - prev) * 100)} suffix=" pts" /></div>}
                 </div>
                 <p className="mt-2 text-[13px] leading-relaxed text-ink-2">
-                  of AI answers mention {brand.name}{brandShare?.avg_rank ? <>, at average position <b className="text-ink tnum">#{brandShare.avg_rank.toFixed(1)}</b></> : null}.
+                  of AI answers mention {brand.name}{brandShare?.avg_rank ? <>, at average position <b className="text-ink tnum">#{brandShare.avg_rank.toFixed(1)}</b> among tracked vendors</> : null}.
                 </p>
+                {data.latest && (
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-ink-3">
+                    Based on {data.latest.measured} answers from one run
+                    {data.latest.errors ? `; ${data.latest.errors} requests failed` : ""}
+                    {data.latest.no_answer ? `; ${data.latest.no_answer} showed no AI answer` : ""}
+                    {data.latest.branded_excluded.length ? `; ${data.latest.branded_excluded.length} questions naming a vendor left out` : ""}.
+                    {!data.latest.complete && <span className="text-high"> Incomplete run: not comparable with others.</span>}
+                  </p>
+                )}
                 <div className="mt-5 grid grid-cols-3 gap-2 text-center">
                   <MiniStat label="Rank vs field" value={brandRankAmong ? `${brandRankAmong}/${share.length}` : "-"} />
                   <MiniStat label="Top-3 mentions" value={brandShare?.top3 ?? 0} />

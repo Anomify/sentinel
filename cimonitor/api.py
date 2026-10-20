@@ -242,9 +242,9 @@ def visibility(run_id: str | None = None):
 @app.get("/api/ai/answers")
 def answers(question_id: str, run_id: str | None = None):
     with db.connect() as con:
-        if not run_id:
-            r = con.execute("SELECT run_id FROM ai_results ORDER BY run_at DESC LIMIT 1").fetchone()
-            run_id = r[0] if r else None
+        if not run_id:  # the same run the visibility page shows: the latest complete one
+            runs = insights.ai_runs(con, len(cfg().questions))
+            run_id = ([r for r in runs if r["complete"]] or runs or [{"run_id": None}])[-1]["run_id"]
         return db.rows(con.execute("SELECT * FROM ai_results WHERE run_id=? AND question_id=? ORDER BY engine", (run_id, question_id)))
 
 
