@@ -48,6 +48,8 @@ def main(argv=None):
     sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
     sv.add_argument("--no-scheduler", action="store_true")
     sub.add_parser("daemon", help="scheduler only (no web)")
+    ev = sub.add_parser("evaluate", help="how useful each kind of signal has been, from Useful / Not useful ratings")
+    ev.add_argument("--days", type=int, default=90)
     ws = sub.add_parser("workspace", help="create a workspace (multi-tenant)")
     ws.add_argument("slug")
     ws.add_argument("name")
@@ -81,6 +83,19 @@ def main(argv=None):
             out = [jobs.run_job(j) for j in order]
         elif a.cmd == "daemon":
             return jobs.daemon()
+        elif a.cmd == "evaluate":
+            from . import db, insights
+            with db.connect() as con:
+                r = insights.evaluate(con, a.days)
+            print(f"{r['rated_moves']} rated moves in the last {a.days} days\n")
+            print(f"{'signal kind':40} {'rated':>6} {'useful':>7}")
+            for k in r["by_kind"]:
+                print(f"{k['kind']:40} {k['rated']:>6} {k['useful_rate']:>7.0%}")
+            print(f"\n{'week':10} {'top moves':>9} {'rated':>6} {'useful':>7}")
+            for w in r["weekly_top"]:
+                print(f"{w['week']:10} {w['top']:>9} {w['rated']:>6} {w['useful']:>7}")
+            print("\nKinds rated mostly not useful are candidates for a lower severity (see the RULES in their collector).")
+            return
         elif a.cmd == "workspace":
             out = {"slug": a.slug, "token": tenancy.create(a.slug, a.name), "note": "store this token; it is shown once"}
         elif a.cmd == "demo":

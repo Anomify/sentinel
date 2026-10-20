@@ -212,14 +212,40 @@ def launch_scores(cfg: Config, con) -> dict:
     return {c.id: db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "n": 0, "kinds": {}} for c in cfg.competitors}
 
 
+def evaluate(con, days: int = 90, top: int = 10) -> dict:
+    """How well the current rules pick what readers found useful, from ratings in the Signals drawer.
+    by_kind: usefulness per module/kind (where a severity rule may be too high or too low).
+    weekly_top: for each week, how many of the overview's top-N moves (by today's ranking) were rated useful."""
+    moves = [m for m in events(con, days, limit=100000) if m.get("rating")]
+    by_kind: dict[str, Counter] = defaultdict(Counter)
+    for m in moves:
+        by_kind[f"{m['module']}/{m['kind']}"]["useful" if m["rating"] > 0 else "not_useful"] += 1
+    kinds = sorted(({"kind": k, **v, "rated": sum(v.values()), "useful_rate": round(v["useful"] / sum(v.values()), 2)}
+                    for k, v in by_kind.items()), key=lambda r: (r["useful_rate"], -r["rated"]))
+    weeks: dict[str, list[dict]] = defaultdict(list)
+    for m in events(con, days, limit=100000):
+        weeks[datetime.fromisoformat(m["detected_at"]).strftime("%G-W%V")].append(m)
+    weekly = []
+    for wk, ms in sorted(weeks.items()):
+        picked = sorted(ms, key=lambda x: -SEV_WEIGHT.get(x["severity"], 0))[:top]
+        rated = [m for m in picked if m.get("rating")]
+        weekly.append({"week": wk, "top": len(picked), "rated": len(rated), "useful": sum(m["rating"] > 0 for m in rated)})
+    return {"rated_moves": len(moves), "by_kind": kinds, "weekly_top": weekly}
+
+
+def moves_score(moves: list[dict]) -> int:
+    """Who's moving: consequential moves first. One high or critical move outranks any number of medium ones, and
+    medium ones break ties; low-severity activity (posts, page tweaks) doesn't rank anyone. Moves are stories, so ten
+    reports of one funding round count once."""
+    return 1000 * sum(m["severity"] in ("critical", "high") for m in moves) + sum(m["severity"] == "medium" for m in moves)
+
+
 def overview(cfg: Config, con, days=7) -> dict:
     ev = events(con, days, limit=2000)
     # The previous period is measured exactly like this one (same filters, same weights) so deltas compare like with like.
     prev = group_stories(db.rows(con.execute(
         "SELECT * FROM events WHERE detected_at >= ? AND detected_at < ? AND severity != 'noise' ORDER BY detected_at DESC, id DESC",
         (since(days * 2), since(days)))))
-    prev_posts = Counter(r["competitor"] for r in db.rows(con.execute(
-        "SELECT competitor FROM posts WHERE first_seen >= ? AND first_seen < ?", (since(days * 2), since(days)))))
     # The overview ranks and counts competitors only: our own activity ("(us)") is shown elsewhere, not in "Who's moving".
     rivals = {c.id for c in cfg.competitors if c.tier != "self"}
     ev = [x for x in ev if x["competitor"] in rivals]
@@ -232,8 +258,8 @@ def overview(cfg: Config, con, days=7) -> dict:
         if c.id not in rivals:
             continue
         mine = [x for x in ev if x["competitor"] == c.id]
-        heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in mine) + 1.5 * sum(p["competitor"] == c.id for p in ps)
-        prev_heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in prev if x["competitor"] == c.id) + 1.5 * prev_posts[c.id]
+        heat = moves_score(mine)
+        prev_heat = moves_score([x for x in prev if x["competitor"] == c.id])
         sov = next((s for s in vis["share"] if s["id"] == c.id), None)
         comp.append({"id": c.id, "name": c.name, "color": c.color, "tier": c.tier, "changes": len(mine),
                      "critical": sum(x["severity"] in ("critical", "high") for x in mine),
@@ -241,18 +267,16 @@ def overview(cfg: Config, con, days=7) -> dict:
                      "heat_delta": round(heat - prev_heat, 1), "ai_share": sov["share"] if sov else None,
                      "launch": launch[c.id].get("n", 0), "latest": mine[0] if mine else None,
                      "modules": dict(Counter(MODULE_LABEL.get(x["module"], x["module"]) for x in mine))})
-    comp.sort(key=lambda x: -x["heat"])
+    comp.sort(key=lambda x: (-x["heat"], -x["changes"]))
     span = max(days * 2, 28)
     start = datetime.now(timezone.utc).date() - timedelta(days=span - 1)
     buckets = {(start + timedelta(d)).isoformat(): defaultdict(float) for d in range(span)}
-    for x in db.rows(con.execute("SELECT competitor, detected_at, severity FROM events WHERE detected_at >= ?", (start.isoformat(),))):
+    # Activity chart: one point per move by severity (stories, not reports; posts appear as their own low-severity moves).
+    for x in group_stories(db.rows(con.execute("SELECT * FROM events WHERE detected_at >= ? AND severity != 'noise' "
+                                               "ORDER BY detected_at DESC, id DESC", (start.isoformat(),)))):
         b = buckets.get(x["detected_at"][:10])
         if b is not None:
             b[x["competitor"]] += SEV_WEIGHT.get(x["severity"], 1)
-    for p in db.rows(con.execute("SELECT competitor, first_seen FROM posts WHERE first_seen >= ?", (start.isoformat(),))):
-        b = buckets.get(p["first_seen"][:10])
-        if b is not None:
-            b[p["competitor"]] += 1.5
     brand = next((s for s in vis["share"] if s["id"] == "__brand__"), None)
     last_run = db.row(con.execute("SELECT * FROM runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1").fetchone())
     n_facts = con.execute("SELECT COUNT(*) FROM facts WHERE removed_at IS NULL").fetchone()[0]

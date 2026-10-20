@@ -780,3 +780,39 @@ def test_a_self_serve_live_demo_is_not_a_sales_motion():
     theirs = conversion_paths('<a href="/request-a-demo">Demo</a><a href="/contact">Talk to sales</a>')
     assert theirs.get("demo") == "Demo" and classify_motion(set(), theirs)["label"] == "Sales-led"
     assert "demo" in conversion_paths('<a href="/x">Book a demo</a>')
+
+
+# ── Ranking by consequence; ratings ──────────────────────────────────────────
+def test_one_consequential_move_outranks_a_lot_of_activity():
+    from cimonitor import db, facts, insights
+    c = cfg()
+    busy, quiet = [x.id for x in c.competitors if x.tier != "self"][:2]
+    with db.connect() as con:
+        for i in range(12):
+            facts.emit(con, busy, "content", "blog_post", "low", f"New blog post: tips {i}")
+            con.execute("INSERT INTO posts (competitor,guid,title,url,first_seen) VALUES (?,?,?,?,?)", (busy, f"p{i}", "t", "u", _ago(1)))
+        for i in range(3):
+            facts.emit(con, busy, "pages", "page_change", "medium", f"Copy tweak {i}")
+        facts.emit(con, quiet, "money", "funding_added", "critical", "Funding: Series C · $200M")
+        ov = insights.overview(c, con, 7)
+    assert [x["id"] for x in ov["competitors"]][:2] == [quiet, busy]
+
+
+def test_rating_a_move_rates_every_report_and_feeds_evaluate():
+    from fastapi.testclient import TestClient
+    from cimonitor import db, facts, insights
+    from cimonitor.api import app
+    with db.connect() as con:
+        a = facts.emit(con, "hiddenlayer", "money", "funding_added", "critical", "Funding: Series B · $100M")
+        facts.emit(con, "hiddenlayer", "money", "press_added", "low", "In the news: HiddenLayer raises $100M - Wire")
+        b = facts.emit(con, "hiddenlayer", "radar", "site_page_added", "medium", "New page live: /careers/x")
+    c = TestClient(app)
+    assert c.post(f"/api/events/{a}/rate?value=1").status_code == 200
+    assert c.post(f"/api/events/{b}/rate?value=-1").status_code == 200
+    assert c.post(f"/api/events/{b}/rate?value=5").status_code == 422
+    with db.connect() as con:
+        assert [r[0] for r in con.execute("SELECT rating FROM events ORDER BY id")] == [1, 1, -1]
+        r = insights.evaluate(con, 30)
+    assert r["rated_moves"] == 2
+    assert [(k["kind"], k["useful_rate"]) for k in r["by_kind"]] == [("radar/site_page_added", 0.0), ("money/funding_added", 1.0)]
+    assert r["weekly_top"][0]["useful"] == 1 and r["weekly_top"][0]["rated"] == 2

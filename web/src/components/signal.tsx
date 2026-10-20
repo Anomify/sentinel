@@ -1,4 +1,4 @@
-import { Check, ExternalLink } from "lucide-react";
+import { Check, ExternalLink, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, invalidate, useApi } from "../lib/api";
 import type { SignalEvent } from "../lib/types";
 import { ago, day, host, path } from "../lib/format";
@@ -57,6 +57,14 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
   const meta = useMeta();
   const toast = useToast();
   const ready = e && e.id === id;
+  // Ratings are how ranking rules get judged: `sentinel evaluate` reports usefulness per kind of signal.
+  const rate = async (value: number) => {
+    if (!e) return;
+    const next = e.rating === value ? 0 : value;
+    await api(`/api/events/${e.id}/rate?value=${next}`, { method: "POST" });
+    toast({ title: next === 1 ? "Rated useful" : next === -1 ? "Rated not useful" : "Rating cleared" });
+    invalidate();
+  };
   const ack = async () => {
     if (!e) return;
     await api(`/api/events/${e.id}/ack?value=${!e.acknowledged}`, { method: "POST" });
@@ -85,6 +93,8 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
             </div>
             <div className="mt-5 flex gap-2">
               <Button variant="outline" size="sm" onClick={ack}><Check size={13} />{e.acknowledged ? "Mark unread" : "Mark reviewed"}</Button>
+              <Button variant={e.rating === 1 ? "primary" : "ghost"} size="sm" onClick={() => rate(1)} aria-pressed={e.rating === 1}><ThumbsUp size={13} />Useful</Button>
+              <Button variant={e.rating === -1 ? "primary" : "ghost"} size="sm" onClick={() => rate(-1)} aria-pressed={e.rating === -1}><ThumbsDown size={13} />Not useful</Button>
               {e.evidence?.[0]?.url && <Button variant="ghost" size="sm" onClick={() => window.open(e.evidence[0].url!, "_blank")}><ExternalLink size={13} />Open source</Button>}
             </div>
           </div>

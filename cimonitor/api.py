@@ -117,6 +117,18 @@ def ack_event(eid: int, value: bool = True):
     return {"ok": True}
 
 
+@app.post("/api/events/{eid}/rate")
+def rate_event(eid: int, value: int = Query(..., ge=-1, le=1)):
+    """Useful (1) / not useful (-1) / clear (0), for every report of the move. Feeds `sentinel evaluate`."""
+    with db.connect() as con:
+        e = db.row(con.execute("SELECT id, competitor, story FROM events WHERE id=?", (eid,)).fetchone())
+        if not e:
+            raise HTTPException(404)
+        for i in [r["id"] for r in insights.story_events(con, e)] or [eid]:
+            con.execute("UPDATE events SET rating=? WHERE id=?", (value or None, i))
+    return {"ok": True}
+
+
 @app.get("/api/changes")
 def list_changes(days: int = 30, competitor: str | None = None, severity: list[str] | None = Query(None)):
     with db.connect() as con:
