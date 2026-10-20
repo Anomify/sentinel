@@ -67,7 +67,7 @@ export default function Messaging() {
 
   return (
     <div>
-      <PageHeader eyebrow="Messaging" title="Messaging" sub="Everything each company publishes, on its blog and its social channels, in one feed. Filter by company, channel, content type and period, or search the text." />
+      <PageHeader eyebrow="Content & social" title="Content & social" sub="Everything each company publishes, on its blog and its social channels, in one feed. Filter by company, channel, content type and period, or search the text." />
       {!data ? <Skeleton className="h-[600px] rounded-2xl" /> : (
         <div className="space-y-5">
           <div className="grid gap-4 xl:grid-cols-[1fr_380px]">

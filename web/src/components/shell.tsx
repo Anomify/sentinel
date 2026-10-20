@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Command } from "cmdk";
 import {
-  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, FileSearch, Globe, Layers, LayoutGrid, Loader2, Mail, MessagesSquare, Package,
+  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, Globe, Layers, LayoutGrid, Loader2, Mail, MessagesSquare, Package,
   Menu, Network, Newspaper, Play, Rocket, Search, Settings, ShieldCheck, Swords, X,
 } from "lucide-react";
 import { api, invalidate, runJob, setWorkspace, workspace } from "../lib/api";
@@ -58,9 +58,9 @@ const JOB_HELP: Record<string, string> = {
   subdomains: "New subdomains and certificates (Infrastructure)", dns: "Email tools and DNS verifications (Infrastructure)",
   stack: "Marketing tools and tracking (GTM stack)", pages: "Homepage, pricing and messaging changes (Positioning)",
   radar: "Staging sites, new pages, new repos (Launch radar)", product: "New products, release notes, launches (Product launches)",
-  social: "LinkedIn, X, YouTube, Medium, Bluesky, Hacker News (Messaging)",
+  social: "LinkedIn, X, YouTube, Medium, Bluesky, Hacker News (Content & social)",
   hiring: "Open roles and first-of-their-kind hires (Hiring)", money: "Funding, partners, marketplaces, press (Partners & money)",
-  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Messaging)", ai: "What AI search engines say (AI visibility). Uses API quota.",
+  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Content & social)", ai: "What AI search engines say (AI visibility). Uses API quota.",
   deepdive: "Rewrites every deep dive from the latest data (Deep dives)", digest: "Saves a new weekly digest (Digest)",
 };
 // Count new findings in a run's stats, wherever the collector reported them.
@@ -105,27 +105,29 @@ export function JobProvider({ children }: { children: ReactNode }) {
 }
 
 /* ── Navigation ─────────────────────────────────────────────────────────────── */
+// Grouped by the question each page answers. Every page stays reachable; reference data sits below the topics.
 export const NAV: { group: string; items: { to: string; label: string; icon: any }[] }[] = [
   { group: "Intelligence", items: [
     { to: "/", label: "Overview", icon: LayoutGrid },
     { to: "/signals", label: "Signals", icon: Activity },
-    { to: "/deep-dives", label: "Deep dives", icon: FileSearch },
-    { to: "/competitors", label: "Competitors", icon: Swords },
+    { to: "/competitors", label: "Competitors", icon: Swords },  // each one's deep dive opens from here
   ] },
-  { group: "Modules", items: [
-    { to: "/stack", label: "GTM stack", icon: Layers },
-    { to: "/infrastructure", label: "Infrastructure", icon: Network },
-    { to: "/radar", label: "Pre-launch radar", icon: Rocket },
+  { group: "By topic", items: [
     { to: "/product", label: "Product launches", icon: Package },
-    { to: "/messaging", label: "Messaging", icon: MessagesSquare },
+    { to: "/positioning", label: "Positioning", icon: Newspaper },
+    { to: "/messaging", label: "Content & social", icon: MessagesSquare },
+    { to: "/ai", label: "AI visibility", icon: Bot },
     { to: "/hiring", label: "Hiring", icon: Briefcase },
     { to: "/money", label: "Partners & money", icon: BadgeDollarSign },
-    { to: "/positioning", label: "Positioning", icon: Newspaper },
-    { to: "/ai", label: "AI visibility", icon: Bot },
+    { to: "/radar", label: "Pre-launch radar", icon: Rocket },
+  ] },
+  { group: "Reference", items: [
+    { to: "/stack", label: "GTM stack", icon: Layers },
+    { to: "/infrastructure", label: "Infrastructure", icon: Network },
   ] },
   { group: "System", items: [
-    { to: "/coverage", label: "Coverage", icon: ShieldCheck },
     { to: "/digest", label: "Digest", icon: Mail },
+    { to: "/coverage", label: "Coverage", icon: ShieldCheck },
     { to: "/settings", label: "Settings", icon: Settings },
   ] },
 ];

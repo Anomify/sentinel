@@ -689,3 +689,11 @@ def test_recommendations_carry_the_date_of_what_we_know_about_ourselves():
     assert c.brand.profile.get("profile_as_of")
     assert c.brand.profile["profile_as_of"] in llm.brand_context(c)
     assert deepdive.build(c, next(x for x in c.competitors if x.tier != "self"))["profile_as_of"] == c.brand.profile["profile_as_of"]
+
+
+def test_partner_extraction_skips_menus_and_customer_logos():
+    from cimonitor.collectors.money import partner_names
+    html = ('<nav><img alt="AI Agent Security Summit navigation item"><img alt="Academy"></nav>'
+            '<img alt="AISPM navigation item"><img alt="Alice client logo of Amazon Web Services">'
+            '<section><img alt="Nvidia partner"><img alt="Optiv logo"></section><footer><img alt="LinkedIn"></footer>')
+    assert partner_names(html, "https://www.acme.com/partners") == ["Nvidia", "Optiv"]

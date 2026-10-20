@@ -107,7 +107,7 @@ export function DeepDive() {
   return (
     <div>
       <motion.div {...fade} className="mb-10">
-        <div className="eyebrow mb-4"><Link to="/deep-dives" className="hover:text-ink">Deep dives</Link> / {e.domains[0]}</div>
+        <div className="eyebrow mb-4"><Link to="/competitors" className="hover:text-ink">Competitors</Link> / {e.domains[0]}</div>
         <div className="flex flex-wrap items-end justify-between gap-5">
           <div className="flex items-center gap-4">
             <Monogram id={id} size={52} />

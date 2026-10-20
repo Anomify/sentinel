@@ -71,14 +71,25 @@ SKIP_HOSTS = re.compile(r"(linkedin|twitter|x\.com|facebook|youtube|instagram|gi
 ICONISH = re.compile(r"^[A-Z][a-z]+(?:[A-Z][a-z]+){0,2}$")  # "ShieldCheck", "ArrowRight" (UI icon sets)
 
 
+# Alt text that names something other than a partner: menu entries, customer logos, people, awards.
+NOT_A_PARTNER = re.compile(r"navigation item|menu item|nav item|\bclient\b|\bcustomer|testimonial|headshot|avatar|award|badge", re.I)
+
+
 def partner_names(html: str, page_url: str = "") -> list[str]:
     """Names from logo alts, logo filenames and outbound partner links (alt text is often missing)."""
     soup = BeautifulSoup(html, "html.parser")
+    # Site chrome isn't a partner list: menus, headers and footers carry product, page and social icons.
+    for chrome in soup.find_all(["nav", "header", "footer"]):
+        chrome.decompose()
     names, trusted = set(), set()
     own = (urlparse(page_url).hostname or "").removeprefix("www.")
     for img in soup.find_all("img"):
-        alt = re.sub(r"\s*(logo|icon|image)\s*$", "", (img.get("alt") or "").strip(), flags=re.I)
-        alt = re.sub(r"^(logo of|logo)\s+", "", alt, flags=re.I).strip(" -|")
+        raw = (img.get("alt") or "").strip()
+        if NOT_A_PARTNER.search(raw):
+            continue
+        alt = re.sub(r"\s*(logo|icon|image)\s*$", "", raw, flags=re.I)
+        alt = re.sub(r"^(logo of|logo)\s+", "", alt, flags=re.I)
+        alt = re.sub(r"\s+partner\s*$", "", alt, flags=re.I).strip(" -|")  # "Nvidia partner" → "Nvidia"
         if 2 <= len(alt) <= 40 and not GENERIC.match(alt) and not re.search(r"\.(png|svg|jpe?g|webp)$", alt, re.I):
             trusted.add(alt)
             continue
@@ -263,7 +274,10 @@ def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], 
 
 
 RULES = {
-    "partner": Rule(severity="medium", title_add=lambda f: f"New partner listed: {f.label}", title_remove=lambda r: f"Partner removed: {r['label']}"),
+    # Logo extraction is too imprecise to alert on (in live data most "partners" were menu items or customer logos):
+    # partners are recorded and counted, but adding or dropping one is not a signal until precision is proven.
+    "partner": Rule(severity="medium", on_add=False, on_remove=False, title_add=lambda f: f"New partner listed: {f.label}",
+                    title_remove=lambda r: f"Partner removed: {r['label']}"),
     "marketplace": Rule(severity="high", title_add=lambda f: f"New marketplace listing: {f.label}",
                         so_what=lambda f: "Marketplace listings let buyers burn committed cloud spend, a big enterprise procurement accelerator."),
     "partner_program": Rule(severity="high", title_add=lambda f: f"Partner programme signal: {f.label}",
