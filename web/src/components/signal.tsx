@@ -15,7 +15,8 @@ const HIDDEN_DATA = ["kind", "key", "analysed_by", "so_what_by", "rule_severity"
 /** Who wrote the interpretation: the observed change is a fact, "why it matters" is not. */
 function interpretedBy(e: SignalEvent): string {
   const by = e.data?.analysed_by;
-  return by ? `AI interpretation (${by === "claude" ? "Claude" : by === "gemini" ? "Gemini" : by})` : "rule of thumb for this kind of change";
+  if (!by) return "rule of thumb for this kind of change";
+  return by === "claude" ? "AI interpretation (Claude)" : by === "gemini" ? "AI interpretation (Gemini)" : "AI interpretation";
 }
 
 /** The event's own date when it differs from the day Sentinel found it (late-discovered news, old releases). */

@@ -844,3 +844,13 @@ def test_repeated_samples_show_the_spread_and_majority_decides_the_grid(monkeypa
     assert v["latest"]["samples"] == 3 and v["spread"]["__brand__"] == {"min": 0.0, "max": 1.0}
     q1 = next(m for m in v["matrix"] if m["id"] == "q01")
     assert q1["cells"]["hiddenlayer"]["perplexity"] == 1 and q1["cells"]["__brand__"]["perplexity"] == 2  # named in 2 of 3
+
+
+def test_old_page_change_interpretations_are_labelled_as_ai():
+    from cimonitor import cleanup, db, facts
+    with db.connect() as con:
+        eid = facts.emit(con, "hiddenlayer", "pages", "page_change", "high", "Hero rewritten", so_what="They now lead with agents",
+                         data={"category": "messaging"})
+        cleanup.page_change_provenance(con)
+        d = db.row(con.execute("SELECT data FROM events WHERE id=?", (eid,)).fetchone())["data"]
+    assert d["analysed_by"] == "ai" and d["category"] == "messaging"

@@ -62,7 +62,7 @@ export default function Overview() {
                     <Monogram id={c.id} size={28} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13.5px] text-ink">{c.name}</div>
-                      <div className="text-[11.5px] text-ink-3 tnum">{c.changes} signals{c.critical ? <span className="text-high"> · {c.critical} high</span> : null}{c.launch >= 3 ? ` · ${c.launch} pre-launch indicators` : ""}</div>
+                      <div className="text-[11.5px] text-ink-3 tnum">{c.changes} {c.changes === 1 ? "move" : "moves"}{c.critical ? <span className="text-high"> · {c.critical} high</span> : null}{c.launch >= 3 ? ` · ${c.launch} pre-launch indicators` : ""}</div>
                     </div>
                     <Sparkline values={data.timeline.slice(-14).map((d) => Number(d[c.id]) || 0)} color={c.color} width={56} height={20} />
                   </Link>

@@ -159,6 +159,17 @@ def ai_text_dashes(con) -> int:
     return n
 
 
+def page_change_provenance(con) -> int:
+    """Page-change interpretations are only ever written by the AI analyst; ones stored before the analyst was
+    recorded are marked as AI-written, so they're never shown as a rule of thumb."""
+    n = 0
+    for r in db.rows(con.execute("SELECT id, data FROM events WHERE module='pages' AND so_what IS NOT NULL")):
+        d = _data(r["data"])
+        if not d.get("analysed_by"):
+            con.execute("UPDATE events SET data=? WHERE id=?", (json.dumps({**d, "analysed_by": "ai"}), r["id"])); n += 1
+    return n
+
+
 def story_keys(con) -> int:
     """Events stored before stories existed get their story key, so old reports group like new ones."""
     from .facts import story_key
@@ -178,7 +189,8 @@ def run() -> dict:
                          ("redated", lambda: redate_events(con)), ("off_voice_comments", lambda: off_voice_comments(con)),
                          ("per_headline_deals", lambda: per_headline_deals(con)),
                          ("removed_competitors", lambda: removed_competitors(con, cfg)), ("duplicate_digests", lambda: duplicate_digests(con)),
-                         ("stories", lambda: story_keys(con)), ("ai_text_dashes", lambda: ai_text_dashes(con))):
+                         ("stories", lambda: story_keys(con)), ("ai_text_dashes", lambda: ai_text_dashes(con)),
+                         ("page_change_provenance", lambda: page_change_provenance(con))):
             try:
                 out[name] = fn()
             except Exception as e:  # a repair must never stop the app
