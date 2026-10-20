@@ -105,13 +105,13 @@ def render_html(d: dict) -> str:
 
     def kpi(label, val, sub=""):
         return (f'<td style="padding:0 20px 0 0;width:25%;vertical-align:top">'
-                f'<div style="{t(11, "#8a8a93", "letter-spacing:.08em;text-transform:uppercase")}">{label}</div>'
+                f'<div style="{t(11, "#6b6b73", "letter-spacing:.08em;text-transform:uppercase")}">{label}</div>'
                 f'<div style="{t(30, "#16161a", "letter-spacing:-.02em;margin-top:6px;line-height:1")}">{val}</div>'
-                f'<div style="{t(12, "#8a8a93", "margin-top:6px")}">{sub}</div></td>')
+                f'<div style="{t(12, "#6b6b73", "margin-top:6px")}">{sub}</div></td>')
 
     rows = "".join(
         f'<tr><td style="padding:18px 0;border-top:1px solid #ececef">'
-        f'<div style="{t(12, "#8a8a93")}"><span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:{SEV_COLOR.get(c["severity"], "#999")};margin-right:8px;vertical-align:middle"></span>'
+        f'<div style="{t(12, "#6b6b73")}"><span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:{SEV_COLOR.get(c["severity"], "#999")};margin-right:8px;vertical-align:middle"></span>'
         f'{_e(d["names"].get(c["competitor"]))} · {_e(c["kind"])}{(" · " + _e(c.get("confidence"))) if c.get("confidence") else ""}'
         f'{(" · happened " + _e(c["occurred"][:10])) if c.get("occurred") else ""}'
         f'{(" · " + str(c["reports"]) + " reports") if c.get("reports", 1) > 1 else ""}</div>'
@@ -119,10 +119,10 @@ def render_html(d: dict) -> str:
         + (f'<div style="{t(14, "#4a4a52", "margin-top:4px")}">{_e(c["so_what"] or c["summary"])}</div>' if (c.get("so_what") or c.get("summary")) else "")
         + (f'<div style="{t(13, "#5b45b8", "margin-top:6px")}">→ {_e(c["action"])}</div>' if c.get("action") else "")
         + "</td></tr>" for c in d["changes"][:12]) or \
-        f'<tr><td style="{t(14, "#8a8a93", "padding:12px 0")}">No material moves this period.</td></tr>'
+        f'<tr><td style="{t(14, "#6b6b73", "padding:12px 0")}">No material moves this period.</td></tr>'
 
     posts = "".join(f'<li style="margin:0 0 8px">{_e(d["names"].get(p["competitor"]))}, <a href="{_e(p["url"])}" style="color:#16161a">{_e(p["title"])}</a></li>'
-                    for p in d["posts"][:8]) or '<li style="color:#8a8a93">No new posts.</li>'
+                    for p in d["posts"][:8]) or '<li style="color:#6b6b73">No new posts.</li>'
     bars = ""
     for s in sorted(d["share"], key=lambda s: -s["share"]):
         pct = round(s["share"] * 100)
@@ -136,7 +136,7 @@ def render_html(d: dict) -> str:
     gaps = "".join(f'<li style="margin:0 0 6px">{_e(g["text"])}</li>' for g in d["gaps"])
     tldr = "".join(f'<li style="margin:0 0 10px">{_e(x)}</li>' for x in b.get("tldr", []))
     watch = "".join(f'<li style="margin:0 0 6px">{_e(x)}</li>' for x in b.get("watch_next", []))
-    sec = lambda title: f'<div style="{t(11, "#8a8a93", "letter-spacing:.1em;text-transform:uppercase;margin:40px 0 10px")}">{title}</div>'  # noqa: E731
+    sec = lambda title: f'<div style="{t(11, "#6b6b73", "letter-spacing:.1em;text-transform:uppercase;margin:40px 0 10px")}">{title}</div>'  # noqa: E731
     ul = lambda inner, size=14: f'<ul style="{t(size, "#2a2a30", "padding-left:18px;margin:0")}">{inner}</ul>'  # noqa: E731
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
@@ -144,10 +144,10 @@ def render_html(d: dict) -> str:
 <body style="margin:0;background:#f6f6f4;padding:40px 14px">
 <table role="presentation" width="100%" style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ececef;border-radius:16px">
 <tr><td style="padding:40px 44px 8px">
-  <div style="{t(12, "#8a8a93", "letter-spacing:.12em;text-transform:uppercase")}">Sentinel · {_e(d['title'])}</div>
+  <div style="{t(12, "#6b6b73", "letter-spacing:.12em;text-transform:uppercase")}">Sentinel · {_e(d['title'])}</div>
   <div style="{t(26, "#16161a", "letter-spacing:-.02em;line-height:1.25;margin-top:14px")}">{_e(b.get('headline'))}</div>
-  <div style="{t(13, "#8a8a93", "margin-top:8px")}">{period}</div>
-  <div style="{t(12, "#8a8a93" if (d.get('health') or {}).get('status', 'ok') == 'ok' else "#b4470b", "margin-top:4px")}">{_e(health_note(d.get('health')))}</div>
+  <div style="{t(13, "#6b6b73", "margin-top:8px")}">{period}</div>
+  <div style="{t(12, "#6b6b73" if (d.get('health') or {}).get('status', 'ok') == 'ok' else "#b4470b", "margin-top:4px")}">{_e(health_note(d.get('health')))}</div>
 </td></tr>
 <tr><td style="padding:28px 44px 44px">
   <table role="presentation" width="100%"><tr>
@@ -165,7 +165,7 @@ def render_html(d: dict) -> str:
   {(sec('Watch next') + ul(watch)) if watch else ''}
   <div style="margin-top:40px"><a href="{_e(d['app_url'])}" style="{t(14, "#ffffff", "display:inline-block;background:#16161a;padding:12px 22px;border-radius:999px;text-decoration:none")}">Open Sentinel</a></div>
 </td></tr></table>
-<div style="{t(12, "#8a8a93", "text-align:center;margin-top:18px")}">Passive, public-source intelligence for {_e(d['brand'])}</div>
+<div style="{t(12, "#6b6b73", "text-align:center;margin-top:18px")}">Passive, public-source intelligence for {_e(d['brand'])}</div>
 </body></html>"""
 
 

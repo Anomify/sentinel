@@ -21,15 +21,15 @@
   --line-strong: #dcdcd7;
   --ink: #111113;
   --ink-2: #57575e;
-  --ink-3: #96969d;
+  --ink-3: #6b6b73;   /* secondary text: ≥4.5:1 on every surface (was #96969d, 2.6–2.9:1) */
   --accent: #6250d6;
   --accent-ink: #4f3fbf;
   --accent-soft: rgba(98, 80, 214, 0.08);
-  --crit: #d93036;
-  --high: #e5600f;
-  --med: #b88200;
-  --low: #9a9aa0;
-  --good: #1f8f56;
+  --crit: #c4262c;
+  --high: #b8500b;
+  --med: #8a6200;
+  --low: #6e6e76;
+  --good: #1a7a49;  /* status colours are also used as text: all ≥4.4:1 on every surface */
   color-scheme: light;
 }
 
