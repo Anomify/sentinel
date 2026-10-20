@@ -490,5 +490,11 @@ if DIST.exists():
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str):
-        f = DIST / path
-        return FileResponse(f if path and f.is_file() else DIST / "index.html")
+        return FileResponse(spa_file(DIST, path))
+
+
+def spa_file(root: Path, path: str) -> Path:
+    """A file inside root, or index.html. Encoded ../ in the URL must never reach files outside the build."""
+    root = root.resolve()
+    f = (root / path).resolve()
+    return f if path and f.is_file() and f.is_relative_to(root) else root / "index.html"

@@ -28,6 +28,19 @@ def test_add_target_validates_and_registers(monkeypatch):
     assert ent["domains"] == ["newco.ai"] and ent["source"] == "ui"
 
 
+def test_spa_never_serves_files_outside_the_build(tmp_path):
+    from cimonitor.api import spa_file
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("app")
+    (dist / "assets" / "app.js").write_text("js")
+    (tmp_path / ".env").write_text("SECRET=1")
+    assert spa_file(dist, "assets/app.js") == (dist / "assets" / "app.js").resolve()
+    assert spa_file(dist, "settings") == (dist / "index.html").resolve()
+    for p in ("../.env", "assets/../../.env", str(tmp_path / ".env"), "../../../../etc/hostname"):
+        assert spa_file(dist, p) == (dist / "index.html").resolve(), p
+
+
 def test_workspace_requires_its_token():
     from cimonitor import tenancy
     tok = tenancy.create("acme", "Acme")
