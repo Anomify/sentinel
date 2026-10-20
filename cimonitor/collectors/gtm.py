@@ -157,6 +157,10 @@ RULES = {
 def run_one(con, cfg: Config, comp: Entity, caps: list[Capture]) -> dict:
     if not caps:
         return {"skipped": "no captures"}
+    if all(c.error and not c.html for c in caps):  # the site didn't load: nothing to compare against
+        return {"skipped": "no page could be loaded"}
+    kinds = ["container", "tracking_id", "conversion", "gtm_tag", "sgtm", "funnel"]
+    unread = set(kinds) if any(c.error and not c.html for c in caps) else set()
     observed: list[Fact] = []
     gids, served = container_ids(caps)
     page_text = "\n".join((c.html or "") + "\n" + "\n".join(c.requests + c.requests_post) for c in caps)
@@ -170,6 +174,7 @@ def run_one(con, cfg: Config, comp: Entity, caps: list[Capture]) -> dict:
             observed.append(Fact("sgtm", host, f"{host} serves {gid}", {"container": gid, "url": src}, facts.CONFIRMED, e))
         if not data:
             observed.append(Fact("container", gid, gid, {"host": host, "parsed": False}, facts.CONFIRMED, e))
+            unread |= {"gtm_tag", "conversion", "funnel", "tracking_id"}  # its tags weren't read, not deleted
             continue
         observed.append(Fact("container", gid, gid, {"host": host, **data["counts"]}, facts.CONFIRMED, e))
         for t in data["tags"]:
@@ -201,7 +206,7 @@ def run_one(con, cfg: Config, comp: Entity, caps: list[Capture]) -> dict:
     if all_conv:
         observed.append(Fact("funnel", "funnel", funnel_reading(all_conv), {"conversions": sorted(all_conv)}, facts.INFERRED,
                              [ev(None, "inferred from tracked conversion events")]))
-    return facts.sync(con, comp.id, MODULE, observed, ["container", "tracking_id", "conversion", "gtm_tag", "sgtm", "funnel"], RULES)
+    return facts.sync(con, comp.id, MODULE, observed, kinds, RULES, unread=unread)
 
 
 def registrable(host: str) -> str:

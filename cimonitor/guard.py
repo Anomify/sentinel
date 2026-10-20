@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import socket
 import threading
 import time
 from urllib import robotparser
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 UA = "SentinelCI/2.0 (+passive competitive research; respects robots.txt)"
 BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129 Safari/537.36"
 MIN_INTERVAL = 1.5  # seconds between requests to the same host
+MAX_REDIRECTS = 5   # each hop is checked like a new request
 # Official APIs / data services: robots.txt doesn't govern documented API endpoints.
 API_HOSTS = {
     "crt.sh", "api.certspotter.com", "dns.google", "boards-api.greenhouse.io", "api.lever.co", "api.ashbyhq.com",
@@ -74,6 +76,22 @@ def resolve_ips(host: str) -> list[str]:
     return ips
 
 
+def system_ips(host: str) -> list[str]:
+    """What this machine's own resolver returns: the addresses the connection itself will use."""
+    try:
+        return sorted({ai[4][0] for ai in socket.getaddrinfo(host, None)})
+    except (socket.gaierror, UnicodeError):
+        return []
+
+
+def reset_caches() -> None:
+    """Forget resolved addresses, robots.txt rules and DNS answers (including failed lookups)."""
+    from .collectors import dnsq
+    _resolved.clear()
+    _robots.clear()
+    dnsq.clear()
+
+
 def check_host(url: str) -> None:
     u = urlparse(url)
     if u.scheme not in ("http", "https"):
@@ -89,9 +107,14 @@ def check_host(url: str) -> None:
             raise Blocked("private IP literal")
     except ValueError:
         pass
-    ips = resolve_ips(host)
-    if ips and all(is_private(i) for i in ips):
-        raise Blocked("resolves only to private addresses (recorded, never contacted)")
+    # Fail closed: a name that doesn't resolve can't be vetted, and one private address is enough to refuse, since a
+    # connection may land on any of them. Both DNS-over-HTTPS and the local resolver are checked, which narrows (but
+    # can't fully close) the gap between checking a name and connecting to it (DNS rebinding).
+    ips = resolve_ips(host) + system_ips(host)
+    if not ips:
+        raise Blocked("hostname does not resolve")
+    if any(is_private(i) for i in ips):
+        raise Blocked("resolves to a private address (recorded, never contacted)")
 
 
 def robots_allowed(url: str, ua: str = UA) -> bool:
@@ -102,12 +125,12 @@ def robots_allowed(url: str, ua: str = UA) -> bool:
     if base not in _robots:
         rp = robotparser.RobotFileParser()
         try:
-            r = requests.get(base + "/robots.txt", timeout=10, headers={"User-Agent": BROWSER_UA})
+            r = _follow(base + "/robots.txt", timeout=10)
             if r.status_code >= 400:
                 rp = None  # no robots.txt → allowed
             else:
                 rp.parse(r.text.splitlines())
-        except requests.RequestException:
+        except (requests.RequestException, Blocked):
             rp = None
         _robots[base] = rp
     rp = _robots[base]
@@ -142,10 +165,28 @@ _session = requests.Session()
 _session.headers.update({"User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9"})
 
 
+def _follow(url: str, timeout: int = 25, robots: bool = False, **kw) -> requests.Response:
+    """GET that follows redirects itself, checking every hop: a public page must not be able to bounce us to an
+    internal address (169.254.169.254, localhost, the office network)."""
+    for _ in range(MAX_REDIRECTS + 1):
+        r = _session.get(url, timeout=timeout, allow_redirects=False, **kw)
+        if not (r.is_redirect and r.headers.get("location")):
+            return r
+        url = urljoin(url, r.headers["location"])
+        check_host(url)
+        if robots and not robots_allowed(url):
+            raise Blocked("redirect target disallowed by robots.txt")
+    raise Blocked("too many redirects")
+
+
 def get(url: str, *, timeout: int = 25, respect_robots: bool = True, **kw) -> requests.Response:
     """Policy-checked GET. Only GET exists here: we never submit forms or POST to websites."""
     permit(url, respect_robots)
-    r = _session.get(url, timeout=timeout, **kw)
+    try:
+        r = _follow(url, timeout=timeout, robots=respect_robots, **kw)
+    except Blocked as b:
+        audit(url, "blocked", f"redirect: {b.reason}")
+        raise
     audit(url, "allowed", f"HTTP {r.status_code}")
     return r
 
@@ -160,7 +201,9 @@ POLICY = [
     ("Passive, public sources only", "GET requests to public pages and documented public APIs. No logins, no form submissions."),
     ("robots.txt respected", "Every website page is checked against robots.txt before it is fetched; disallowed paths are skipped and logged."),
     ("Rate limited", f"At most one request per host every {MIN_INTERVAL:g}s."),
-    ("No private addresses", "Hostnames resolving to internal IPs are recorded as DNS facts and never contacted."),
+    ("No private addresses", "Hostnames resolving to internal IPs are recorded as DNS facts and never contacted. Every redirect "
+                             "hop and every request a loaded page makes (scripts, images, iframes) is checked the same way; "
+                             "names that don't resolve are not contacted."),
     ("Internal tooling is never reached", "Only clearly public-facing hostnames are ever fetched. Names of internal systems (vault, argocd, atlantis, sso, logging…) and environments are recorded from CT/DNS only, even when publicly resolvable."),
     ("No port scanning", "Only default HTTP/HTTPS ports; no service probing."),
     ("Official APIs first", "Certificate Transparency, DNS-over-HTTPS, Greenhouse/Lever/Ashby, GitHub, ad-library APIs."),

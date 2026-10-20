@@ -152,15 +152,36 @@ def enabled_engines(cfg: Config) -> list[tuple[str, str]]:
 
 
 # ── scoring ───────────────────────────────────────────────────────────────────
+PLAIN_WORD = re.compile(r"[A-Z][a-z]+")  # "Alice": also an ordinary name, unlike "HiddenLayer" or "Lakera Guard"
+# Security explainers use stock characters ("Alice sends Bob a message"): those sentences aren't about a vendor.
+PERSONAS = re.compile(r"\b(Bob|Eve|Mallory|Trudy|Charlie)\b")
+
+
+def mentions(e, text: str) -> list[int]:
+    """Positions where the answer names this company. A plain-word name only counts when written as a name
+    (capitalised) and not in a sentence about stock example characters."""
+    plain = {t for t in (re.sub(r"\s*\(.*?\)", "", n).strip() for n in e.names) if PLAIN_WORD.fullmatch(t)}
+    out = []
+    for m in e.mention_regex().finditer(text or ""):
+        word = next((t for t in plain if t.lower() == m.group(1).lower()), None)
+        if word:
+            start = max(text.rfind(c, 0, m.start()) for c in ".!?\n") + 1
+            ends = [i for i in (text.find(c, m.end()) for c in ".!?\n") if i >= 0]
+            sentence = text[start:min(ends) if ends else len(text)]
+            if m.group(1) != word or PERSONAS.search(sentence):
+                continue
+        out.append(m.start())
+    return out
+
+
 def score(cfg: Config, answer: str, cites: list[dict]) -> dict:
     """Per entity: mentioned?, first position in answer, rank among entities, citation count."""
     found = []
     for e in cfg.entities:
-        m = e.mention_regex().search(answer or "")
+        pos = mentions(e, answer or "")
         doms = [c["url"] for c in cites if c.get("url") and
                 any((c.get("domain") or urlparse(c["url"]).netloc).endswith(d) for d in e.domains)]
-        found.append({"id": e.id, "pos": m.start() if m else None, "count": len(e.mention_regex().findall(answer or "")),
-                      "cited": len(doms)})
+        found.append({"id": e.id, "pos": pos[0] if pos else None, "count": len(pos), "cited": len(doms)})
     ranked = sorted((f for f in found if f["pos"] is not None), key=lambda f: f["pos"])
     for i, f in enumerate(ranked, 1):
         f["rank"] = i
@@ -168,7 +189,7 @@ def score(cfg: Config, answer: str, cites: list[dict]) -> dict:
             for f in found}
 
 
-def _one(cfg, run_id, engine, model, q: Question) -> dict:
+def _one(cfg, run_id, engine, model, q: Question, sample: int = 0) -> dict:
     fn = ENGINES[engine][0]
     try:
         answer, cites = fn(model, q.text)
@@ -183,12 +204,12 @@ def _one(cfg, run_id, engine, model, q: Question) -> dict:
             seen.add(c["url"])
             uniq.append(c)
     acc = None
-    if not err and (mentions.get("__brand__") or {}).get("mentioned"):
+    if not err and sample == 0 and (mentions.get("__brand__") or {}).get("mentioned"):  # judge one sample: it costs a model call
         from .. import llm
         acc = llm.judge_accuracy(cfg, q.text, answer)
     return {"run_id": run_id, "run_at": db.now(), "engine": engine, "model": model, "question_id": q.id,
             "question": q.text, "answer": answer, "citations": uniq, "mentions": mentions,
-            "brand_rank": (mentions.get("__brand__") or {}).get("rank"), "error": err, "accuracy": acc}
+            "brand_rank": (mentions.get("__brand__") or {}).get("rank"), "error": err, "accuracy": acc, "sample": sample}
 
 
 def run(cfg: Config, limit: int | None = None) -> dict:
@@ -197,7 +218,10 @@ def run(cfg: Config, limit: int | None = None) -> dict:
         return {"skipped": "no AI engines enabled with API keys (set PERPLEXITY_API_KEY / OPENAI_API_KEY)"}
     run_id = uuid.uuid4().hex[:10]
     qs = cfg.questions[:limit] if limit else cfg.questions
-    jobs = [(e, m, q) for e, m in engines for q in qs]
+    # Answers vary between identical requests: asking each question several times (settings ai.samples) shows how much.
+    # Every sample is a paid request, so this multiplies cost; the default is 1.
+    samples = max(1, int((cfg.settings.get("ai") or {}).get("samples", 1)))
+    jobs = [(e, m, q, s) for e, m in engines for q in qs for s in range(samples)]
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(lambda j: _one(cfg, run_id, *j), jobs))
     with db.connect() as con:

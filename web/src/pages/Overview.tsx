@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
-import { Activity, ArrowRight } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight } from "lucide-react";
 import { useApi } from "../lib/api";
 import type { Overview as OV } from "../lib/types";
 import { ago, day, greeting, pct } from "../lib/format";
@@ -21,10 +21,13 @@ export default function Overview() {
   const { start } = useJobs();
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   const lead = data?.competitors[0];
-  const top = data ? Object.entries(data.launch).sort((a, b) => b[1].probability - a[1].probability)[0] : null;
+  const top = data ? Object.entries(data.launch).filter(([id]) => data.competitors.some((c) => c.id === id)).sort((a, b) => b[1].n - a[1].n)[0] : null;
+  const gaps = data?.health.status === "degraded";
   const headline = !data ? "" : data.kpis.critical
     ? `${data.kpis.critical} high-impact move${data.kpis.critical > 1 ? "s" : ""} this ${days === 7 ? "week" : `${days} days`}.`
-    : data.kpis.changes ? "Steady, nothing high-impact." : data.kpis.facts ? "Baseline recorded. Watching for changes." : "All quiet.";
+    : data.kpis.changes ? "Steady, nothing high-impact."
+    : gaps ? "Quiet, but some collection is failing." // never call it quiet when we may simply not have looked
+    : data.kpis.facts ? "Baseline recorded. Watching for changes." : "All quiet.";
 
   return (
     <div>
@@ -32,13 +35,14 @@ export default function Overview() {
         right={<Segmented value={days} onChange={setDays} options={[{ value: 7, label: "7 days" }, { value: 30, label: "30 days" }, { value: 90, label: "90 days" }]} />} />
       {!data ? <Skel /> : (
         <div className="space-y-5">
+          {gaps && <HealthStrip h={data.health} />}
           <motion.div {...fade}>
             <Card className="grid grid-cols-2 divide-line lg:grid-cols-4 lg:divide-x">
               <Stat className="p-6" label="Signals" value={data.kpis.changes} sub={data.kpis.changes || data.kpis.changes_prev
                 ? <span className="inline-flex items-center gap-1.5"><Delta value={data.kpis.changes - data.kpis.changes_prev} neutral /> vs prior period</span>
                 : `Baseline · ${data.kpis.facts.toLocaleString()} facts on file`} />
               <Stat className="p-6" label="High-impact" value={<span className={data.kpis.critical ? "text-crit" : ""}>{data.kpis.critical}</span>} sub={lead ? `Most active: ${lead.name}` : "-"} />
-              <Stat className="p-6" label="Launch risk" value={pct(data.kpis.launch_max)} sub={top && top[1].probability > 0 ? `${meta.entities.find((e) => e.id === top[0])?.name} · ${top[1].horizon}` : "No launch signals"} />
+              <Stat className="p-6" label="Pre-launch indicators" value={data.kpis.launch_indicators} sub={top && top[1].n > 0 ? `Most: ${meta.entities.find((e) => e.id === top[0])?.name} (${top[1].n}) · 45 days` : "None in 45 days"} />
               <Stat className="p-6" label="AI share of voice" value={pct(data.kpis.ai_share)}
                 sub={data.kpis.ai_share != null ? <span className="inline-flex items-center gap-1.5">{data.kpis.ai_share_prev != null && <Delta value={Math.round((data.kpis.ai_share - data.kpis.ai_share_prev) * 100)} suffix=" pts" />}{data.kpis.ai_gaps} gaps</span> : <Link to="/ai" className="hover:text-ink">Connect engines →</Link>} />
             </Card>
@@ -58,7 +62,7 @@ export default function Overview() {
                     <Monogram id={c.id} size={28} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13.5px] text-ink">{c.name}</div>
-                      <div className="text-[11.5px] text-ink-3 tnum">{c.changes} signals{c.critical ? <span className="text-high"> · {c.critical} high</span> : null}{c.launch >= 0.3 ? ` · launch ${pct(c.launch)}` : ""}</div>
+                      <div className="text-[11.5px] text-ink-3 tnum">{c.changes} {c.changes === 1 ? "move" : "moves"}{c.critical ? <span className="text-high"> · {c.critical} high</span> : null}{c.launch >= 3 ? ` · ${c.launch} pre-launch indicators` : ""}</div>
                     </div>
                     <Sparkline values={data.timeline.slice(-14).map((d) => Number(d[c.id]) || 0)} color={c.color} width={56} height={20} />
                   </Link>
@@ -86,7 +90,7 @@ export default function Overview() {
                 <CardHeader title="Signals by module" />
                 <div className="px-6 pb-6">
                   {Object.keys(data.by_module).length ? (
-                    <BarList fmt={(v) => String(v)} rows={Object.entries(data.by_module).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ id: k, label: k, value: v, color: "var(--ink)" }))} />
+                    <BarList fmt={(v) => String(v)} rows={Object.entries(data.by_module).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ id: k, label: k, value: v, color: "var(--text)" }))} />
                   ) : <div className="py-6 text-center text-[13px] text-ink-3">-</div>}
                 </div>
               </Card>
@@ -121,6 +125,21 @@ export default function Overview() {
         </div>
       )}
       <EventDrawer id={open} onClose={() => setOpen(null)} />
+    </div>
+  );
+}
+
+function HealthStrip({ h }: { h: OV["health"] }) {
+  const parts = [
+    h.failing.length ? `failing: ${h.failing.join(", ")}` : "",
+    h.stale.length ? `overdue: ${h.stale.join(", ")}` : "",
+    h.issues.length ? `not fully read: ${[...new Set(h.issues.map((i) => `${i.name} (${i.label})`))].slice(0, 3).join(", ")}` : "",
+  ].filter(Boolean);
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-amber/12 px-5 py-3 text-[13px] text-ink ring-1 ring-inset ring-amber/30">
+      <AlertTriangle size={14} className="shrink-0 text-high" />
+      <span>Collection gaps: {parts.join(" · ")}. Missing changes here may not mean nothing happened.</span>
+      <Link to="/coverage" className="ml-auto text-[12.5px] text-ink-2 underline-offset-4 hover:text-ink hover:underline">Details</Link>
     </div>
   );
 }

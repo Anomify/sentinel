@@ -49,7 +49,7 @@ export interface Overview {
   days: number;
   kpis: {
     changes: number; critical: number; pricing: number; posts: number; changes_prev: number;
-    ai_share: number | null; ai_share_prev: number | null; ai_gaps: number; pages: number; feeds: number; questions: number; launch_max: number; facts: number;
+    ai_share: number | null; ai_share_prev: number | null; ai_gaps: number; pages: number; feeds: number; questions: number; launch_indicators: number; facts: number;
   };
   competitors: {
     id: string; name: string; color: string; tier: string; changes: number; critical: number; posts: number;
@@ -62,11 +62,23 @@ export interface Overview {
   recent_posts: Post[];
   share: Share[];
   last_run: { job: string; finished_at: string; status: string } | null;
+  health: Health;
+}
+
+/** Whether "nothing changed" can be trusted: module freshness and companies a module couldn't read. */
+export interface Health {
+  status: "ok" | "degraded";
+  modules: { job: string; label: string; spec: string; last_ok: string | null; last_error: string | null; status: "ok" | "stale" | "error" }[];
+  issues: { competitor: string; name: string; job: string; label: string; status: "error" | "partial"; detail: string }[];
+  stale: string[];
+  failing: string[];
 }
 
 export interface Visibility {
-  runs: { run_id: string; run_at: string; answers: number; engines: string }[];
-  latest: { run_id: string; run_at: string } | null;
+  runs: { run_id: string; run_at: string; answers: number; errors: number; questions: number; complete: boolean; engines: string }[];
+  latest: { run_id: string; run_at: string; answers: number; errors: number; complete: boolean; measured: number;
+    no_answer: number; branded_excluded: string[]; samples?: number } | null;
+  spread?: Record<string, { min: number; max: number }>; // share range across repeated samples (settings ai.samples > 1)
   engines: string[];
   share: Share[];
   per_engine: Record<string, Share[]>;
@@ -92,6 +104,10 @@ export interface Evidence { url?: string | null; observed_at?: string; method?: 
 export interface SignalEvent {
   id: number; competitor: string; module: string; kind: string; severity: Severity; title: string; detail: string | null;
   so_what: string | null; confidence: string; evidence: Evidence[]; data: Record<string, any>; detected_at: string;
+  occurred_at?: string | null; // when it happened (article / release date), if known; detected_at is when Sentinel found it
+  rating?: number | null; // 1 useful, -1 not useful (reader's verdict, used by `sentinel evaluate`)
+  related?: number; // reports of the same move this signal stands for (syndicated copies, coverage of one round)
+  reports?: { id: number; title: string; severity: Severity; detected_at: string; occurred_at: string | null; evidence: Evidence[] }[];
   acknowledged: number; change_id: number | null; change?: ChangeDetail;
 }
 
@@ -106,7 +122,9 @@ export interface Finding {
 }
 export interface DeepDive {
   competitor: string; name: string; domain: string; generated_at: string;
+  profile_as_of?: string | null; // date the Hyperfence profile behind every "Vs. us" was last checked
   summary: { label: string; value: string }[]; sections: { id: string; title: string; findings: Finding[] }[];
   counts: Record<string, number>;
 }
-export interface Launch { probability: number; horizon: string; signals: { signal: string; title: string; at: string; weight: number }[]; n: number }
+/** Pre-launch indicators: evidence count and the signals themselves. `probability` is an unvalidated internal score: never show it. */
+export interface Launch { probability: number; signals: { signal: string; title: string; at: string; weight: number }[]; n: number; kinds?: Record<string, number> }

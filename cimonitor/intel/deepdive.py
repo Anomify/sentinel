@@ -183,11 +183,12 @@ def build(cfg: Config, comp: Entity) -> dict:
 
     # ── Radar
     if launch:
-        p = launch.get("probability", 0)
-        out.append(_f("radar", "launch", f"Launch probability {round(p * 100)}%" + (f" · likely within {launch['horizon']}" if p >= 0.3 else ""),
-                      "; ".join(s["signal"] + ": " + s["title"] for s in launch.get("signals", [])[:4]) or "No launch signals in the last 45 days.",
-                      "inferred", [], data=launch, vs_us="A launch looks close. Prepare a response: a blog or changelog post on how Hyperfence handles the same problem, and an updated comparison page." if p >= 0.5 else None,
-                      weight=5 if p >= 0.5 else 1))
+        # Evidence, not a forecast: the count and the signals themselves. No probability or launch date is claimed.
+        n = launch.get("n", 0)
+        out.append(_f("radar", "launch", f"{n} pre-launch indicator{'s' if n != 1 else ''} in the last 45 days" if n else "No pre-launch indicators in the last 45 days",
+                      "; ".join(s["signal"] + ": " + s["title"] for s in launch.get("signals", [])[:4]),
+                      "inferred", [], data=launch, vs_us="Several pre-launch signals at once. Read the evidence; if it points at something we cover, have a post or comparison page ready." if n >= 3 else None,
+                      weight=5 if n >= 3 else 1))
     for s in stg:
         out.append(_f("radar", f"stg:{s['key']}", f"Staging site: {s['key']}", s["value"].get("crawl") or "Public staging mirror monitored for pre-launch pages.",
                       "confirmed", s["evidence"], first_seen=s["first_seen"]))
@@ -213,7 +214,8 @@ def build(cfg: Config, comp: Entity) -> dict:
                       "By function: " + ", ".join(f"{k} {v}" for k, v in fn.most_common()) + ". By region: " + ", ".join(f"{k} {v}" for k, v in reg.most_common()),
                       "confirmed", _ev(boards), weight=3, data={"functions": dict(fn), "regions": dict(reg), "seniority": dict(sen)},
                       vs_us=("They're scaling sales capacity: a slower, demo-gated motion. Lean into ours: free plan, two-minute setup, no calls. Make that contrast explicit in comparison content."
-                             if gtm_share >= 0.5 else "R&D-heavy hiring: product velocity will rise. Watch the radar for launches.")))
+                             if gtm_share >= 0.5 else "R&D-heavy hiring: product velocity will rise. Watch the radar for launches."
+                             if gtm_share <= 0.3 else None)))  # a mixed hiring plan supports neither reading
         senior = [j for j in jobs if j["value"]["seniority"] in ("VP", "C-level", "Head / Director")]
         if senior:
             out.append(_f("hiring", "senior", "Senior hires: " + "; ".join(j["label"] for j in senior[:6]), "", "confirmed", _ev(senior), weight=2))
@@ -333,6 +335,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         log.exception("vs us")
     summary = _summary(comp, out, motion, jobs, funding, launch, stack_tools, subs, mna)
     return {"competitor": comp.id, "name": comp.name, "domain": comp.domain, "generated_at": db.now(),
+            "profile_as_of": (cfg.brand.profile or {}).get("profile_as_of"),
             "summary": summary, "sections": [{"id": s, "title": t, "findings": sorted([f for f in out if f["section"] == s], key=lambda f: -f["weight"])}
                                              for s, t in SECTIONS if any(f["section"] == s for f in out)],
             "counts": Counter(f["confidence"] for f in out)}
@@ -351,7 +354,7 @@ def _summary(comp, out, motion, jobs, funding, launch, tools, subs, mna=()) -> l
     lat = sorted([*funding, *mna], key=lambda f: f["value"].get("date") or "", reverse=True)
     return [
         {"label": "Motion", "value": motion[0]["label"] if motion else "-"},
-        {"label": "Launch probability", "value": f"{round((launch or {}).get('probability', 0) * 100)}%"},
+        {"label": "Pre-launch indicators", "value": str((launch or {}).get("n", 0))},
         {"label": "Open roles", "value": str(len(jobs))},
         {"label": "Latest funding / M&A", "value": (_short(lat[0]["label"], 70) + (f" ({lat[0]['value']['date'][:7]})" if lat[0]["value"].get("date") else "")) if lat else "-"},
         {"label": "GTM tools", "value": str(len(tools))},

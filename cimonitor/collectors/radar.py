@@ -5,13 +5,14 @@
   • Production sitemap diffs: new pages as they go live.
   • Webflow "Last Published" stamps → release cadence.
   • Public GitHub org repos: new repos and push cadence.
-  • Launch probability: combines recent weak signals into one score (inferred).
+  • Pre-launch indicators: recent weak signals, listed with their evidence (no probability or date is claimed).
 """
 from __future__ import annotations
 
 import logging
 import math
 import re
+from collections import Counter
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from urllib.parse import urlparse
@@ -105,7 +106,7 @@ RULES = {
                          so_what=lambda f: "This page exists on their staging site but not on production, an upcoming launch, campaign or pricing change."),
     "site_page": Rule(severity="low", on_remove=True, title_add=lambda f: f"New page live: {f.label}",
                       severity_fn=lambda f: "medium" if not NOISE_PATH.search(f.key) else "low"),
-    "publish": Rule(severity="low", on_remove=False, title_add=lambda f: f"Site republished ({f.value.get('site')})"),
+    "publish": Rule(severity="low", on_remove=False, append_only=True, title_add=lambda f: f"Site republished ({f.value.get('site')})"),
     "repo": Rule(severity="high", title_add=lambda f: f"New public GitHub repo: {f.label}",
                  so_what=lambda f: "New open-source repos often precede product or developer-facing launches."),
 }
@@ -127,6 +128,8 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
         t = _parse_lp(lp)
         if t:
             facts.metric(con, comp.id, MODULE, "publish", t.strftime("%Y-%m-%dT%H:%M"), 1)
+    # Kinds we could not read completely this run: their known facts stay as they are (no false removals).
+    unread = set() if prod else {"site_page", "staging_page"}
     staging_found = 0
     for s in staging_candidates(con, comp):
         try:
@@ -140,6 +143,7 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
                                 facts.CONFIRMED, [ev(s + "/robots.txt", "robots.txt (host exists; crawling disallowed)")]))
             continue
         except Exception:
+            unread |= {"staging_site", "staging_page"}
             continue
         if r.status_code != 200 or "Page not found" in r.text[:3000]:
             continue
@@ -153,18 +157,26 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
             if t:
                 facts.metric(con, comp.id, MODULE, "publish_staging", t.strftime("%Y-%m-%dT%H:%M"), 1)
         spaths = _sitemap(s)
+        if not spaths or not prod:  # without both sitemaps every staging page would look "pre-launch"
+            unread.add("staging_page")
+            continue
         only = sorted(p for p in spaths - prod if not NOISE_PATH.search(p))[:60]
         for p in only:
             obs.append(Fact("staging_page", f"{urlparse(s).hostname}{p}", p, {"staging_url": s + p, "staging": s},
                             facts.CONFIRMED, [ev(s + p, "staging sitemap vs production sitemap diff")]))
     # GitHub
     repos = 0
-    for org in github_orgs(con, comp):
+    orgs = github_orgs(con, comp)
+    if not orgs:
+        unread.add("repo")  # the org link comes from their homepage; a failed fetch must not drop every repo
+    for org in orgs:
         for kind in ("orgs", "users"):
             try:
                 data = guard.get_json(f"https://api.github.com/{kind}/{org}/repos?per_page=100&sort=pushed", respect_robots=False)
             except Exception as e:
                 log.info("github %s/%s: %s", kind, org, e)
+                if kind == "users":  # neither endpoint answered (rate limit, outage)
+                    unread.add("repo")
                 continue
             for rp in data:
                 if rp.get("fork"):
@@ -179,8 +191,8 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
                     facts.metric(con, comp.id, MODULE, f"repo_push:{rp['name']}", pushed, 1)
             break
     kinds = ["site_page", "publish", "staging_site", "staging_page", "repo"]
-    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES)
-    stats.update(prod_pages=len(prod), staging_sites=staging_found, repos=repos)
+    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES, unread=unread)
+    stats.update(prod_pages=len(prod), staging_sites=staging_found, repos=repos, unread=sorted(unread))
     stats["launch"] = launch_score(con, comp)
     return stats
 
@@ -205,7 +217,9 @@ HALF_LIFE_DAYS = 21
 
 def launch_score(con, comp: Entity, window_days: int = 45) -> dict:
     since = datetime.now(timezone.utc).timestamp() - window_days * 86400
-    evts = db.rows(con.execute("SELECT module, kind, title, detected_at, severity, data FROM events WHERE competitor=? AND detected_at>=?",
+    # Age a signal by when it happened, when known (a 3-month-old repo found today is not fresh).
+    evts = db.rows(con.execute("SELECT module, kind, title, COALESCE(occurred_at, detected_at) AS detected_at, severity, data "
+                               "FROM events WHERE competitor=? AND COALESCE(occurred_at, detected_at)>=?",
                                (comp.id, datetime.fromtimestamp(since, timezone.utc).isoformat(timespec="seconds"))))
     p_none, contrib = 1.0, []
     for e in evts:
@@ -220,10 +234,12 @@ def launch_score(con, comp: Entity, window_days: int = 45) -> dict:
                 p_none *= (1 - wt)
                 contrib.append({"signal": why, "title": e["title"], "at": e["detected_at"], "weight": round(wt, 3)})
     p = 1 - p_none
-    contrib.sort(key=lambda c: -c["weight"])
-    kinds = {c["signal"] for c in contrib}
-    horizon = "2–4 weeks" if "new page on staging" in kinds else "4–8 weeks" if p >= 0.3 else "-"
-    out = {"probability": round(p, 3), "horizon": horizon, "signals": contrib[:8], "n": len(contrib)}
+    contrib.sort(key=lambda c: c["at"], reverse=True)
+    # What the product shows is the evidence: how many pre-launch indicators, of which kinds, newest first.
+    # `probability` is an unvalidated heuristic (hand-set weights, never backtested against real launches): it is kept
+    # for history and comparison only and must not be presented as a probability or a launch date.
+    out = {"probability": round(p, 3), "signals": contrib[:8], "n": len(contrib),
+           "kinds": dict(Counter(c["signal"] for c in contrib))}
     facts.metric(con, comp.id, MODULE, "launch_probability", datetime.now(timezone.utc).strftime("%Y-%m-%d"), out["probability"])
     db.set_meta(con, f"launch:{comp.id}", out)
     return out

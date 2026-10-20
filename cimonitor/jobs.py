@@ -9,7 +9,7 @@ import time
 import traceback
 from datetime import datetime, timedelta
 
-from . import config, db, digest, tenancy
+from . import config, db, digest, guard, tenancy
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +86,7 @@ def run_job(name: str, **kw) -> dict:
             return {"status": "already_running"}
         _running[(ws, tag)] = db.now()
     try:
+        guard.reset_caches()  # the server is long-lived: every run must see today's DNS and robots.txt
         cfg = config.load()
         with db.connect() as con:
             rid = db.insert(con, "runs", {"job": tag, "started_at": db.now(), "status": "running"})

@@ -71,14 +71,25 @@ SKIP_HOSTS = re.compile(r"(linkedin|twitter|x\.com|facebook|youtube|instagram|gi
 ICONISH = re.compile(r"^[A-Z][a-z]+(?:[A-Z][a-z]+){0,2}$")  # "ShieldCheck", "ArrowRight" (UI icon sets)
 
 
+# Alt text that names something other than a partner: menu entries, customer logos, people, awards.
+NOT_A_PARTNER = re.compile(r"navigation item|menu item|nav item|\bclient\b|\bcustomer|testimonial|headshot|avatar|award|badge", re.I)
+
+
 def partner_names(html: str, page_url: str = "") -> list[str]:
     """Names from logo alts, logo filenames and outbound partner links (alt text is often missing)."""
     soup = BeautifulSoup(html, "html.parser")
+    # Site chrome isn't a partner list: menus, headers and footers carry product, page and social icons.
+    for chrome in soup.find_all(["nav", "header", "footer"]):
+        chrome.decompose()
     names, trusted = set(), set()
     own = (urlparse(page_url).hostname or "").removeprefix("www.")
     for img in soup.find_all("img"):
-        alt = re.sub(r"\s*(logo|icon|image)\s*$", "", (img.get("alt") or "").strip(), flags=re.I)
-        alt = re.sub(r"^(logo of|logo)\s+", "", alt, flags=re.I).strip(" -|")
+        raw = (img.get("alt") or "").strip()
+        if NOT_A_PARTNER.search(raw):
+            continue
+        alt = re.sub(r"\s*(logo|icon|image)\s*$", "", raw, flags=re.I)
+        alt = re.sub(r"^(logo of|logo)\s+", "", alt, flags=re.I)
+        alt = re.sub(r"\s+partner\s*$", "", alt, flags=re.I).strip(" -|")  # "Nvidia partner" → "Nvidia"
         if 2 <= len(alt) <= 40 and not GENERIC.match(alt) and not re.search(r"\.(png|svg|jpe?g|webp)$", alt, re.I):
             trusted.add(alt)
             continue
@@ -178,6 +189,25 @@ def purge_irrelevant(con, comp: Entity) -> int:
     return n
 
 
+# The company's own announcement, distributed by a newswire: a primary source, not a third-party report.
+WIRES = re.compile(r"pr newswire|prnewswire|business ?wire|globe ?newswire|accesswire|einpresswire|newsfile", re.I)
+
+
+def _headline(note: str) -> str:
+    """A headline without its " - Publisher" suffix, lowercased and depunctuated: syndicated copies compare equal."""
+    return " ".join(re.sub(r"[^a-z0-9 ]", " ", re.sub(r"\s+-\s+[^-]+$", "", note or "").lower()).split())
+
+
+def independent_reports(v: dict) -> int:
+    """Distinct headlines among the reports: the same wire story on ten sites counts once."""
+    return len({_headline(e.get("note") or "") for e in v["evidence"]} - {""})
+
+
+def corroborated(v: dict) -> bool:
+    """Confirmed: the company announced it (a newswire release), or at least two differently-worded reports carry it."""
+    return any(WIRES.search(s or "") for s in v["sources"]) or independent_reports(v) >= 2
+
+
 def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], list[Fact], list[Fact]]:
     rounds, arr, acq = {}, {}, {}
     for n in items:
@@ -218,8 +248,8 @@ def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], 
     rounds = merged
     fr = [Fact("funding", k, f"{v['series'] or 'Funding'} · ${v['amount_musd']:g}M", {
         "amount_musd": v["amount_musd"], "series": v["series"], "investors": sorted(v["investors"]), "date": v["date"],
-        "sources": sorted(set(filter(None, v["sources"])))[:6]},
-        facts.CONFIRMED if len(set(v["sources"])) >= 2 else facts.LIKELY, v["evidence"][:4]) for k, v in rounds.items()]
+        "sources": sorted(set(filter(None, v["sources"])))[:6], "independent_reports": independent_reports(v)},
+        facts.CONFIRMED if corroborated(v) else facts.LIKELY, v["evidence"][:4]) for k, v in rounds.items()]
     ar = [Fact("arr_claim", k[:150], v["claim"], {"headline": v["headline"], "date": v["date"]}, facts.LIKELY, v["evidence"]) for k, v in arr.items()]
     # One fact per deal: coverage of the same acquisition within ~4 months (announcement, close) is merged.
     deals: list[dict] = []
@@ -244,16 +274,20 @@ def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], 
 
 
 RULES = {
-    "partner": Rule(severity="medium", title_add=lambda f: f"New partner listed: {f.label}", title_remove=lambda r: f"Partner removed: {r['label']}"),
+    # Logo extraction is too imprecise to alert on (in live data most "partners" were menu items or customer logos):
+    # partners are recorded and counted, but adding or dropping one is not a signal until precision is proven.
+    "partner": Rule(severity="medium", on_add=False, on_remove=False, title_add=lambda f: f"New partner listed: {f.label}",
+                    title_remove=lambda r: f"Partner removed: {r['label']}"),
     "marketplace": Rule(severity="high", title_add=lambda f: f"New marketplace listing: {f.label}",
                         so_what=lambda f: "Marketplace listings let buyers burn committed cloud spend, a big enterprise procurement accelerator."),
     "partner_program": Rule(severity="high", title_add=lambda f: f"Partner programme signal: {f.label}",
                             so_what=lambda f: "A formal channel/reseller motion is being built."),
-    "press": Rule(severity="low", on_remove=False, title_add=lambda f: f"In the news: {f.label}"),
-    "funding": Rule(severity="critical", on_remove=False, title_add=lambda f: f"Funding: {f.label}",
+    # News search returns a moving window: a story dropping out of it is not a removal, and coming back is not new.
+    "press": Rule(severity="low", on_remove=False, append_only=True, title_add=lambda f: f"In the news: {f.label}"),
+    "funding": Rule(severity="critical", on_remove=False, append_only=True, title_add=lambda f: f"Funding: {f.label}",
                     so_what=lambda f: "Fresh capital usually means hiring sprees, bigger launches and aggressive pricing in the next 2–3 quarters."),
-    "arr_claim": Rule(severity="high", on_remove=False, title_add=lambda f: f"Growth claim: {f.label}"),
-    "m_and_a": Rule(severity="critical", on_remove=False, title_add=lambda f: f"M&A: {f.label}"),
+    "arr_claim": Rule(severity="high", on_remove=False, append_only=True, title_add=lambda f: f"Growth claim: {f.label}"),
+    "m_and_a": Rule(severity="critical", on_remove=False, append_only=True, title_add=lambda f: f"M&A: {f.label}"),
 }
 
 
@@ -266,12 +300,17 @@ def run_one(con, comp: Entity) -> dict:
     ppages = list(dict.fromkeys(u.split("#")[0].rstrip("/") for u in ppages))[:4]
     mkt_links = [u for u in links if any(rx.search(u) for rx, _ in MKT_RX)] + list(comp.marketplaces)
     names_all: set[str] = set()
+    # Partner pages and marketplace links are found from their homepage; if it or a partner page can't be read,
+    # leave what we know alone rather than reporting every partner as removed.
+    unread = set() if links else {"partner", "partner_program", "marketplace"}
     for pu in ppages:
         try:
             r = guard.get(pu)
         except Exception:
+            unread |= {"partner", "partner_program", "marketplace"}
             continue
         if not r.ok:
+            unread |= {"partner", "partner_program", "marketplace"}
             continue
         for n in partner_names(r.text, pu):
             names_all.add(n)
@@ -299,14 +338,14 @@ def run_one(con, comp: Entity) -> dict:
                             facts.CONFIRMED, [ev(n["url"], "Google News RSS")]))
     fr, ar, aq = extract_money(items, rx)
     obs += fr + ar + aq
-    kinds = ["partner", "marketplace", "partner_program", "funding", "arr_claim", "m_and_a"]
-    if items:
-        kinds.append("press")
-    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES)
+    kinds = ["partner", "marketplace", "partner_program", "funding", "arr_claim", "m_and_a", "press"]
+    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES, unread=unread)
     month = datetime.now(timezone.utc).strftime("%Y-%m")
-    facts.metric(con, comp.id, MODULE, "partners", month, len(names_all))
-    facts.metric(con, comp.id, MODULE, "marketplaces", month, len({f.label for f in obs if f.kind == "marketplace"}))
-    stats.update(partner_pages=ppages, partners=len(names_all), news=len(items), funding=len(fr), irrelevant_purged=purged)
+    if not unread:  # a partial read would under-count
+        facts.metric(con, comp.id, MODULE, "partners", month, len(names_all))
+        facts.metric(con, comp.id, MODULE, "marketplaces", month, len({f.label for f in obs if f.kind == "marketplace"}))
+    stats.update(partner_pages=ppages, partners=len(names_all), news=len(items), funding=len(fr), irrelevant_purged=purged,
+                 unread=sorted(unread))
     return stats
 
 

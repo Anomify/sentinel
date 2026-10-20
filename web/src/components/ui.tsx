@@ -21,7 +21,7 @@ export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Bool
 export const fade = {
   initial: { opacity: 0, y: 4 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as const },
+  transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as const },  // design-system easing: short, gentle, no bounce
 };
 
 export function Card({ children, className, ...rest }: { children: ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>) {
@@ -45,8 +45,8 @@ export function PageHeader({ title, sub, right, eyebrow }: { title: ReactNode; s
     <motion.div {...fade} className="mb-8 flex flex-wrap items-end justify-between gap-5">
       <div className="min-w-0">
         {eyebrow && <div className="eyebrow mb-3">{eyebrow}</div>}
-        <h1 className="text-[34px] leading-[1.1] tracking-[-0.03em] text-ink">{title}</h1>
-        {sub && <p className="mt-2.5 max-w-2xl text-[14.5px] leading-relaxed text-ink-2">{sub}</p>}
+        <h1 className="text-[28px] leading-[1.15] tracking-[-0.02em] text-ink">{title}</h1>
+        {sub && <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-ink-2">{sub}</p>}
       </div>
       {right && <div className="flex flex-wrap items-center gap-2">{right}</div>}
     </motion.div>
@@ -54,12 +54,13 @@ export function PageHeader({ title, sub, right, eyebrow }: { title: ReactNode; s
 }
 
 const SEV: Record<string, { label: string; dot: string; text: string }> = {
-  critical: { label: "Critical", dot: "bg-crit", text: "text-crit" },
-  high: { label: "High", dot: "bg-high", text: "text-high" },
-  medium: { label: "Medium", dot: "bg-med", text: "text-ink-2" },
-  low: { label: "Low", dot: "bg-low", text: "text-ink-3" },
-  noise: { label: "Noise", dot: "bg-low", text: "text-ink-3" },
-  info: { label: "Info", dot: "bg-low", text: "text-ink-3" },
+  // Red for what needs action, amber for what to look at; the rest stays neutral (accents are functional).
+  critical: { label: "Critical", dot: "bg-red", text: "text-crit" },
+  high: { label: "High", dot: "bg-amber", text: "text-high" },
+  medium: { label: "Medium", dot: "bg-mauve-500", text: "text-ink-2" },
+  low: { label: "Low", dot: "bg-mauve-400", text: "text-ink-3" },
+  noise: { label: "Noise", dot: "bg-mauve-400", text: "text-ink-3" },
+  info: { label: "Info", dot: "bg-mauve-400", text: "text-ink-3" },
 };
 export function SeverityBadge({ s }: { s: Severity | string; compact?: boolean }) {
   const v = SEV[s] ?? SEV.low;
@@ -73,7 +74,7 @@ export const sevDot = (s: string) => (SEV[s] ?? SEV.low).dot;
 
 const CONF: Record<string, { label: string; glyph: ReactNode; tip: string }> = {
   confirmed: { label: "Confirmed", glyph: <span className="size-2 rounded-full bg-ink" />, tip: "Directly observed in a public source" },
-  likely: { label: "Likely", glyph: <span className="size-2 rounded-full border border-ink bg-[linear-gradient(90deg,var(--ink)_50%,transparent_50%)]" />, tip: "Strong indirect evidence" },
+  likely: { label: "Likely", glyph: <span className="size-2 rounded-full border border-ink bg-[linear-gradient(90deg,var(--text)_50%,transparent_50%)]" />, tip: "Strong indirect evidence" },
   inferred: { label: "Inferred", glyph: <span className="size-2 rounded-full border border-ink-3" />, tip: "Derived by Sentinel from other signals" },
 };
 export function Confidence({ c }: { c?: string | null }) {
@@ -100,9 +101,9 @@ export function Monogram({ id, size = 32 }: { id: string; size?: number }) {
   const name = e?.name ?? id;
   const initials = name.replace(/\(.*?\)/g, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (
-    <span className="relative inline-grid shrink-0 place-items-center rounded-[10px] text-ink"
-      style={{ width: size, height: size, fontSize: size * 0.34, background: `color-mix(in oklab, ${e?.color ?? "#888"} 13%, white)`,
-        boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${e?.color ?? "#888"} 26%, white)` }}>
+    <span className="relative inline-grid shrink-0 place-items-center rounded-[10px] font-semibold text-ink"
+      style={{ width: size, height: size, fontSize: size * 0.34, background: `color-mix(in oklab, ${e?.color ?? "var(--mauve-500)"} 12%, transparent)`,
+        boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${e?.color ?? "var(--mauve-500)"} 28%, transparent)` }}>
       {initials}
     </span>
   );
@@ -113,7 +114,7 @@ export function Chip({ children, active, onClick, className }: { children: React
   return (
     <C onClick={onClick} className={cx(
       "inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-[12.5px] transition-colors focus-ring",
-      active ? "bg-ink text-white" : "text-ink-2 ring-1 ring-inset ring-line-strong hover:bg-hover hover:text-ink", className)}>
+      active ? "bg-primary text-primary-fg" : "text-ink-2 ring-1 ring-inset ring-line-strong hover:bg-hover hover:text-ink", className)}>
       {children}
     </C>
   );
@@ -123,9 +124,9 @@ export function Button({ children, variant = "ghost", size = "md", className, ..
   { variant?: "primary" | "ghost" | "outline"; size?: "sm" | "md" } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button {...rest} className={cx(
-      "inline-flex items-center justify-center gap-2 rounded-full transition-all focus-ring disabled:pointer-events-none disabled:opacity-40 select-none",
-      size === "sm" ? "h-8 px-3.5 text-[12.5px]" : "h-10 px-5 text-[13.5px]",
-      variant === "primary" && "bg-ink text-white hover:bg-[#2a2a2e]",
+      "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors focus-ring disabled:pointer-events-none disabled:opacity-40 select-none",
+      size === "sm" ? "h-8 px-3 text-[13px]" : "h-9 px-4 text-[14px]",
+      variant === "primary" && "bg-primary text-primary-fg hover:bg-primary-hover",
       variant === "outline" && "bg-elev text-ink ring-1 ring-inset ring-line-strong hover:bg-hover",
       variant === "ghost" && "text-ink-2 hover:bg-hover hover:text-ink",
       className)}>
@@ -141,7 +142,7 @@ export function Segmented<T extends string | number>({ value, options, onChange 
       {options.map((o) => (
         <button key={String(o.value)} onClick={() => onChange(o.value)}
           className={cx("relative z-10 h-7 rounded-full px-3.5 text-[12.5px] transition-colors focus-ring", value === o.value ? "text-ink" : "text-ink-3 hover:text-ink-2")}>
-          {value === o.value && <motion.span layoutId={`seg-${id}`} className="absolute inset-0 -z-10 rounded-full bg-elev shadow-[0_1px_2px_rgba(0,0,0,0.06)] ring-1 ring-line" transition={{ type: "spring", bounce: 0.12, duration: 0.4 }} />}
+          {value === o.value && <motion.span layoutId={`seg-${id}`} className="absolute inset-0 -z-10 rounded-full bg-solid shadow-[var(--shadow-card)] ring-1 ring-line" transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }} />}
           {o.label}
         </button>
       ))}
@@ -179,7 +180,7 @@ export function Stat({ label, value, sub, className }: { label: ReactNode; value
   return (
     <div className={className}>
       <div className="eyebrow">{label}</div>
-      <div className="mt-2 text-[30px] leading-none tracking-[-0.03em] tnum text-ink">{value}</div>
+      <div className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.02em] tnum text-ink">{value}</div>
       {sub && <div className="mt-2 text-[12.5px] text-ink-3">{sub}</div>}
     </div>
   );
@@ -210,10 +211,10 @@ export function Drawer({ open, onClose, children, width = 680 }: { open: boolean
     <AnimatePresence>
       {open && (
         <>
-          <motion.div className="fixed inset-0 z-40 bg-[#111]/15 backdrop-blur-[1px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-          <motion.aside role="dialog" aria-modal className="fixed bottom-2 right-2 top-2 z-50 flex max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-2xl border border-line bg-elev shadow-[0_24px_64px_-24px_rgba(0,0,0,0.25)]"
+          <motion.div className="fixed inset-0 z-40 bg-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+          <motion.aside role="dialog" aria-modal className="glass fixed bottom-2 right-2 top-2 z-50 flex max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-[20px] border border-line shadow-[var(--shadow-panel)]"
             style={{ width }} initial={{ x: 24, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 24, opacity: 0 }}
-            transition={{ type: "spring", bounce: 0, duration: 0.35 }}>
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}>
             <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 z-10 grid size-8 place-items-center rounded-full text-ink-3 hover:bg-hover hover:text-ink focus-ring"><X size={16} /></button>
             <div className="flex-1 overflow-y-auto">{children}</div>
           </motion.aside>
@@ -224,7 +225,7 @@ export function Drawer({ open, onClose, children, width = 680 }: { open: boolean
 }
 
 export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="inline-grid h-5 min-w-5 place-items-center rounded-md bg-sunken px-1 font-sans text-[10.5px] text-ink-3">{children}</kbd>;
+  return <kbd className="inline-grid h-5 min-w-5 place-items-center rounded-md bg-sunken px-1 font-mono text-[11px] text-ink-3">{children}</kbd>;
 }
 
 /* ── Evidence trail ─────────────────────────────────────────────────────────── */
@@ -237,7 +238,7 @@ export function EvidenceList({ items, compact }: { items: Evidence[]; compact?: 
     <div className={cx("space-y-1.5", compact && "space-y-1")}>
       {items.map((e, i) => (
         <div key={i} className="flex items-center gap-2 text-[11.5px] text-ink-3">
-          <span className="w-[72px] shrink-0 tnum">{e.observed_at ? new Date(e.observed_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "-"}</span>
+          <span className="mono w-[84px] shrink-0">{e.observed_at ? new Date(e.observed_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "-"}</span>
           <span className="truncate">{e.method}{e.note ? ` · ${e.note}` : ""}</span>
           {e.url && <a href={e.url} target="_blank" rel="noreferrer" className="ml-auto inline-flex shrink-0 items-center gap-1 text-ink-2 hover:text-ink">{host(e.url)}<ExternalLink size={10} /></a>}
           {e.screenshot && (
@@ -256,9 +257,9 @@ export function Lightbox({ src, onClose }: { src: string | null; onClose: () => 
   return (
     <AnimatePresence>
       {src && (
-        <motion.div className="fixed inset-0 z-[70] grid place-items-center bg-[#111]/40 p-6 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+        <motion.div className="fixed inset-0 z-[70] grid place-items-center bg-overlay p-6 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
           <motion.img src={src} alt="Evidence screenshot" initial={{ scale: 0.98 }} animate={{ scale: 1 }}
-            className="max-h-[88vh] max-w-[92vw] rounded-xl border border-line bg-white shadow-2xl" />
+            className="max-h-[88vh] max-w-[92vw] rounded-[20px] border border-line bg-solid shadow-[var(--shadow-panel)]" />
         </motion.div>
       )}
     </AnimatePresence>
@@ -271,7 +272,7 @@ export function Thumb({ name, className }: { name?: string | null; className?: s
   return (
     <>
       <button onClick={() => setOpen(true)} className={cx("overflow-hidden rounded-lg border border-line bg-sunken focus-ring", className)}>
-        <img src={shotUrl(name)} alt="" loading="lazy" className="h-full w-full object-cover object-top transition-transform duration-500 hover:scale-[1.02]" />
+        <img src={shotUrl(name)} alt="" loading="lazy" className="h-full w-full object-cover object-top transition-transform duration-300 hover:scale-[1.01]" />
       </button>
       <Lightbox src={open ? shotUrl(name) : null} onClose={() => setOpen(false)} />
     </>
@@ -279,5 +280,5 @@ export function Thumb({ name, className }: { name?: string | null; className?: s
 }
 
 export function Since({ iso }: { iso?: string | null }) {
-  return <span className="text-[11.5px] text-ink-3 tnum">{ago(iso)}</span>;
+  return <span className="mono text-[11.5px] text-ink-3">{ago(iso)}</span>;
 }

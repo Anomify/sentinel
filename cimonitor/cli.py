@@ -15,7 +15,7 @@ MODULE_HELP = {
     "stack": "Modules 1+2 · stack fingerprint (pre/post consent) + GTM container forensics",
     "dns": "Module 3 · TXT/SPF/MX/DMARC/DKIM",
     "subdomains": "Module 4 · certificate transparency + hosting + screenshots",
-    "radar": "Module 5 · staging, sitemaps, publishes, GitHub, launch probability",
+    "radar": "Module 5 · staging, sitemaps, publishes, GitHub, pre-launch indicators",
     "social": "Social media · YouTube, Bluesky, Medium, X (with API key), Hacker News, LinkedIn links",
     "product": "Product intelligence · new products, release notes, launch announcements",
     "hiring": "Module 6 · Greenhouse/Lever/Ashby",
@@ -48,6 +48,8 @@ def main(argv=None):
     sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)))
     sv.add_argument("--no-scheduler", action="store_true")
     sub.add_parser("daemon", help="scheduler only (no web)")
+    ev = sub.add_parser("evaluate", help="how useful each kind of signal has been, from Useful / Not useful ratings")
+    ev.add_argument("--days", type=int, default=90)
     ws = sub.add_parser("workspace", help="create a workspace (multi-tenant)")
     ws.add_argument("slug")
     ws.add_argument("name")
@@ -63,6 +65,9 @@ def main(argv=None):
             if a.cmd == "digest":
                 kw = {"deliver": not a.no_send}
             out = jobs.run_job(a.cmd, **{k: v for k, v in kw.items() if v is not None})
+            if out.get("status") == "error":  # cron / CI must see a failed module
+                print(json.dumps(out, indent=2, default=str))
+                raise SystemExit(1)
         elif a.cmd == "scan":
             cfg = config.load()
             comp = cfg.competitor(a.target) or next((c for c in cfg.competitors if a.target.removeprefix("www.") in
@@ -78,6 +83,19 @@ def main(argv=None):
             out = [jobs.run_job(j) for j in order]
         elif a.cmd == "daemon":
             return jobs.daemon()
+        elif a.cmd == "evaluate":
+            from . import db, insights
+            with db.connect() as con:
+                r = insights.evaluate(con, a.days)
+            print(f"{r['rated_moves']} rated moves in the last {a.days} days\n")
+            print(f"{'signal kind':40} {'rated':>6} {'useful':>7}")
+            for k in r["by_kind"]:
+                print(f"{k['kind']:40} {k['rated']:>6} {k['useful_rate']:>7.0%}")
+            print(f"\n{'week':10} {'top moves':>9} {'rated':>6} {'useful':>7}")
+            for w in r["weekly_top"]:
+                print(f"{w['week']:10} {w['top']:>9} {w['rated']:>6} {w['useful']:>7}")
+            print("\nKinds rated mostly not useful are candidates for a lower severity (see the RULES in their collector).")
+            return
         elif a.cmd == "workspace":
             out = {"slug": a.slug, "token": tenancy.create(a.slug, a.name), "note": "store this token; it is shown once"}
         elif a.cmd == "demo":
@@ -89,6 +107,9 @@ def main(argv=None):
             for w in [x["slug"] for x in tenancy.list_workspaces()] or [tenancy.current()]:
                 with tenancy.use(w):
                     cleanup.run()
+            if not os.environ.get("SENTINEL_TOKEN") and a.host not in ("127.0.0.1", "localhost", "::1"):
+                logging.warning("SENTINEL_TOKEN is not set and Sentinel listens on %s: anyone who can reach port %s can "
+                                "read the dashboard and start paid AI runs. Set SENTINEL_TOKEN in .env.", a.host, a.port)
             if not a.no_scheduler:
                 threading.Thread(target=jobs.daemon, daemon=True).start()
             uvicorn.run("cimonitor.api:app", host=a.host, port=a.port, log_level="info")

@@ -10,7 +10,7 @@ brand:
   name: "Hyperfence"
   aliases: []
   domains: ["hyperfence.io"]       # used to match AI citations (bare hostname)
-  color: "#6250d6"
+  color: "#2ED58C"     # Hyperfence brand green: our line in every chart
   # monitor: true tracks Hyperfence with every module (Signals, stack, DNS, hiring, product...) as if it
   # were a competitor. Optional, same keys as a competitor: pages, feeds, staging, github, ats, news_query.
   monitor: true
@@ -47,6 +47,9 @@ brand:
     - "Hyperfence retains no conversation data"
     - "Hyperfence supports OpenAI, Anthropic, Google Gemini, DeepSeek and xAI, including streaming responses"
     - "Hyperfence is self-serve and developer-first; it is not sold through a sales team"
+  # When the positioning, strengths and facts above were last checked against the real product. Every "Vs. us"
+  # recommendation is shown with this date, and flagged once it is more than 90 days old. Update it when you edit them.
+  profile_as_of: "2026-10-14"
   voice:   # rules for every AI-written recommendation
     - "Recommend product, docs, content, pricing, integration and community moves. Never recommend sales actions (no reps, SDRs, outbound, battlecards for sellers, renewals or account targeting): we have no sales team"
     - "Our audience is developers, not CISOs or procurement. Don't suggest targeting executives or regulated-enterprise buyers"
@@ -100,7 +103,7 @@ competitors:
   - id: alice
     name: Alice (WonderFence)
     tier: primary
-    color: "#eb6834"
+    color: "#6250d6"
     aliases: ["Alice", "WonderFence", "ActiveFence", "Active Fence"]
     domains: ["alice.io", "activefence.com"]
     pages:
@@ -171,7 +174,7 @@ competitors:
   - id: zenity
     name: Zenity
     tier: primary
-    color: "#c2410c"
+    color: "#807780"
     aliases: ["Zenity Labs", "AI Total"]
     domains: ["zenity.io"]
     pages:

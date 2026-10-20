@@ -16,7 +16,7 @@ Validated against a manual HiddenLayer teardown: see [docs/VALIDATION-hiddenlaye
 | 2 | **Tag manager & conversion forensics** | Manual GTM inspection | The public `gtm.js` container: tags, triggers, IDs, server-side GTM | `book_demo_form` (GA4) fires on `hs_form_submission`; sGTM on `atxgtm.` |
 | 3 | **DNS & email infrastructure** | MXToolbox | DNS-over-HTTPS: TXT, SPF, MX, DMARC, DKIM; 60+ verification decoders | Anthropic, OpenAI, Cursor, Pendo and Docker verified; **Mindmatrix** (partner platform) authorised in SPF |
 | 4 | **Subdomains & certificates** | Subdomain finders | crt.sh + Cert Spotter CT logs, hosting classification, screenshots | `ai-costs`, `hackathon` ("AWS Clash of Agents"); 22 internal or private names recorded but never contacted |
-| 5 | **Pre-launch radar** | Manual staging checks | Sitemaps (prod vs staging), Webflow "Last Published" stamps, GitHub API, **launch probability** | `hiddenlayer-stg.webflow.io` exists. Its robots.txt disallows crawling, so only its existence is recorded |
+| 5 | **Pre-launch radar** | Manual staging checks | Sitemaps (prod vs staging), Webflow "Last Published" stamps, GitHub API, **pre-launch indicators** (evidence, not a forecast) | `hiddenlayer-stg.webflow.io` exists. Its robots.txt disallows crawling, so only its existence is recorded |
 | 6 | **Hiring intelligence** | LinkedIn Jobs browsing | Greenhouse / Lever / Ashby public APIs; function, seniority, region, tech; **firsts** | 15 roles, 87% go-to-market; federal and UK solutions architects |
 | 7 | **Partners, channel & money** | Crunchbase trawling | Partner pages, marketplace links, Google News RSS; funding, investors, ARR claims | Series B $100M (Sep 2026); AWS Marketplace; reseller programme |
 | 8 | **Ads intelligence** | Ad library browsing | Google Ads Transparency (official BigQuery dataset), Meta Ad Library API, **cross-checked against pixels** | Google Ads tag live; **no LinkedIn Insight Tag** (answers the LinkedIn ads question) |
@@ -108,7 +108,7 @@ cimonitor/
     stack.py  gtm.py       Modules 1–2 (+ motion classifier, sister-site ID linking)
     dns_infra.py dnsq.py   Module 3 (DNS-over-HTTPS)
     subdomains.py          Module 4
-    radar.py               Module 5 (+ launch probability)
+    radar.py               Module 5 (+ pre-launch indicators)
     hiring.py              Module 6
     money.py  ads.py       Modules 7–8
     pages.py  feeds.py     Module 9
@@ -116,7 +116,7 @@ cimonitor/
   intel/deepdive.py        auto-generated deep dive with Vs. us
   intel/coverage.py        method tracker
   insights.py digest.py jobs.py api.py tenancy.py db.py (SQLite | Postgres)
-web/                       React 19 · Vite · Tailwind v4 · Motion · cmdk, set in Alpha Lyrae
+web/                       React 19 · Vite · Tailwind v4 · Motion · cmdk, Hyperfence design system (light and dark)
 ```
 
 ## Develop
@@ -129,4 +129,4 @@ TEST_DATABASE_URL=postgresql://… pytest -q           # also exercises the Post
 
 ---
 
-Typeface: **Alpha Lyrae** by Fontfabric, under the SIL Open Font License 1.1 (`web/public/fonts/AlphaLyrae-OFL.md`).
+Dashboard: the Hyperfence design system. Tokens (mauve neutrals, functional green / blue / amber / red, light and dark themes) live in `web/src/index.css`; UI text is set in [Inter](https://rsms.me/inter/), machine values in the system mono. The email digest is still set in **Alpha Lyrae** by Fontfabric, under the SIL Open Font License 1.1 (`web/public/fonts/AlphaLyrae-OFL.md`).

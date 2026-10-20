@@ -37,23 +37,11 @@ async def scope(request: Request, call_next):
     needs_auth = bool(TOKEN) or ws != tenancy.DEFAULT
     if needs_auth and not tenancy.authorize(ws, given, TOKEN):
         return JSONResponse({"detail": "unauthorized"}, status_code=401)
+    # Responses are passed through unchanged: quotes from sources (headlines, page text, AI answers) are evidence and
+    # must read exactly as published. Sentinel's own AI text has its em dashes removed when written (llm.no_dashes,
+    # cleanup.ai_text_dashes), not by rewriting every response.
     with tenancy.use(ws):
-        resp = await call_next(request)
-    return await _strip_dashes(resp)
-
-
-async def _strip_dashes(resp):
-    """No em dashes anywhere in the app, including stored data and AI text written before this rule."""
-    ctype = resp.headers.get("content-type", "")
-    if not (ctype.startswith("application/json") or ctype.startswith("text/html")):
-        return resp
-    body = b"".join([c async for c in resp.body_iterator])
-    text = body.decode("utf-8")
-    if "\u2014" not in text and "\\u2014" not in text:
-        return Response(body, status_code=resp.status_code, headers=dict(resp.headers))
-    text = re.sub(r"\s*(\u2014|\\u2014)\s*", ", ", text)
-    headers = {k: v for k, v in resp.headers.items() if k.lower() != "content-length"}
-    return Response(text.encode("utf-8"), status_code=resp.status_code, headers=headers)
+        return await call_next(request)
 
 
 def cfg():
@@ -104,6 +92,8 @@ def list_events(days: int = 30, competitor: str | None = None, module: str | Non
 def event_detail(eid: int):
     with db.connect() as con:
         e = db.row(con.execute("SELECT * FROM events WHERE id=?", (eid,)).fetchone())
+        if e:
+            e["reports"] = insights.story_events(con, e)  # every report of the same move, for the evidence trail
     if not e:
         raise HTTPException(404)
     if e.get("change_id"):
@@ -114,10 +104,28 @@ def event_detail(eid: int):
 @app.post("/api/events/{eid}/ack")
 def ack_event(eid: int, value: bool = True):
     with db.connect() as con:
-        con.execute("UPDATE events SET acknowledged=? WHERE id=?", (int(value), eid))
-        r = con.execute("SELECT change_id FROM events WHERE id=?", (eid,)).fetchone()
-        if r and r[0]:
-            con.execute("UPDATE changes SET acknowledged=? WHERE id=?", (int(value), r[0]))
+        e = db.row(con.execute("SELECT id, competitor, story, change_id FROM events WHERE id=?", (eid,)).fetchone())
+        if not e:
+            raise HTTPException(404)
+        # Reviewing a signal reviews every report of that move.
+        ids = [r["id"] for r in insights.story_events(con, e)] or [eid]
+        for i in ids:
+            con.execute("UPDATE events SET acknowledged=? WHERE id=?", (int(value), i))
+            r = con.execute("SELECT change_id FROM events WHERE id=?", (i,)).fetchone()
+            if r and r[0]:
+                con.execute("UPDATE changes SET acknowledged=? WHERE id=?", (int(value), r[0]))
+    return {"ok": True}
+
+
+@app.post("/api/events/{eid}/rate")
+def rate_event(eid: int, value: int = Query(..., ge=-1, le=1)):
+    """Useful (1) / not useful (-1) / clear (0), for every report of the move. Feeds `sentinel evaluate`."""
+    with db.connect() as con:
+        e = db.row(con.execute("SELECT id, competitor, story FROM events WHERE id=?", (eid,)).fetchone())
+        if not e:
+            raise HTTPException(404)
+        for i in [r["id"] for r in insights.story_events(con, e)] or [eid]:
+            con.execute("UPDATE events SET rating=? WHERE id=?", (value or None, i))
     return {"ok": True}
 
 
@@ -242,9 +250,9 @@ def visibility(run_id: str | None = None):
 @app.get("/api/ai/answers")
 def answers(question_id: str, run_id: str | None = None):
     with db.connect() as con:
-        if not run_id:
-            r = con.execute("SELECT run_id FROM ai_results ORDER BY run_at DESC LIMIT 1").fetchone()
-            run_id = r[0] if r else None
+        if not run_id:  # the same run the visibility page shows: the latest complete one
+            runs = insights.ai_runs(con, len(cfg().questions))
+            run_id = ([r for r in runs if r["complete"]] or runs or [{"run_id": None}])[-1]["run_id"]
         return db.rows(con.execute("SELECT * FROM ai_results WHERE run_id=? AND question_id=? ORDER BY engine", (run_id, question_id)))
 
 
@@ -367,7 +375,10 @@ def scan_status(cid: str):
 
 @app.get("/api/coverage")
 def coverage_get():
-    return coverage.matrix(cfg())
+    c = cfg()
+    with db.connect() as con:
+        health = insights.collection_health(c, con)
+    return {**coverage.matrix(c), "health": health}
 
 
 @app.get("/api/guard")
@@ -490,5 +501,11 @@ if DIST.exists():
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str):
-        f = DIST / path
-        return FileResponse(f if path and f.is_file() else DIST / "index.html")
+        return FileResponse(spa_file(DIST, path))
+
+
+def spa_file(root: Path, path: str) -> Path:
+    """A file inside root, or index.html. Encoded ../ in the URL must never reach files outside the build."""
+    root = root.resolve()
+    f = (root / path).resolve()
+    return f if path and f.is_file() and f.is_relative_to(root) else root / "index.html"

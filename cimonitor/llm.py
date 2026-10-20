@@ -141,6 +141,8 @@ def brand_context(cfg) -> str:
     """Who "we" are, for every prompt. Without this the model assumes a sales-led enterprise vendor."""
     p = cfg.brand.profile or {}
     parts = [f"We are {cfg.brand.name}."]
+    if p.get("profile_as_of"):
+        parts.append(f"(This description of us was last checked on {p['profile_as_of']}; do not claim anything about us beyond it.)")
     if p.get("positioning"):
         parts.append(f"Positioning: {p['positioning']}")
     if p.get("icp"):
@@ -185,7 +187,9 @@ def write_brief(cfg, facts: dict) -> dict | None:
     system = (
         f"You write the weekly competitive brief for {cfg.brand.name}'s product marketing lead. {brand_context(cfg)} "
         "Lead with what changes decisions. 3-5 TL;DR bullets max, each ≤ 25 words, each naming a competitor. "
-        "watch_next: 2-3 things to keep an eye on. No filler, no hedging."
+        "Only state what the listed items support. Say 'unconfirmed' for a single report or an inferred item, never "
+        "predict launch dates, and if nothing is consequential say so plainly rather than inventing urgency. "
+        "watch_next: 2-3 things to keep an eye on. No filler."
     )
     try:
         return _json_call(cfg, system,

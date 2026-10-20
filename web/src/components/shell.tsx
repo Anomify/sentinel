@@ -3,9 +3,10 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Command } from "cmdk";
 import {
-  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, FileSearch, Globe, Layers, LayoutGrid, Loader2, Mail, MessagesSquare, Package,
-  Menu, Network, Newspaper, Play, Rocket, Search, Settings, ShieldCheck, Swords, X,
+  Activity, BadgeDollarSign, Bot, Briefcase, Check, ChevronDown, Compass, Globe, Layers, LayoutGrid, Loader2, Mail, MessagesSquare, Package,
+  Menu, Monitor, Moon, Network, Newspaper, Play, Rocket, Search, Settings, ShieldCheck, Sun, Swords, X,
 } from "lucide-react";
+import { useTheme, type ThemeChoice } from "../lib/theme";
 import { api, invalidate, runJob, setWorkspace, workspace } from "../lib/api";
 import type { Run } from "../lib/types";
 import { ago } from "../lib/format";
@@ -30,9 +31,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <AnimatePresence>
           {items.map((t) => (
             <motion.div key={t.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 20 }}
-              className="flex gap-3 rounded-2xl border border-line bg-elev p-4 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.18)]">
+              className="glass flex gap-3 rounded-2xl border border-line p-4 shadow-[var(--shadow-panel)]">
               <span className={cx("mt-0.5 grid size-5 shrink-0 place-items-center rounded-full",
-                t.tone === "err" ? "bg-crit/10 text-crit" : t.tone === "info" ? "bg-sunken text-ink-2" : "bg-good/10 text-good")}>
+                t.tone === "err" ? "bg-red/12 text-crit" : t.tone === "info" ? "bg-sunken text-ink-2" : "bg-green/12 text-good")}>
                 {t.tone === "err" ? <X size={11} /> : t.tone === "info" ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
               </span>
               <div className="min-w-0">
@@ -58,9 +59,9 @@ const JOB_HELP: Record<string, string> = {
   subdomains: "New subdomains and certificates (Infrastructure)", dns: "Email tools and DNS verifications (Infrastructure)",
   stack: "Marketing tools and tracking (GTM stack)", pages: "Homepage, pricing and messaging changes (Positioning)",
   radar: "Staging sites, new pages, new repos (Launch radar)", product: "New products, release notes, launches (Product launches)",
-  social: "LinkedIn, X, YouTube, Medium, Bluesky, Hacker News (Messaging)",
+  social: "LinkedIn, X, YouTube, Medium, Bluesky, Hacker News (Content & social)",
   hiring: "Open roles and first-of-their-kind hires (Hiring)", money: "Funding, partners, marketplaces, press (Partners & money)",
-  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Messaging)", ai: "What AI search engines say (AI visibility). Uses API quota.",
+  ads: "Ad channels (Partners & money)", feeds: "New blog posts (Content & social)", ai: "What AI search engines say (AI visibility). Uses API quota.",
   deepdive: "Rewrites every deep dive from the latest data (Deep dives)", digest: "Saves a new weekly digest (Digest)",
 };
 // Count new findings in a run's stats, wherever the collector reported them.
@@ -105,27 +106,29 @@ export function JobProvider({ children }: { children: ReactNode }) {
 }
 
 /* ── Navigation ─────────────────────────────────────────────────────────────── */
+// Grouped by the question each page answers. Every page stays reachable; reference data sits below the topics.
 export const NAV: { group: string; items: { to: string; label: string; icon: any }[] }[] = [
   { group: "Intelligence", items: [
     { to: "/", label: "Overview", icon: LayoutGrid },
     { to: "/signals", label: "Signals", icon: Activity },
-    { to: "/deep-dives", label: "Deep dives", icon: FileSearch },
-    { to: "/competitors", label: "Competitors", icon: Swords },
+    { to: "/competitors", label: "Competitors", icon: Swords },  // each one's deep dive opens from here
   ] },
-  { group: "Modules", items: [
-    { to: "/stack", label: "GTM stack", icon: Layers },
-    { to: "/infrastructure", label: "Infrastructure", icon: Network },
-    { to: "/radar", label: "Launch radar", icon: Rocket },
+  { group: "By topic", items: [
     { to: "/product", label: "Product launches", icon: Package },
-    { to: "/messaging", label: "Messaging", icon: MessagesSquare },
+    { to: "/positioning", label: "Positioning", icon: Newspaper },
+    { to: "/messaging", label: "Content & social", icon: MessagesSquare },
+    { to: "/ai", label: "AI visibility", icon: Bot },
     { to: "/hiring", label: "Hiring", icon: Briefcase },
     { to: "/money", label: "Partners & money", icon: BadgeDollarSign },
-    { to: "/positioning", label: "Positioning", icon: Newspaper },
-    { to: "/ai", label: "AI visibility", icon: Bot },
+    { to: "/radar", label: "Pre-launch radar", icon: Rocket },
+  ] },
+  { group: "Reference", items: [
+    { to: "/stack", label: "GTM stack", icon: Layers },
+    { to: "/infrastructure", label: "Infrastructure", icon: Network },
   ] },
   { group: "System", items: [
-    { to: "/coverage", label: "Coverage", icon: ShieldCheck },
     { to: "/digest", label: "Digest", icon: Mail },
+    { to: "/coverage", label: "Coverage", icon: ShieldCheck },
     { to: "/settings", label: "Settings", icon: Settings },
   ] },
 ];
@@ -133,10 +136,10 @@ export const NAV: { group: string; items: { to: string; label: string; icon: any
 function Logo() {
   return (
     <div className="flex items-center gap-2.5 px-3">
-      <div className="grid size-7 place-items-center rounded-[9px] bg-ink">
-        <span className="relative grid size-3.5 place-items-center rounded-full ring-[1.5px] ring-white"><span className="size-1 rounded-full bg-white" /></span>
+      <div className="grid size-7 place-items-center rounded-[9px] bg-brand">
+        <span className="relative grid size-3.5 place-items-center rounded-full ring-[1.5px] ring-brand-fg"><span className="size-1 rounded-full bg-brand-fg" /></span>
       </div>
-      <span className="text-[16px] tracking-[-0.02em] text-ink">sentinel</span>
+      <span className="text-[15px] font-semibold tracking-[-0.015em] text-ink">Sentinel</span>
     </div>
   );
 }
@@ -152,7 +155,7 @@ function WorkspaceSwitcher() {
         <span className="truncate">{cur?.name ?? meta.workspace}</span><ChevronDown size={13} className="text-ink-3" />
       </button>
       {open && (
-        <div className="card absolute left-1 right-1 top-10 z-30 p-1">
+        <div className="glass absolute left-1 right-1 top-10 z-30 rounded-2xl border border-line p-1 shadow-[var(--shadow-panel)]">
           {meta.workspaces.map((w) => (
             <button key={w.slug} onClick={() => { setWorkspace(w.slug); setOpen(false); }}
               className={cx("block w-full rounded-lg px-3 py-2 text-left text-[13px] hover:bg-hover", w.slug === workspace() ? "text-ink" : "text-ink-2")}>{w.name}</button>
@@ -181,8 +184,8 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
                 isActive ? "text-ink" : "text-ink-2 hover:bg-hover hover:text-ink")}>
               {({ isActive }) => (
                 <>
-                  {isActive && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-xl bg-elev ring-1 ring-line" transition={{ type: "spring", bounce: 0.12, duration: 0.4 }} />}
-                  <Icon size={15} strokeWidth={1.6} className={cx("relative", isActive ? "text-ink" : "text-ink-3 group-hover:text-ink-2")} />
+                  {isActive && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-xl bg-solid shadow-[var(--shadow-card)] ring-1 ring-line" transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }} />}
+                  <Icon size={15} className={cx("relative", isActive ? "text-ink" : "text-ink-3 group-hover:text-ink-2")} />
                   <span className="relative">{label}</span>
                 </>
               )}
@@ -192,7 +195,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       ))}
       <div className="mt-auto px-3 text-[11.5px] text-ink-3">
         <div className="flex items-center gap-2">
-          <span className={cx("pulse-dot size-1.5 rounded-full", running.length ? "bg-accent text-accent" : meta.demo ? "bg-med text-med" : "bg-good text-good")} />
+          <span className={cx("pulse-dot size-1.5 rounded-full", running.length ? "bg-blue text-blue" : meta.demo ? "bg-amber text-amber" : "bg-green text-green")} />
           {running.length ? `Collecting · ${running.length} job${running.length > 1 ? "s" : ""}` : meta.demo ? "Demo workspace" : "Monitoring live"}
         </div>
         <div className="mt-1.5">{meta.entities.filter((e) => !e.is_brand).length} competitors · {meta.backend}</div>
@@ -201,13 +204,13 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
   );
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-line bg-bg lg:block">{content}</aside>
+      <aside className="glass fixed inset-y-0 left-0 z-30 hidden w-60 border-r border-line lg:block">{content}</aside>
       <AnimatePresence>
         {open && (
           <>
-            <motion.div className="fixed inset-0 z-40 bg-[#111]/20 lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-            <motion.aside className="fixed inset-y-0 left-0 z-50 w-64 border-r border-line bg-bg lg:hidden"
-              initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ type: "spring", bounce: 0, duration: 0.3 }}>
+            <motion.div className="fixed inset-0 z-40 bg-overlay lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+            <motion.aside className="glass fixed inset-y-0 left-0 z-50 w-64 border-r border-line lg:hidden"
+              initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}>
               {content}
             </motion.aside>
           </>
@@ -220,15 +223,15 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
 /* ── Top bar ────────────────────────────────────────────────────────────────── */
 export function Topbar({ onMenu, onSearch }: { onMenu: () => void; onSearch: () => void }) {
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-3 bg-bg/80 px-4 backdrop-blur-xl sm:px-8">
-      <button onClick={onMenu} className="grid size-9 place-items-center rounded-full text-ink-2 hover:bg-hover lg:hidden" aria-label="Menu"><Menu size={17} /></button>
+    <header className="glass sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line px-4 sm:px-8">
+      <button onClick={onMenu} className="grid size-9 place-items-center rounded-xl text-ink-2 hover:bg-hover lg:hidden" aria-label="Menu"><Menu size={17} /></button>
       <button onClick={onSearch}
-        className="flex h-9 min-w-0 max-w-md flex-1 items-center gap-2.5 rounded-full bg-elev px-4 text-[13px] text-ink-3 ring-1 ring-inset ring-line transition-colors hover:ring-line-strong focus-ring">
-        <Search size={14} strokeWidth={1.6} />
+        className="flex h-9 min-w-0 max-w-md flex-1 items-center gap-2.5 rounded-xl bg-solid px-3.5 text-[13px] text-ink-3 ring-1 ring-inset ring-line transition-colors hover:ring-line-strong focus-ring">
+        <Search size={14} />
         <span className="flex-1 truncate text-left"><span className="sm:hidden">Search…</span><span className="hidden sm:inline">Search competitors, modules, questions…</span></span>
         <span className="hidden gap-1 sm:flex"><Kbd>⌘</Kbd><Kbd>K</Kbd></span>
       </button>
-      <div className="ml-auto flex shrink-0 items-center gap-2"><RunMenu /></div>
+      <div className="ml-auto flex shrink-0 items-center gap-2"><ThemeToggle /><RunMenu /></div>
     </header>
   );
 }
@@ -248,7 +251,7 @@ function RunMenu() {
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-9 items-center gap-2 rounded-full bg-ink px-4 text-[13px] text-white transition-colors hover:bg-[#2a2a2e] focus-ring">
+        className="inline-flex h-9 items-center gap-2 rounded-xl bg-primary px-4 text-[14px] font-medium text-primary-fg transition-colors hover:bg-primary-hover focus-ring">
         {running.length ? <Loader2 size={14} className="animate-spin" /> : <Play size={13} />}
         <span className="hidden sm:inline">{running.length ? `Refreshing ${running.length === 1 ? (JOB_LABEL[running[0]] ?? "scan").toLowerCase() : `${running.length} sections`}…` : "Refresh data"}</span>
         <ChevronDown size={13} className="opacity-60" />
@@ -256,7 +259,7 @@ function RunMenu() {
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.14 }}
-            className="absolute right-0 top-11 z-30 max-h-[80vh] w-[340px] overflow-y-auto rounded-2xl border border-line bg-elev p-1.5 shadow-[0_16px_48px_-16px_rgba(0,0,0,0.2)]">
+            className="glass absolute right-0 top-11 z-30 max-h-[80vh] w-[340px] overflow-y-auto rounded-2xl border border-line p-1.5 shadow-[var(--shadow-panel)]">
             <div className="px-3 pb-2 pt-2 text-[12px] leading-relaxed text-ink-3">Sentinel refreshes everything on a schedule. Use this to collect fresh data now instead of waiting.</div>
             {items.map((job) => {
               const busy = running.includes(job);
@@ -268,7 +271,7 @@ function RunMenu() {
                     <span className="block text-[13px] text-ink">{job === "all" ? "Refresh everything" : JOB_LABEL[job]}</span>
                     <span className="block text-[11.5px] leading-snug text-ink-3">{JOB_HELP[job]}</span>
                   </span>
-                  <span className="shrink-0 pt-0.5 text-[11px] text-ink-3">{busy ? <Loader2 size={13} className="animate-spin" /> : last ? ago(last) : ""}</span>
+                  <span className="mono shrink-0 pt-0.5 text-[11px] text-ink-3">{busy ? <Loader2 size={13} className="animate-spin" /> : last ? ago(last) : ""}</span>
                 </button>
               );
             })}
@@ -276,6 +279,24 @@ function RunMenu() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/* ── Theme ──────────────────────────────────────────────────────────────────── */
+const THEMES: { id: ThemeChoice; label: string; icon: typeof Sun }[] = [
+  { id: "system", label: "Theme: follow system", icon: Monitor }, { id: "light", label: "Theme: light", icon: Sun }, { id: "dark", label: "Theme: dark", icon: Moon },
+];
+
+function ThemeToggle() {
+  const [choice, setChoice] = useTheme();
+  const i = THEMES.findIndex((t) => t.id === choice);
+  const { label, icon: Icon } = THEMES[i];
+  const next = THEMES[(i + 1) % THEMES.length];
+  return (
+    <button onClick={() => setChoice(next.id)} title={`${label}. Switch to ${next.label.replace("Theme: ", "")}`} aria-label={`${label}. Switch to ${next.label.replace("Theme: ", "")}`}
+      className="grid size-9 place-items-center rounded-xl text-ink-2 ring-1 ring-inset ring-line transition-colors hover:bg-hover hover:text-ink focus-ring">
+      <Icon size={15} />
+    </button>
   );
 }
 
@@ -296,14 +317,14 @@ export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: 
   return (
     <AnimatePresence>
       {open && (
-        <motion.div className="fixed inset-0 z-[55] grid place-items-start justify-center bg-[#111]/15 px-4 pt-[14vh] backdrop-blur-[2px]"
+        <motion.div className="fixed inset-0 z-[55] grid place-items-start justify-center bg-overlay px-4 pt-[14vh]"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)}>
           <motion.div initial={{ opacity: 0, scale: 0.98, y: -6 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.15 }} className="w-[620px] max-w-full overflow-hidden rounded-2xl border border-line bg-elev shadow-[0_32px_80px_-24px_rgba(0,0,0,0.3)]"
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }} className="glass w-[620px] max-w-full overflow-hidden rounded-[20px] border border-line shadow-[var(--shadow-panel)]"
             onClick={(e) => e.stopPropagation()}>
             <Command loop label="Command menu">
               <div className="flex items-center gap-2.5 border-b border-line px-5">
-                <Search size={15} className="text-ink-3" strokeWidth={1.6} />
+                <Search size={15} className="text-ink-3" />
                 <Command.Input autoFocus placeholder="Type a command or search…" className="h-14 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3" />
                 <Kbd>esc</Kbd>
               </div>
@@ -311,7 +332,7 @@ export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: 
                 <Command.Empty className="py-12 text-center text-[13px] text-ink-3">No results.</Command.Empty>
                 <Command.Group heading="Go to">
                   {NAV.flatMap((g) => g.items).map((n) => (
-                    <Command.Item key={n.to} onSelect={() => go(n.to)} className={item}><n.icon size={15} strokeWidth={1.6} className="text-ink-3" />{n.label}</Command.Item>
+                    <Command.Item key={n.to} onSelect={() => go(n.to)} className={item}><n.icon size={15} className="text-ink-3" />{n.label}</Command.Item>
                   ))}
                 </Command.Group>
                 <Command.Group heading="Deep dives">
@@ -320,7 +341,7 @@ export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: 
                       <EntityDot color={c.color} />{c.name}<span className="ml-auto text-[11.5px] text-ink-3">{c.domains[0]}</span>
                     </Command.Item>
                   ))}
-                  <Command.Item value="new deep dive enter a domain analyse" onSelect={() => go("/deep-dives?new=1")} className={item}><Compass size={15} strokeWidth={1.6} className="text-ink-3" />Analyse a new domain…</Command.Item>
+                  <Command.Item value="new deep dive enter a domain analyse" onSelect={() => go("/deep-dives?new=1")} className={item}><Compass size={15} className="text-ink-3" />Analyse a new domain…</Command.Item>
                 </Command.Group>
                 <Command.Group heading="Run">
                   {Object.entries(JOB_LABEL).map(([j, l]) => (
@@ -330,14 +351,14 @@ export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: 
                 <Command.Group heading="AI questions">
                   {meta.questions.map((q) => (
                     <Command.Item key={q.id} value={`question ${q.text}`} onSelect={() => go(`/ai?q=${q.id}`)} className={item}>
-                      <Bot size={15} strokeWidth={1.6} className="shrink-0 text-ink-3" /><span className="truncate">{q.text}</span>
+                      <Bot size={15} className="shrink-0 text-ink-3" /><span className="truncate">{q.text}</span>
                     </Command.Item>
                   ))}
                 </Command.Group>
                 <Command.Group heading="Sites">
                   {meta.entities.filter((e) => !e.is_brand).map((c) => (
                     <Command.Item key={`site-${c.id}`} value={`open site ${c.name}`} onSelect={() => { window.open(`https://${c.domains[0]}`, "_blank"); setOpen(false); }} className={item}>
-                      <Globe size={15} strokeWidth={1.6} className="text-ink-3" />{c.domains[0]}
+                      <Globe size={15} className="text-ink-3" />{c.domains[0]}
                     </Command.Item>
                   ))}
                 </Command.Group>

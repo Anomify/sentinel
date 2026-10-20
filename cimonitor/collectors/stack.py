@@ -22,14 +22,17 @@ log = logging.getLogger(__name__)
 MODULE = "stack"
 
 CONVERSION_RX = {
-    "demo": r"\b(book|request|get|schedule|see)\s+(a\s+)?(live\s+)?demo\b|\bdemo\b",
+    "demo": r"\b(book|request|get|schedule|see)\s+(a\s+)?(live\s+)?demo\b",
     "contact_sales": r"\b(contact|talk to|speak (to|with))\s+(sales|an expert|us)\b",
     "free_trial": r"\b(free trial|start (your )?(free )?trial|try (it )?(for )?free|try free)\b",
     "signup": r"\b(sign up|get started( free)?|start (for )?free|create (an )?account)\b",
     "open_source": r"\b(github|open[- ]source|pip install|npm install)\b",
     "login": r"\b(log ?in|sign ?in)\b",
 }
-CONV_LABEL = {"demo": "Book a demo", "contact_sales": "Contact sales", "free_trial": "Free trial", "signup": "Self-serve sign-up",
+# A bare "Demo" button is ambiguous: a booking form is a sales step, a live/interactive demo is self-serve.
+BARE_DEMO = re.compile(r"^(live |interactive |product |try (the |a )?)?demo$", re.I)
+DEMO_FORM_HREF = re.compile(r"(book|request|schedule|get)[-_]?(a[-_])?demo|demo[-_]?request|/contact|/talk|calendly|chilipiper|hubspot\.com/meetings", re.I)
+CONV_LABEL = {"product_demo": "Self-serve product demo", "demo": "Book a demo", "contact_sales": "Contact sales", "free_trial": "Free trial", "signup": "Self-serve sign-up",
               "open_source": "Open source / GitHub", "login": "Product login", "pricing_public": "Public pricing"}
 KEY_PAGE_RX = re.compile(r"/(pricing|plans|demo|book-a-demo|request-a-demo|contact|contact-sales|get-started|signup|sign-up|trial|start)(/|$)", re.I)
 
@@ -59,16 +62,19 @@ def key_pages(comp: Entity, home: Capture) -> list[str]:
 
 def conversion_paths(html: str) -> dict[str, str]:
     soup = BeautifulSoup(html or "", "html.parser")
-    texts = []
+    links = []
     for a in soup.find_all(["a", "button"]):
         t = re.sub(r"\s+", " ", a.get_text(" ")).strip()
         if 2 <= len(t) <= 40:
-            texts.append(t)
+            links.append((t, a.get("href") or ""))
     found = {}
     for k, rx in CONVERSION_RX.items():
-        m = next((t for t in texts if re.search(rx, t, re.I)), None)
+        m = next((t for t, _ in links if re.search(rx, t, re.I)), None)
         if m:
             found[k] = m
+    for t, href in links:
+        if BARE_DEMO.match(t):
+            found.setdefault("demo" if DEMO_FORM_HREF.search(href) else "product_demo", t)
     if re.search(r"[$€£]\s?\d", soup.get_text(" ")) and re.search(r"/(mo|month|year|yr|user|seat)", soup.get_text(" "), re.I):
         found["pricing_public"] = "prices shown"
     return found
@@ -88,6 +94,9 @@ def classify_motion(tools: set[str], conv: dict[str, str]) -> dict:
     if "demo" in conv or "contact_sales" in conv:
         score += 2
         reasons.append(f"Primary CTA routes to sales (“{conv.get('demo') or conv.get('contact_sales')}”)")
+    if "product_demo" in conv and "demo" not in conv:
+        score -= 1
+        reasons.append(f"Public product demo, no booking form (“{conv['product_demo']}”)")
     if "free_trial" in conv or "signup" in conv:
         score -= 2.5
         reasons.append(f"Self-serve entry point (“{conv.get('free_trial') or conv.get('signup')}”)")
@@ -183,7 +192,10 @@ def run_one(con, cfg: Config, fetcher: Fetcher, comp: Entity) -> tuple[dict, lis
     if all(c.error and not c.html for c in caps):
         return {"error": home.error}, caps
     observed = analyse(comp, caps)
-    stats = facts.sync(con, comp.id, MODULE, observed, ["tool", "third_party", "conversion_path", "motion", "cookies"], RULES)
+    kinds = ["tool", "third_party", "conversion_path", "motion", "cookies"]
+    # A page that failed to load hides whatever only it loads: nothing is "removed" on a partial capture.
+    unread = set(kinds) if any(c.error and not c.html for c in caps) else set()
+    stats = facts.sync(con, comp.id, MODULE, observed, kinds, RULES, unread=unread)
     stats["pages"] = [c.url for c in caps]
     return stats, caps
 

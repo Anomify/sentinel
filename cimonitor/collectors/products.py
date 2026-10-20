@@ -165,10 +165,10 @@ RULES = {
                          title_add=lambda f: f"New product page: {f.label}",
                          title_remove=lambda r: f"Product page removed: {r['label']}",
                          so_what=lambda f: "A new product, platform or solution page usually means a new product or a newly packaged capability. Check how it is positioned and priced."),
-    "release": Rule(severity="medium", on_remove=False, alert_if=_recent,
+    "release": Rule(severity="medium", on_remove=False, append_only=True, alert_if=_recent,
                     title_add=lambda f: f"Shipped: {f.label}",
                     so_what=lambda f: "A new entry in their release notes: a feature that is live now. Compare it with our roadmap."),
-    "launch": Rule(severity="high", on_remove=False, alert_if=_recent,
+    "launch": Rule(severity="high", on_remove=False, append_only=True, alert_if=_recent,
                    title_add=lambda f: f"Launch announced: {f.label}",
                    so_what=lambda f: "A public launch announcement. Expect a marketing push; check whether Hyperfence already covers it and say so in a post or comparison page."),
 }

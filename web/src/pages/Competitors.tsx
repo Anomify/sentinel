@@ -19,7 +19,7 @@ export function CompetitorList() {
         right={<Link to="/deep-dives?new=1"><Button variant="primary" size="sm">Add a domain</Button></Link>} />
       <Card className="overflow-hidden">
         <div className="hidden grid-cols-[1.6fr_.8fr_.8fr_.8fr_1fr_120px] gap-4 border-b border-line px-6 py-3 text-[11px] uppercase tracking-[.1em] text-ink-3 md:grid">
-          <span>Competitor</span><span>Signals</span><span>Launch</span><span>AI share</span><span>Latest</span><span>30 days</span>
+          <span>Competitor</span><span>Signals</span><span>Pre-launch</span><span>AI share</span><span>Latest</span><span>30 days</span>
         </div>
         <div className="divide-y divide-line">
           {(data?.competitors ?? comps.map((c) => ({ id: c.id, name: c.name, changes: 0, critical: 0, launch: 0, ai_share: null, latest: null, color: c.color }))).map((c: any, i: number) => (
@@ -30,7 +30,7 @@ export function CompetitorList() {
                   <div className="min-w-0"><div className="truncate text-[14px] text-ink">{c.name}</div><div className="text-[12px] text-ink-3">{meta.entities.find((e) => e.id === c.id)?.domains[0]}</div></div>
                 </div>
                 <div className="hidden text-[14px] text-ink tnum md:block">{c.changes}{c.critical ? <span className="ml-1.5 text-[12px] text-high">{c.critical} high</span> : null}</div>
-                <div className="hidden text-[14px] text-ink tnum md:block">{pct(c.launch)}</div>
+                <div className="hidden text-[14px] text-ink tnum md:block" title="Pre-launch indicators, last 45 days">{c.launch}</div>
                 <div className="hidden text-[14px] text-ink tnum md:block">{pct(c.ai_share)}</div>
                 <div className="hidden truncate text-[12.5px] text-ink-2 md:block">{c.latest?.title ?? "-"}</div>
                 <div className="flex items-center justify-end gap-3">
@@ -207,7 +207,7 @@ function summary(f: Fact): string {
     case "motion": return (v.reasons ?? []).join(" · ");
     case "funding": return [v.date?.slice(0, 10), v.investors?.join(", ")].filter(Boolean).join(" · ");
     case "ad_channel": return `${v.status} · ${v.reading ?? ""}`;
-    case "repo": return [v.language, v.stars != null ? `${v.stars}★` : null, v.pushed_at ? `pushed ${v.pushed_at.slice(0, 10)}` : null].filter(Boolean).join(" · ");
+    case "repo": return [v.language, v.stars != null ? `${v.stars} stars` : null, v.pushed_at ? `pushed ${v.pushed_at.slice(0, 10)}` : null].filter(Boolean).join(" · ");
     case "press": return [v.source, v.published?.slice(0, 10)].filter(Boolean).join(" · ");
     case "email_sender": return v.include ?? "";
     case "staging_site": return v.crawl ?? v.url ?? "";

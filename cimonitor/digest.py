@@ -21,23 +21,28 @@ def build(cfg: Config, days: int | None = None) -> dict:
     days = days or cfg.settings.get("digest", {}).get("lookback_days", 7)
     names = {e.id: e.name for e in cfg.entities}
     colors = {e.id: e.color for e in cfg.entities}
+    # A competitive brief: our own monitored activity (tier "self") is left out, as on the overview.
+    rivals = {c.id for c in cfg.competitors if c.tier != "self"}
     with db.connect() as con:
         ov = insights.overview(cfg, con, days)
-        evs = insights.events(con, days, limit=500)
-        ps = insights.posts(con, days)
+        evs = [e for e in insights.events(con, days, limit=500) if e["competitor"] in rivals]
+        ps = [p for p in insights.posts(con, days) if p["competitor"] in rivals]
         vis = insights.visibility(cfg, con)
-        launch = insights.launch_scores(cfg, con)
+        launch = {k: v for k, v in insights.launch_scores(cfg, con).items() if k in rivals}
     ch = [{"id": e["id"], "competitor": e["competitor"], "kind": insights.MODULE_LABEL.get(e["module"], e["module"]),
            "severity": e["severity"], "category": (e.get("data") or {}).get("category") or e["module"],
            "headline": e["title"], "summary": e.get("detail") or "", "so_what": e.get("so_what"),
            "action": (e.get("data") or {}).get("action"), "confidence": e.get("confidence"),
+           "occurred": e.get("occurred_at") if (e.get("occurred_at") or "")[:10] != (e.get("detected_at") or "")[:10] else None,
+           "reports": e.get("related", 1),
            "url": next((x.get("url") for x in (e.get("evidence") or []) if x.get("url")), cfg.settings.get("digest", {}).get("app_url", ""))}
           for e in sorted(evs, key=lambda e: -insights.SEV_WEIGHT.get(e["severity"], 0))]
     gaps = insights.gaps(cfg, vis)
     facts = {
-        "changes": [{k: c[k] for k in ("competitor", "kind", "severity", "category", "headline", "summary", "so_what", "url")}
+        "changes": [{k: c[k] for k in ("competitor", "kind", "severity", "category", "headline", "summary", "so_what", "url",
+                                       "confidence", "reports")}
                     for c in ch[:40]],
-        "launch": {names.get(k): v.get("probability") for k, v in launch.items()},
+        "pre_launch_indicators": {names.get(k): {"count": v.get("n", 0), "kinds": v.get("kinds", {})} for k, v in launch.items() if v.get("n")},
         "posts": [{"competitor": p["competitor"], "title": p["title"], "topics": p["topics"]} for p in ps[:40]],
         "ai_share": [{"entity": names.get(s["id"]), "share": s["share"], "avg_rank": s["avg_rank"]} for s in vis["share"]],
         "ai_gaps": gaps[:10],
@@ -49,9 +54,20 @@ def build(cfg: Config, days: int | None = None) -> dict:
         "brand": cfg.brand.name, "period_start": insights.since(days), "period_end": end.isoformat(timespec="seconds"),
         "brief": brief, "kpis": ov["kpis"], "competitors": ov["competitors"],
         "changes": ch[:15], "posts": ps[:15], "share": vis["share"], "gaps": gaps[:8],
-        "launch": sorted(({"id": k, **v} for k, v in launch.items() if v.get("probability", 0) >= 0.2), key=lambda x: -x["probability"]),
+        "launch": sorted(({"id": k, **v} for k, v in launch.items() if v.get("n")), key=lambda x: -x["n"]),
         "names": names, "colors": colors, "app_url": cfg.settings.get("digest", {}).get("app_url", ""),
+        "health": ov["health"],
     }
+
+
+def health_note(h: dict | None) -> str:
+    """One line on whether this brief saw everything: a quiet week and a broken collector look the same otherwise."""
+    if not h or h.get("status") == "ok":
+        return "Collection: every module current."
+    parts = [f"failing: {', '.join(h['failing'])}" if h.get("failing") else "",
+             f"overdue: {', '.join(h['stale'])}" if h.get("stale") else "",
+             f"{len(h['issues'])} {'company' if len(h['issues']) == 1 else 'companies'} not fully read" if h.get("issues") else ""]
+    return "Collection gaps (" + "; ".join(p for p in parts if p) + "): some moves may be missing from this brief."
 
 
 def _fallback_brief(cfg, ov, ch, ps, gaps, names) -> dict:
@@ -89,22 +105,24 @@ def render_html(d: dict) -> str:
 
     def kpi(label, val, sub=""):
         return (f'<td style="padding:0 20px 0 0;width:25%;vertical-align:top">'
-                f'<div style="{t(11, "#8a8a93", "letter-spacing:.08em;text-transform:uppercase")}">{label}</div>'
+                f'<div style="{t(11, "#6b6b73", "letter-spacing:.08em;text-transform:uppercase")}">{label}</div>'
                 f'<div style="{t(30, "#16161a", "letter-spacing:-.02em;margin-top:6px;line-height:1")}">{val}</div>'
-                f'<div style="{t(12, "#8a8a93", "margin-top:6px")}">{sub}</div></td>')
+                f'<div style="{t(12, "#6b6b73", "margin-top:6px")}">{sub}</div></td>')
 
     rows = "".join(
         f'<tr><td style="padding:18px 0;border-top:1px solid #ececef">'
-        f'<div style="{t(12, "#8a8a93")}"><span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:{SEV_COLOR.get(c["severity"], "#999")};margin-right:8px;vertical-align:middle"></span>'
-        f'{_e(d["names"].get(c["competitor"]))} · {_e(c["kind"])}{(" · " + _e(c.get("confidence"))) if c.get("confidence") else ""}</div>'
+        f'<div style="{t(12, "#6b6b73")}"><span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:{SEV_COLOR.get(c["severity"], "#999")};margin-right:8px;vertical-align:middle"></span>'
+        f'{_e(d["names"].get(c["competitor"]))} · {_e(c["kind"])}{(" · " + _e(c.get("confidence"))) if c.get("confidence") else ""}'
+        f'{(" · happened " + _e(c["occurred"][:10])) if c.get("occurred") else ""}'
+        f'{(" · " + str(c["reports"]) + " reports") if c.get("reports", 1) > 1 else ""}</div>'
         f'<div style="{t(16, "#16161a", "margin-top:4px;line-height:1.4")}"><a href="{_e(c["url"])}" style="color:#16161a;text-decoration:none">{_e(c["headline"])}</a></div>'
         + (f'<div style="{t(14, "#4a4a52", "margin-top:4px")}">{_e(c["so_what"] or c["summary"])}</div>' if (c.get("so_what") or c.get("summary")) else "")
         + (f'<div style="{t(13, "#5b45b8", "margin-top:6px")}">→ {_e(c["action"])}</div>' if c.get("action") else "")
         + "</td></tr>" for c in d["changes"][:12]) or \
-        f'<tr><td style="{t(14, "#8a8a93", "padding:12px 0")}">No material moves this period.</td></tr>'
+        f'<tr><td style="{t(14, "#6b6b73", "padding:12px 0")}">No material moves this period.</td></tr>'
 
     posts = "".join(f'<li style="margin:0 0 8px">{_e(d["names"].get(p["competitor"]))}, <a href="{_e(p["url"])}" style="color:#16161a">{_e(p["title"])}</a></li>'
-                    for p in d["posts"][:8]) or '<li style="color:#8a8a93">No new posts.</li>'
+                    for p in d["posts"][:8]) or '<li style="color:#6b6b73">No new posts.</li>'
     bars = ""
     for s in sorted(d["share"], key=lambda s: -s["share"]):
         pct = round(s["share"] * 100)
@@ -112,12 +130,13 @@ def render_html(d: dict) -> str:
                  f'<td style="width:100%;padding:5px 0"><div style="background:#f0f0f2;border-radius:3px;height:4px">'
                  f'<div style="background:{d["colors"].get(s["id"])};width:{max(pct, 1)}%;height:4px;border-radius:3px"></div></div></td>'
                  f'<td style="{t(13, "#16161a", "padding:5px 0 5px 14px;text-align:right")}">{pct}%</td></tr>')
-    launch = "".join(f'<li style="margin:0 0 6px">{_e(d["names"].get(l["id"]))}: {round(l["probability"] * 100)}% · likely within {_e(l.get("horizon"))}</li>'
+    launch = "".join(f'<li style="margin:0 0 6px">{_e(d["names"].get(l["id"]))}: {l["n"]} indicator{"s" if l["n"] != 1 else ""}'
+                     f'{(" · latest: " + _e(l["signals"][0]["title"][:90])) if l.get("signals") else ""}</li>'
                      for l in d.get("launch", [])[:4])
     gaps = "".join(f'<li style="margin:0 0 6px">{_e(g["text"])}</li>' for g in d["gaps"])
     tldr = "".join(f'<li style="margin:0 0 10px">{_e(x)}</li>' for x in b.get("tldr", []))
     watch = "".join(f'<li style="margin:0 0 6px">{_e(x)}</li>' for x in b.get("watch_next", []))
-    sec = lambda title: f'<div style="{t(11, "#8a8a93", "letter-spacing:.1em;text-transform:uppercase;margin:40px 0 10px")}">{title}</div>'  # noqa: E731
+    sec = lambda title: f'<div style="{t(11, "#6b6b73", "letter-spacing:.1em;text-transform:uppercase;margin:40px 0 10px")}">{title}</div>'  # noqa: E731
     ul = lambda inner, size=14: f'<ul style="{t(size, "#2a2a30", "padding-left:18px;margin:0")}">{inner}</ul>'  # noqa: E731
 
     return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
@@ -125,27 +144,28 @@ def render_html(d: dict) -> str:
 <body style="margin:0;background:#f6f6f4;padding:40px 14px">
 <table role="presentation" width="100%" style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ececef;border-radius:16px">
 <tr><td style="padding:40px 44px 8px">
-  <div style="{t(12, "#8a8a93", "letter-spacing:.12em;text-transform:uppercase")}">Sentinel · {_e(d['title'])}</div>
+  <div style="{t(12, "#6b6b73", "letter-spacing:.12em;text-transform:uppercase")}">Sentinel · {_e(d['title'])}</div>
   <div style="{t(26, "#16161a", "letter-spacing:-.02em;line-height:1.25;margin-top:14px")}">{_e(b.get('headline'))}</div>
-  <div style="{t(13, "#8a8a93", "margin-top:8px")}">{period}</div>
+  <div style="{t(13, "#6b6b73", "margin-top:8px")}">{period}</div>
+  <div style="{t(12, "#6b6b73" if (d.get('health') or {}).get('status', 'ok') == 'ok' else "#b4470b", "margin-top:4px")}">{_e(health_note(d.get('health')))}</div>
 </td></tr>
 <tr><td style="padding:28px 44px 44px">
   <table role="presentation" width="100%"><tr>
     {kpi('Signals', k['changes'], f"{k['critical']} high-impact")}
-    {kpi('Launch risk', f"{round((k.get('launch_max') or 0) * 100)}%", 'highest competitor')}
+    {kpi('Pre-launch', k.get('launch_indicators', 0), 'indicators, 45 days')}
     {kpi('New content', k['posts'], 'pieces')}
     {kpi('AI share', f"{round(brand_share * 100)}%" if brand_share is not None else '-', f"{k['ai_gaps']} gaps")}
   </tr></table>
   {sec('In brief')}{ul(tldr, 15)}
   {sec('What moved')}<table role="presentation" width="100%">{rows}</table>
-  {(sec('Launch radar') + ul(launch)) if launch else ''}
+  {(sec('Pre-launch indicators (evidence, not predictions)') + ul(launch)) if launch else ''}
   {sec('New content')}{ul(posts)}
   {(sec('AI search share of voice') + '<table role="presentation" width="100%">' + bars + '</table>') if bars else ''}
   {(sec("Where we're missing from AI answers") + ul(gaps)) if gaps else ''}
   {(sec('Watch next') + ul(watch)) if watch else ''}
   <div style="margin-top:40px"><a href="{_e(d['app_url'])}" style="{t(14, "#ffffff", "display:inline-block;background:#16161a;padding:12px 22px;border-radius:999px;text-decoration:none")}">Open Sentinel</a></div>
 </td></tr></table>
-<div style="{t(12, "#8a8a93", "text-align:center;margin-top:18px")}">Passive, public-source intelligence for {_e(d['brand'])}</div>
+<div style="{t(12, "#6b6b73", "text-align:center;margin-top:18px")}">Passive, public-source intelligence for {_e(d['brand'])}</div>
 </body></html>"""
 
 

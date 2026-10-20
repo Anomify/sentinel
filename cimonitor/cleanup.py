@@ -65,18 +65,22 @@ def irrelevant_news(con, cfg) -> int:
 
 
 def redate_events(con) -> int:
-    """Date news-driven events by when the event happened (article date), not when Sentinel saw it; old news is never Critical."""
+    """Record when news-driven events happened (article date) beside when Sentinel saw them; old news is never Critical.
+
+    Events from older versions had detected_at overwritten with the article date; their discovery date is lost,
+    so they keep it and gain occurred_at.
+    """
     n = 0
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    for r in db.rows(con.execute("SELECT id, detected_at, severity, data FROM events")):
+    for r in db.rows(con.execute("SELECT id, detected_at, occurred_at, severity, data FROM events")):
         d = _data(r["data"])
         happened = d.get("published") or d.get("date")
         if not happened or not re.match(r"\d{4}-\d{2}-\d{2}", str(happened)):
             continue
         happened = str(happened)[:25]
         upd = {}
-        if happened[:10] != str(r["detected_at"])[:10]:
-            upd["detected_at"] = happened if "T" in happened else happened + "T00:00:00+00:00"
+        if not r["occurred_at"]:
+            upd["occurred_at"] = happened if "T" in happened else happened + "T00:00:00+00:00"
         if happened < cutoff and r["severity"] in ("critical", "high"):
             upd["severity"] = "low"
         if upd:
@@ -115,6 +119,10 @@ def per_headline_deals(con) -> int:
 
 def removed_competitors(con, cfg) -> int:
     """Data for a company that is no longer on the watchlist is deleted."""
+    # A missing, empty or unreadable watchlist must never look like "every company was removed".
+    if not any(c.source == "config" and c.tier != "self" for c in cfg.competitors):
+        log.warning("cleanup: watchlist has no competitors, skipping removed-company cleanup")
+        return 0
     keep = {c.id for c in cfg.competitors} | {"__brand__"}
     n = 0
     for t in ("facts", "events", "metrics", "posts", "snapshots", "changes"):
@@ -139,6 +147,40 @@ def duplicate_digests(con) -> int:
     return n
 
 
+def ai_text_dashes(con) -> int:
+    """No em dashes in Sentinel's own AI-written text, including text stored before that rule. Source quotes are left alone."""
+    from .llm import no_dashes
+    n = 0
+    for table, cols in (("events", ("so_what",)), ("changes", ("headline", "summary", "so_what", "action"))):
+        for r in db.rows(con.execute(f"SELECT id, {', '.join(cols)} FROM {table} WHERE " +
+                                     " OR ".join(f"{c} LIKE ?" for c in cols), ["%—%"] * len(cols))):
+            con.execute(f"UPDATE {table} SET {', '.join(f'{c}=?' for c in cols)} WHERE id=?", [*(no_dashes(r[c]) for c in cols), r["id"]])
+            n += 1
+    return n
+
+
+def page_change_provenance(con) -> int:
+    """Page-change interpretations are only ever written by the AI analyst; ones stored before the analyst was
+    recorded are marked as AI-written, so they're never shown as a rule of thumb."""
+    n = 0
+    for r in db.rows(con.execute("SELECT id, data FROM events WHERE module='pages' AND so_what IS NOT NULL")):
+        d = _data(r["data"])
+        if not d.get("analysed_by"):
+            con.execute("UPDATE events SET data=? WHERE id=?", (json.dumps({**d, "analysed_by": "ai"}), r["id"])); n += 1
+    return n
+
+
+def story_keys(con) -> int:
+    """Events stored before stories existed get their story key, so old reports group like new ones."""
+    from .facts import story_key
+    n = 0
+    for r in db.rows(con.execute("SELECT id, kind, title, occurred_at, detected_at FROM events WHERE story IS NULL")):
+        k = story_key(r["kind"], r["title"], r["occurred_at"] or r["detected_at"])
+        if k:
+            con.execute("UPDATE events SET story=? WHERE id=?", (k, r["id"])); n += 1
+    return n
+
+
 def run() -> dict:
     cfg = config.load()
     out = {}
@@ -146,7 +188,9 @@ def run() -> dict:
         for name, fn in (("scoped_noise", lambda: scoped_noise(con, cfg)), ("irrelevant_news", lambda: irrelevant_news(con, cfg)),
                          ("redated", lambda: redate_events(con)), ("off_voice_comments", lambda: off_voice_comments(con)),
                          ("per_headline_deals", lambda: per_headline_deals(con)),
-                         ("removed_competitors", lambda: removed_competitors(con, cfg)), ("duplicate_digests", lambda: duplicate_digests(con))):
+                         ("removed_competitors", lambda: removed_competitors(con, cfg)), ("duplicate_digests", lambda: duplicate_digests(con)),
+                         ("stories", lambda: story_keys(con)), ("ai_text_dashes", lambda: ai_text_dashes(con)),
+                         ("page_change_provenance", lambda: page_change_provenance(con))):
             try:
                 out[name] = fn()
             except Exception as e:  # a repair must never stop the app

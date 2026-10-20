@@ -38,7 +38,9 @@ def entities(cfg: Config) -> list[dict]:
             for e in [cfg.brand, *cfg.competitors]]
 
 
-def events(con, days=30, competitor=None, module=None, severity=None, limit=300) -> list[dict]:
+def events(con, days=30, competitor=None, module=None, severity=None, limit=300, group=True) -> list[dict]:
+    """Signals, newest first. group: events of the same story (facts.story_key) are one signal, represented by its
+    most severe (then earliest) report, with `related` = how many reports it stands for."""
     q, a = "SELECT * FROM events WHERE detected_at >= ? AND severity != 'noise'", [since(days)]
     if competitor:
         q += " AND competitor=?"; a.append(competitor)
@@ -47,7 +49,35 @@ def events(con, days=30, competitor=None, module=None, severity=None, limit=300)
         q += f" AND module IN ({','.join('?' * len(mods))})"; a += mods
     if severity:
         q += f" AND severity IN ({','.join('?' * len(severity))})"; a += severity
-    return db.rows(con.execute(q + " ORDER BY detected_at DESC, id DESC LIMIT ?", [*a, limit]))
+    rows = db.rows(con.execute(q + " ORDER BY detected_at DESC, id DESC LIMIT ?", [*a, limit * (4 if group else 1)]))
+    return group_stories(rows, limit) if group else rows
+
+
+def group_stories(rows: list[dict], limit: int = 10**6) -> list[dict]:
+    """Collapse newest-first event rows into one row per story, keeping the order of each story's newest report."""
+    stories: dict[tuple, list[dict]] = {}
+    order: list = []
+    for r in rows:
+        k = (r["competitor"], r["story"]) if r.get("story") else ("event", r["id"])
+        if k not in stories:
+            stories[k] = []
+            order.append(k)
+        stories[k].append(r)
+    out = []
+    for k in order[:limit]:
+        members = stories[k]
+        rep = min(members, key=lambda r: (-SEV_WEIGHT.get(r["severity"], 0), r.get("occurred_at") or r["detected_at"], r["id"]))
+        out.append({**rep, "related": len(members), "acknowledged": int(all(m.get("acknowledged") for m in members))})
+    return out
+
+
+def story_events(con, e: dict) -> list[dict]:
+    """Every report of the same move as event e (itself included), for the evidence drawer."""
+    if not e.get("story"):
+        return []
+    return db.rows(con.execute("SELECT id, title, severity, detected_at, occurred_at, evidence, module, kind FROM events "
+                               "WHERE competitor=? AND story=? ORDER BY COALESCE(occurred_at, detected_at), id",
+                               (e["competitor"], e["story"])))
 
 
 def changes(con, days=30, competitor=None, severity=None, limit=200) -> list[dict]:
@@ -67,25 +97,56 @@ def posts(con, days=30, competitor=None, limit=200) -> list[dict]:
     return db.rows(con.execute(q + " ORDER BY COALESCE(published, first_seen) DESC LIMIT ?", [*a, limit]))
 
 
-def ai_runs(con) -> list[dict]:
-    return db.rows(con.execute(
-        "SELECT run_id, MIN(run_at) run_at, COUNT(*) answers, GROUP_CONCAT(DISTINCT engine) engines "
+def ai_runs(con, n_questions: int = 0) -> list[dict]:
+    """Every AI-visibility run, flagged `complete` when it asked every question and most requests succeeded.
+    Only complete runs are comparable: a smoke test (--limit) or an outage would otherwise move the share."""
+    runs = db.rows(con.execute(
+        "SELECT run_id, MIN(run_at) run_at, COUNT(*) answers, SUM(CASE WHEN error IS NULL THEN 0 ELSE 1 END) errors, "
+        "COUNT(DISTINCT question_id) questions, GROUP_CONCAT(DISTINCT engine) engines "
         "FROM ai_results GROUP BY run_id ORDER BY MIN(run_at)"))
+    for r in runs:
+        r["complete"] = r["questions"] >= n_questions and r["errors"] * 2 < r["answers"]
+    return runs
+
+
+# Grounding links that redirect to the real source: they are not a cited domain.
+REDIRECT_HOSTS = ("vertexaisearch.cloud.google.com",)
+NO_ANSWER = "[No AI Overview shown"  # Google showed no AI Overview: nothing to measure, not a "no mention"
 
 
 def _dom(c: dict) -> str:
-    return (c.get("domain") or urlparse(c.get("url") or "").netloc).removeprefix("www.")
+    d = (c.get("domain") or urlparse(c.get("url") or "").netloc).removeprefix("www.")
+    return "" if d in REDIRECT_HOSTS else d
+
+
+def _cell(rows: list[dict], entity: str) -> dict:
+    """Question x engine cell: the best rank if the entity was named in most samples of that question, else None."""
+    by_engine: dict[str, list] = defaultdict(list)
+    for r in rows:
+        m = (r["mentions"] or {}).get(entity) or {}
+        by_engine[r["engine"]].append(m.get("rank") if m.get("mentioned") else None)
+    return {e: (min(x for x in ranks if x) if sum(x is not None for x in ranks) * 2 > len(ranks) else None)
+            for e, ranks in by_engine.items()}
+
+
+def branded_questions(cfg: Config) -> set[str]:
+    """Questions that name a tracked vendor ("HiddenLayer alternatives") guarantee it a mention, so they're left out of share."""
+    return {q.id for q in cfg.questions if any(e.mention_regex().search(q.text) for e in cfg.entities if not e.is_brand)}
 
 
 def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
-    runs = ai_runs(con)
+    runs = ai_runs(con, len(cfg.questions))
     empty = {"runs": [], "latest": None, "share": [], "matrix": [], "trend": [], "citations": [], "engines": [], "per_engine": {},
-             "source_gaps": [], "accuracy": None}
+             "source_gaps": [], "accuracy": None, "spread": {}}
     if not runs:
         return empty
-    run_id = run_id or runs[-1]["run_id"]
-    res = db.rows(con.execute("SELECT * FROM ai_results WHERE run_id=? AND error IS NULL", (run_id,)))
+    complete = [r for r in runs if r["complete"]]
+    run_id = run_id or (complete or runs)[-1]["run_id"]
+    res = [r for r in db.rows(con.execute("SELECT * FROM ai_results WHERE run_id=? AND error IS NULL", (run_id,)))
+           if not (r["answer"] or "").startswith(NO_ANSWER)]
     ids = [e.id for e in cfg.entities]
+    branded = branded_questions(cfg)
+    unbranded = lambda rows: [r for r in rows if r["question_id"] not in branded] or rows  # noqa: E731
 
     def share(rows):
         n = len(rows) or 1
@@ -105,25 +166,26 @@ def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
     matrix = []
     for q in cfg.questions:
         rows = by_q.get(q.id, [])
-        cell = {i: {r["engine"]: ((r["mentions"] or {}).get(i) or {}).get("rank") if ((r["mentions"] or {}).get(i) or {}).get("mentioned") else None
-                    for r in rows} for i in ids}
+        cell = {i: _cell(rows, i) for i in ids}
         matrix.append({"id": q.id, "text": q.text, "category": q.category, "cells": cell})
 
     trend = []
-    for rn in runs[-30:]:
-        rr = db.rows(con.execute("SELECT mentions FROM ai_results WHERE run_id=? AND error IS NULL", (rn["run_id"],)))
-        trend.append({"run_id": rn["run_id"], "date": rn["run_at"][:10], **{s["id"]: s["share"] for s in share(rr)}})
+    for rn in complete[-30:]:
+        rr = db.rows(con.execute("SELECT question_id, mentions, answer FROM ai_results WHERE run_id=? AND error IS NULL", (rn["run_id"],)))
+        rr = [r for r in rr if not (r["answer"] or "").startswith(NO_ANSWER)]
+        trend.append({"run_id": rn["run_id"], "date": rn["run_at"][:10], **{s["id"]: s["share"] for s in share(unbranded(rr))}})
 
     domains = Counter(_dom(c) for r in res for c in (r["citations"] or []) if _dom(c))
-    # Source gaps: domains cited in answers that name a competitor but not us.
+    # Source gaps: third-party domains cited in answers that name a competitor but not us. Vendors' own sites aren't
+    # somewhere we can earn coverage, so every tracked company's domains are left out.
     gap = Counter()
-    brand_domains = tuple(cfg.brand.domains)
+    vendor_domains = tuple({d for e in [*cfg.entities, *cfg.competitors] for d in e.domains}) or ("__none__",)
     for r in res:
         m = r["mentions"] or {}
         if not (m.get("__brand__") or {}).get("mentioned") and any((v or {}).get("mentioned") for k, v in m.items() if k != "__brand__"):
             for c in r["citations"] or []:
                 d = _dom(c)
-                if d and not d.endswith(brand_domains or ("__none__",)):
+                if d and not d.endswith(vendor_domains):
                     gap[d] += 1
     acc = [r["accuracy"] for r in res if isinstance(r.get("accuracy"), dict)]
     accuracy = None
@@ -132,8 +194,22 @@ def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
                     "verdicts": dict(Counter(a.get("verdict") for a in acc)),
                     "issues": [i for a in acc for i in a.get("issues", [])][:20]}
     engines = sorted({r["engine"] for r in res})
-    return {"runs": runs, "latest": next(r for r in runs if r["run_id"] == run_id), "engines": engines,
-            "share": share(res), "per_engine": {e: share([r for r in res if r["engine"] == e]) for e in engines},
+    measured = unbranded(res)
+    latest = {**next(r for r in runs if r["run_id"] == run_id), "measured": len(measured),
+              "no_answer": con.execute("SELECT COUNT(*) FROM ai_results WHERE run_id=? AND error IS NULL AND answer LIKE ?",
+                                       (run_id, NO_ANSWER + "%")).fetchone()[0],
+              "branded_excluded": sorted(branded) if len(measured) < len(res) else [],
+              "samples": len({r.get("sample") or 0 for r in measured}) or 1}
+    # With several samples per question, share is computed per sample too: the spread is how much it moves by chance.
+    by_sample: dict[int, list] = defaultdict(list)
+    for r in measured:
+        by_sample[r.get("sample") or 0].append(r)
+    spread = {}
+    if len(by_sample) > 1:
+        per = [share(rows) for rows in by_sample.values()]
+        spread = {i: {"min": min(p[k]["share"] for p in per), "max": max(p[k]["share"] for p in per)} for k, i in enumerate(ids)}
+    return {"runs": runs, "latest": latest, "engines": engines, "spread": spread,
+            "share": share(measured), "per_engine": {e: share([r for r in measured if r["engine"] == e]) for e in engines},
             "matrix": matrix, "trend": trend,
             "citations": [{"domain": d, "count": n} for d, n in domains.most_common(15)],
             "source_gaps": [{"domain": d, "count": n} for d, n in gap.most_common(12)], "accuracy": accuracy}
@@ -151,13 +227,43 @@ def gaps(cfg: Config, vis: dict) -> list[dict]:
 
 
 def launch_scores(cfg: Config, con) -> dict:
-    return {c.id: db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "horizon": "-", "n": 0} for c in cfg.competitors}
+    return {c.id: db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "n": 0, "kinds": {}} for c in cfg.competitors}
+
+
+def evaluate(con, days: int = 90, top: int = 10) -> dict:
+    """How well the current rules pick what readers found useful, from ratings in the Signals drawer.
+    by_kind: usefulness per module/kind (where a severity rule may be too high or too low).
+    weekly_top: for each week, how many of the overview's top-N moves (by today's ranking) were rated useful."""
+    moves = [m for m in events(con, days, limit=100000) if m.get("rating")]
+    by_kind: dict[str, Counter] = defaultdict(Counter)
+    for m in moves:
+        by_kind[f"{m['module']}/{m['kind']}"]["useful" if m["rating"] > 0 else "not_useful"] += 1
+    kinds = sorted(({"kind": k, **v, "rated": sum(v.values()), "useful_rate": round(v["useful"] / sum(v.values()), 2)}
+                    for k, v in by_kind.items()), key=lambda r: (r["useful_rate"], -r["rated"]))
+    weeks: dict[str, list[dict]] = defaultdict(list)
+    for m in events(con, days, limit=100000):
+        weeks[datetime.fromisoformat(m["detected_at"]).strftime("%G-W%V")].append(m)
+    weekly = []
+    for wk, ms in sorted(weeks.items()):
+        picked = sorted(ms, key=lambda x: -SEV_WEIGHT.get(x["severity"], 0))[:top]
+        rated = [m for m in picked if m.get("rating")]
+        weekly.append({"week": wk, "top": len(picked), "rated": len(rated), "useful": sum(m["rating"] > 0 for m in rated)})
+    return {"rated_moves": len(moves), "by_kind": kinds, "weekly_top": weekly}
+
+
+def moves_score(moves: list[dict]) -> int:
+    """Who's moving: consequential moves first. One high or critical move outranks any number of medium ones, and
+    medium ones break ties; low-severity activity (posts, page tweaks) doesn't rank anyone. Moves are stories, so ten
+    reports of one funding round count once."""
+    return 1000 * sum(m["severity"] in ("critical", "high") for m in moves) + sum(m["severity"] == "medium" for m in moves)
 
 
 def overview(cfg: Config, con, days=7) -> dict:
     ev = events(con, days, limit=2000)
-    prev = db.rows(con.execute("SELECT severity, competitor, module FROM events WHERE detected_at >= ? AND detected_at < ?",
-                               (since(days * 2), since(days))))
+    # The previous period is measured exactly like this one (same filters, same weights) so deltas compare like with like.
+    prev = group_stories(db.rows(con.execute(
+        "SELECT * FROM events WHERE detected_at >= ? AND detected_at < ? AND severity != 'noise' ORDER BY detected_at DESC, id DESC",
+        (since(days * 2), since(days)))))
     # The overview ranks and counts competitors only: our own activity ("(us)") is shown elsewhere, not in "Who's moving".
     rivals = {c.id for c in cfg.competitors if c.tier != "self"}
     ev = [x for x in ev if x["competitor"] in rivals]
@@ -170,32 +276,31 @@ def overview(cfg: Config, con, days=7) -> dict:
         if c.id not in rivals:
             continue
         mine = [x for x in ev if x["competitor"] == c.id]
-        heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in mine) + 1.5 * sum(p["competitor"] == c.id for p in ps)
-        prev_heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in prev if x["competitor"] == c.id)
+        heat = moves_score(mine)
+        prev_heat = moves_score([x for x in prev if x["competitor"] == c.id])
         sov = next((s for s in vis["share"] if s["id"] == c.id), None)
         comp.append({"id": c.id, "name": c.name, "color": c.color, "tier": c.tier, "changes": len(mine),
                      "critical": sum(x["severity"] in ("critical", "high") for x in mine),
                      "posts": sum(p["competitor"] == c.id for p in ps), "heat": round(heat, 1),
                      "heat_delta": round(heat - prev_heat, 1), "ai_share": sov["share"] if sov else None,
-                     "launch": launch[c.id].get("probability", 0), "latest": mine[0] if mine else None,
+                     "launch": launch[c.id].get("n", 0), "latest": mine[0] if mine else None,
                      "modules": dict(Counter(MODULE_LABEL.get(x["module"], x["module"]) for x in mine))})
-    comp.sort(key=lambda x: -x["heat"])
+    comp.sort(key=lambda x: (-x["heat"], -x["changes"]))
     span = max(days * 2, 28)
     start = datetime.now(timezone.utc).date() - timedelta(days=span - 1)
     buckets = {(start + timedelta(d)).isoformat(): defaultdict(float) for d in range(span)}
-    for x in db.rows(con.execute("SELECT competitor, detected_at, severity FROM events WHERE detected_at >= ?", (start.isoformat(),))):
+    # Activity chart: one point per move by severity (stories, not reports; posts appear as their own low-severity moves).
+    for x in group_stories(db.rows(con.execute("SELECT * FROM events WHERE detected_at >= ? AND severity != 'noise' "
+                                               "ORDER BY detected_at DESC, id DESC", (start.isoformat(),)))):
         b = buckets.get(x["detected_at"][:10])
         if b is not None:
             b[x["competitor"]] += SEV_WEIGHT.get(x["severity"], 1)
-    for p in db.rows(con.execute("SELECT competitor, first_seen FROM posts WHERE first_seen >= ?", (start.isoformat(),))):
-        b = buckets.get(p["first_seen"][:10])
-        if b is not None:
-            b[p["competitor"]] += 1.5
     brand = next((s for s in vis["share"] if s["id"] == "__brand__"), None)
     last_run = db.row(con.execute("SELECT * FROM runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1").fetchone())
     n_facts = con.execute("SELECT COUNT(*) FROM facts WHERE removed_at IS NULL").fetchone()[0]
     by_module = Counter(MODULE_LABEL.get(x["module"], x["module"]) for x in ev)
-    ranked = sorted(ev, key=lambda x: (-SEV_WEIGHT.get(x["severity"], 0), x["detected_at"]), reverse=False)
+    # Highest severity first, newest first within a severity (ev is already newest-first; sorted() is stable).
+    ranked = sorted(ev, key=lambda x: -SEV_WEIGHT.get(x["severity"], 0))
     return {
         "days": days,
         "kpis": {
@@ -205,13 +310,70 @@ def overview(cfg: Config, con, days=7) -> dict:
             "ai_share_prev": (vis["trend"][-2].get("__brand__") if len(vis["trend"]) > 1 else None),
             "ai_gaps": len(gaps(cfg, vis)), "pages": sum(len(c.pages) for c in cfg.competitors),
             "feeds": sum(len(c.feeds) for c in cfg.competitors), "questions": len(cfg.questions),
-            "launch_max": max((v.get("probability", 0) for v in launch.values()), default=0),
+            # Pre-launch indicators (evidence count, last 45 days); no probability is shown, it was never validated.
+            "launch_indicators": sum(launch[c].get("n", 0) for c in rivals),
             "facts": n_facts,
         },
         "competitors": comp, "timeline": [{"date": d, **v} for d, v in buckets.items()],
         "top_events": ranked[:10], "by_module": dict(by_module), "recent_posts": ps[:8],
         "share": vis["share"], "last_run": last_run, "launch": launch,
+        "health": collection_health(cfg, con),
     }
+
+
+# ── collection health: "nothing changed" vs "nothing was collected" ──────────
+JOB_LABEL = {**MODULE_LABEL, "feeds": "Content", "ai": "AI search", "deepdive": "Deep dives", "digest": "Digest"}
+PER_COMPANY = {"dns", "subdomains", "stack", "radar", "hiring", "money", "ads", "product", "social"}
+
+
+def _interval(spec: str) -> timedelta | None:
+    """How often a schedule entry runs: "every 6h" → 6h, "daily 05:10" → 1 day, "weekly mon 08:30" → 7 days."""
+    spec = (spec or "").strip().lower()
+    if spec.startswith("every "):
+        n, unit = spec[6:-1].strip(), spec[-1]
+        if n.isdigit() and unit in "mhd":
+            return timedelta(**{{"m": "minutes", "h": "hours", "d": "days"}[unit]: int(n)})
+    if spec.startswith("daily"):
+        return timedelta(days=1)
+    if spec.startswith("weekly"):
+        return timedelta(days=7)
+    return None
+
+
+def collection_health(cfg: Config, con) -> dict:
+    """Per scheduled module: when it last succeeded, whether that is overdue, and which companies it couldn't read."""
+    now = datetime.now(timezone.utc)
+    names = {c.id: c.name for c in cfg.competitors}
+    modules, issues = [], []
+    for job, spec in (cfg.settings.get("schedule") or {}).items():
+        if job == "digest":
+            continue
+        last = db.row(con.execute("SELECT * FROM runs WHERE job=? AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1", (job,)).fetchone())
+        ok = con.execute("SELECT MAX(finished_at) FROM runs WHERE job=? AND status='ok'", (job,)).fetchone()[0]
+        every = _interval(spec)
+        # Overdue: no success within two scheduled intervals (one missed run is tolerated), and never sooner than 12h,
+        # since the GitHub Actions mode runs every module every 6h whatever settings.yaml says.
+        stale = not ok or bool(every and datetime.fromisoformat(ok) < now - max(2 * every, timedelta(hours=12)))
+        status = "error" if last and last["status"] == "error" else "stale" if stale else "ok"
+        modules.append({"job": job, "label": JOB_LABEL.get(job, job), "spec": spec, "last_ok": ok,
+                        "last_error": last["error"] if last and last["status"] == "error" else None, "status": status})
+        stats = (last or {}).get("stats")
+        if job in PER_COMPANY and isinstance(stats, dict):
+            for cid, s in stats.items():
+                if cid not in names or not isinstance(s, dict):
+                    continue
+                gaps = [*(s.get("unread") or []), *(["boards: " + ", ".join(s["failed_boards"])] if s.get("failed_boards") else []),
+                        *([f"{s['failed_lookups']} DNS lookups failed"] if s.get("failed_lookups") else [])]
+                if s.get("error"):
+                    issues.append({"competitor": cid, "name": names[cid], "job": job, "label": JOB_LABEL.get(job, job),
+                                   "status": "error", "detail": str(s["error"])[:200]})
+                elif gaps:
+                    issues.append({"competitor": cid, "name": names[cid], "job": job, "label": JOB_LABEL.get(job, job),
+                                   "status": "partial", "detail": "not read this run: " + "; ".join(map(str, gaps))[:200]})
+    bad = [m for m in modules if m["status"] != "ok"]
+    return {"status": "ok" if not bad and not issues else "degraded", "modules": modules, "issues": issues,
+            "stale": [m["label"] for m in modules if m["status"] == "stale"],
+            "failing": [m["label"] for m in modules if m["status"] == "error"]}
 
 
 # ── module views ─────────────────────────────────────────────────────────────
@@ -258,7 +420,7 @@ def hiring_view(cfg: Config, con) -> dict:
 def radar_view(cfg: Config, con) -> dict:
     out = []
     for c in cfg.competitors:
-        lp = db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "horizon": "-"}
+        lp = db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "n": 0, "kinds": {}}
         hist = [{"date": s["period"], "p": s["value"]} for s in facts.series(con, c.id, "radar", "launch_probability")]
         pubs = sorted({s["period"] for s in facts.series(con, c.id, "radar", "publish") if s["metric"] == "publish"})
         out.append({"id": c.id, "launch": lp, "history": hist[-60:], "publishes": pubs[-40:],
@@ -271,7 +433,7 @@ def radar_view(cfg: Config, con) -> dict:
                     "campaign_subdomains": [{"host": f["key"], "first_seen": f["first_seen"], **{k: f["value"].get(k) for k in ("hosting", "title", "screenshot", "first_cert")}}
                                             for f in facts.active(con, c.id, "subdomains", "subdomain") if f["value"].get("kind") == "campaign / product"
                                             and not (f["value"].get("private") or f["value"].get("internal") or "not contacted" in (f["value"].get("note") or ""))]})
-    out.sort(key=lambda r: -r["launch"].get("probability", 0))
+    out.sort(key=lambda r: -r["launch"].get("n", 0))
     return {"competitors": out}
 
 

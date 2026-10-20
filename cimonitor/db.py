@@ -38,7 +38,8 @@ CREATE INDEX IF NOT EXISTS ix_posts_seen ON posts(first_seen);
 CREATE TABLE IF NOT EXISTS ai_results (
   id INTEGER PRIMARY KEY, run_id TEXT, run_at TEXT, engine TEXT, model TEXT,
   question_id TEXT, question TEXT, answer TEXT, citations TEXT, mentions TEXT,
-  brand_rank INTEGER, error TEXT, accuracy TEXT
+  brand_rank INTEGER, error TEXT, accuracy TEXT,
+  sample INTEGER DEFAULT 0  -- repeat number when each question is asked several times in one run (settings ai.samples)
 );
 CREATE INDEX IF NOT EXISTS ix_ai_run ON ai_results(run_at);
 
@@ -55,6 +56,7 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS facts (
   id INTEGER PRIMARY KEY, competitor TEXT, module TEXT, kind TEXT, key TEXT, label TEXT,
   value TEXT, confidence TEXT, evidence TEXT, first_seen TEXT, last_seen TEXT, removed_at TEXT,
+  missing INTEGER DEFAULT 0,  -- consecutive complete reads without this fact
   UNIQUE (competitor, module, kind, key)
 );
 CREATE INDEX IF NOT EXISTS ix_facts_comp ON facts(competitor, module);
@@ -62,7 +64,10 @@ CREATE INDEX IF NOT EXISTS ix_facts_comp ON facts(competitor, module);
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY, competitor TEXT, module TEXT, kind TEXT, severity TEXT, title TEXT,
   detail TEXT, so_what TEXT, confidence TEXT, evidence TEXT, data TEXT, detected_at TEXT,
-  acknowledged INTEGER DEFAULT 0, change_id INTEGER
+  acknowledged INTEGER DEFAULT 0, change_id INTEGER,
+  occurred_at TEXT,  -- when it happened (article / release date), if known; detected_at is when Sentinel found it
+  story TEXT,        -- events with the same competitor + story are one move, shown as one signal (facts.story_key)
+  rating INTEGER     -- a reader's verdict: 1 useful, -1 not useful; used by `sentinel evaluate` to judge ranking rules
 );
 CREATE INDEX IF NOT EXISTS ix_events_time ON events(detected_at);
 
@@ -92,6 +97,7 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
 MIGRATIONS = [  # additive columns for databases created by earlier versions
     ("snapshots", "screenshot", "TEXT"), ("posts", "ctype", "TEXT"), ("ai_results", "accuracy", "TEXT"),
+    ("facts", "missing", "INTEGER DEFAULT 0"), ("events", "occurred_at", "TEXT"), ("events", "story", "TEXT"), ("events", "rating", "INTEGER"), ("ai_results", "sample", "INTEGER DEFAULT 0"),
 ]
 
 JSON_COLS = {"signals", "added", "removed", "citations", "mentions", "topics", "payload", "stats", "delivered",

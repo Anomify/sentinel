@@ -1,12 +1,27 @@
-import { Check, ExternalLink } from "lucide-react";
+import { Check, ExternalLink, ThumbsDown, ThumbsUp } from "lucide-react";
 import { api, invalidate, useApi } from "../lib/api";
 import type { SignalEvent } from "../lib/types";
-import { ago, host, path } from "../lib/format";
+import { ago, day, host, path } from "../lib/format";
 import { Button, Confidence, cx, Drawer, EntityTag, EvidenceList, Monogram, SeverityBadge, Skeleton, Thumb, useEntity, useMeta } from "./ui";
 import { useToast } from "./shell";
 
 export function moduleLabel(meta: { modules: Record<string, string> }, m: string) {
   return meta.modules?.[m] ?? m;
+}
+
+// Bookkeeping fields shown elsewhere (provenance labels, the suggested response) or not useful to a reader.
+const HIDDEN_DATA = ["kind", "key", "analysed_by", "so_what_by", "rule_severity", "action"];
+
+/** Who wrote the interpretation: the observed change is a fact, "why it matters" is not. */
+function interpretedBy(e: SignalEvent): string {
+  const by = e.data?.analysed_by;
+  if (!by) return "rule of thumb for this kind of change";
+  return by === "claude" ? "AI interpretation (Claude)" : by === "gemini" ? "AI interpretation (Gemini)" : "AI interpretation";
+}
+
+/** The event's own date when it differs from the day Sentinel found it (late-discovered news, old releases). */
+function happenedEarlier(e: SignalEvent): string | null {
+  return e.occurred_at && e.occurred_at.slice(0, 10) !== e.detected_at.slice(0, 10) ? e.occurred_at : null;
 }
 
 export function EventRow({ e, onOpen, active, showCompetitor = true }: { e: SignalEvent; onOpen: (id: number) => void; active?: boolean; showCompetitor?: boolean }) {
@@ -23,13 +38,16 @@ export function EventRow({ e, onOpen, active, showCompetitor = true }: { e: Sign
           <span>{moduleLabel(meta, e.module)}</span>
           <span>·</span>
           <Confidence c={e.confidence} />
+          {(e.related ?? 1) > 1 && <><span>·</span><span className="text-ink-2" title="Reports of the same move, grouped into one signal">{e.related} reports</span></>}
         </div>
         <div className="mt-1 text-[14px] leading-snug text-ink">{e.title}</div>
         {(e.so_what || e.detail) && <div className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-ink-2">{e.so_what || e.detail}</div>}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1.5 pt-0.5">
         <SeverityBadge s={e.severity} />
-        <span className="text-[11px] text-ink-3 tnum">{ago(e.detected_at)}</span>
+        <span className="text-[11px] text-ink-3 tnum" title={`Found ${new Date(e.detected_at).toLocaleString()}`}>
+          {happenedEarlier(e) ? `happened ${day(happenedEarlier(e)!)}` : ago(e.detected_at)}
+        </span>
       </div>
     </button>
   );
@@ -40,6 +58,14 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
   const meta = useMeta();
   const toast = useToast();
   const ready = e && e.id === id;
+  // Ratings are how ranking rules get judged: `sentinel evaluate` reports usefulness per kind of signal.
+  const rate = async (value: number) => {
+    if (!e) return;
+    const next = e.rating === value ? 0 : value;
+    await api(`/api/events/${e.id}/rate?value=${next}`, { method: "POST" });
+    toast({ title: next === 1 ? "Rated useful" : next === -1 ? "Rated not useful" : "Rating cleared" });
+    invalidate();
+  };
   const ack = async () => {
     if (!e) return;
     await api(`/api/events/${e.id}/ack?value=${!e.acknowledged}`, { method: "POST" });
@@ -62,22 +88,27 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
               <Confidence c={e.confidence} />
             </div>
             <h2 className="mt-4 text-[24px] leading-tight tracking-[-0.02em] text-ink">{e.title}</h2>
-            <div className="mt-2 text-[12.5px] text-ink-3">Detected {ago(e.detected_at)} · {new Date(e.detected_at).toLocaleString()}</div>
+            <div className="mt-2 text-[12.5px] text-ink-3">
+              {happenedEarlier(e) && <>Happened {new Date(happenedEarlier(e)!).toLocaleDateString()} · </>}
+              Found by Sentinel {ago(e.detected_at)} · {new Date(e.detected_at).toLocaleString()}
+            </div>
             <div className="mt-5 flex gap-2">
               <Button variant="outline" size="sm" onClick={ack}><Check size={13} />{e.acknowledged ? "Mark unread" : "Mark reviewed"}</Button>
+              <Button variant={e.rating === 1 ? "primary" : "ghost"} size="sm" onClick={() => rate(1)} aria-pressed={e.rating === 1}><ThumbsUp size={13} />Useful</Button>
+              <Button variant={e.rating === -1 ? "primary" : "ghost"} size="sm" onClick={() => rate(-1)} aria-pressed={e.rating === -1}><ThumbsDown size={13} />Not useful</Button>
               {e.evidence?.[0]?.url && <Button variant="ghost" size="sm" onClick={() => window.open(e.evidence[0].url!, "_blank")}><ExternalLink size={13} />Open source</Button>}
             </div>
           </div>
           <div className="space-y-8 px-9 py-8">
             {(e.so_what || c?.so_what) && (
               <section>
-                <div className="eyebrow mb-2">Why it matters</div>
+                <div className="eyebrow mb-2">Why it matters <span className="normal-case tracking-normal">· {interpretedBy(e)}</span></div>
                 <p className="text-[15px] leading-relaxed text-ink">{e.so_what || c?.so_what}</p>
               </section>
             )}
             {(c?.action || e.data?.action) && (
               <section className="rounded-2xl bg-accent-soft px-5 py-4">
-                <div className="mb-1 text-[11.5px] text-accent-ink">Vs. us, recommended response</div>
+                <div className="mb-1 text-[11.5px] text-accent-ink">Suggested response · {interpretedBy(e)} · a judgement to check, not a finding</div>
                 <p className="text-[14px] leading-relaxed text-ink">{c?.action || e.data?.action}</p>
               </section>
             )}
@@ -89,11 +120,11 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
             )}
             {shot && <Thumb name={shot} className="aspect-[16/10] w-full" />}
             {c && <PageDiff c={c} />}
-            {!c && e.data && Object.keys(e.data).filter((k) => !["kind", "key"].includes(k)).length > 0 && (
+            {!c && e.data && Object.keys(e.data).filter((k) => !HIDDEN_DATA.includes(k)).length > 0 && (
               <section>
                 <div className="eyebrow mb-2">Data</div>
                 <div className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-1.5 text-[12.5px]">
-                  {Object.entries(e.data).filter(([k, v]) => !["kind", "key"].includes(k) && v != null && v !== "").slice(0, 14).map(([k, v]) => (
+                  {Object.entries(e.data).filter(([k, v]) => !HIDDEN_DATA.includes(k) && v != null && v !== "").slice(0, 14).map(([k, v]) => (
                     <div key={k} className="contents"><span className="text-ink-3">{k.replace(/_/g, " ")}</span><span className="break-words text-ink-2">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span></div>
                   ))}
                 </div>
@@ -103,6 +134,23 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
               <div className="eyebrow mb-3">Evidence trail</div>
               <EvidenceList items={e.evidence || []} />
             </section>
+            {(e.reports?.length ?? 0) > 1 && (
+              <section>
+                <div className="eyebrow mb-1">All {e.reports!.length} reports of this move</div>
+                <p className="mb-3 text-[12px] text-ink-3">Grouped into one signal. Identical headlines on several sites are one story, not independent confirmation.</p>
+                <ul className="divide-y divide-line rounded-xl ring-1 ring-inset ring-line">
+                  {e.reports!.map((r) => {
+                    const url = r.evidence?.find((x) => x.url)?.url;
+                    return (
+                      <li key={r.id} className="flex items-start gap-3 px-4 py-2.5 text-[12.5px]">
+                        <span className="w-16 shrink-0 text-ink-3 tnum">{day(r.occurred_at || r.detected_at)}</span>
+                        {url ? <a href={url} target="_blank" rel="noreferrer" className="min-w-0 text-ink-2 hover:text-ink">{r.title}</a> : <span className="min-w-0 text-ink-2">{r.title}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
           </div>
         </div>
       )}
@@ -117,12 +165,12 @@ function PageDiff({ c }: { c: NonNullable<SignalEvent["change"]> }) {
         <div className="eyebrow">Page diff · <a href={c.url} target="_blank" rel="noreferrer" className="normal-case tracking-normal hover:text-ink">{host(c.url)}{path(c.url)}</a></div>
         <div className="text-[11.5px] text-ink-3 tnum">+{c.added.length} · −{c.removed.length} · {Math.round(c.change_ratio * 100)}%</div>
       </div>
-      <div className="overflow-hidden rounded-2xl border border-line bg-[#fbfbfa] font-mono text-[12px] leading-[1.7]">
+      <div className="overflow-hidden rounded-2xl border border-line bg-sunken font-mono text-[12px] leading-[1.7]">
         {c.diff.length === 0 && <div className="p-4 font-sans text-ink-3">Snapshot text not available.</div>}
         {c.diff.map((l, i) => l.t === "gap" ? (
           <div key={i} className="border-y border-line px-4 py-1 text-center font-sans text-[11px] text-ink-3">{l.s}</div>
         ) : (
-          <div key={i} className={cx("flex gap-3 px-4", l.t === "add" && "bg-good/[0.07] text-ink", l.t === "del" && "bg-crit/[0.06] text-ink-2 line-through decoration-crit/30", l.t === "eq" && "text-ink-3")}>
+          <div key={i} className={cx("flex gap-3 px-4", l.t === "add" && "bg-green/12 text-ink", l.t === "del" && "bg-red/12 text-ink-2 line-through decoration-crit/30", l.t === "eq" && "text-ink-3")}>
             <span className={cx("w-3 shrink-0 select-none", l.t === "add" ? "text-good" : l.t === "del" ? "text-crit" : "text-transparent")}>{l.t === "add" ? "+" : l.t === "del" ? "−" : " "}</span>
             <span className="whitespace-pre-wrap break-words">{l.s}</span>
           </div>
