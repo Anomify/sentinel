@@ -529,9 +529,8 @@ def test_failed_and_partial_ai_runs_do_not_replace_the_latest_complete_run():
 def test_questions_naming_a_vendor_are_left_out_of_share():
     from cimonitor import insights
     c = cfg()
-    texts = {q.id: q.text for q in c.questions}
-    assert all("HiddenLayer" in texts[q] or "Lakera" in texts[q] for q in insights.branded_questions(c))
-    assert insights.branded_questions(c)
+    branded = insights.branded_questions(c)
+    assert {"q10", "q11", "q12"} <= branded and "q01" not in branded  # "HiddenLayer alternatives" vs "best AI security platforms"
 
 
 def test_source_gaps_skip_vendor_sites_and_redirect_links():
