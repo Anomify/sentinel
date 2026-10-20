@@ -38,7 +38,8 @@ CREATE INDEX IF NOT EXISTS ix_posts_seen ON posts(first_seen);
 CREATE TABLE IF NOT EXISTS ai_results (
   id INTEGER PRIMARY KEY, run_id TEXT, run_at TEXT, engine TEXT, model TEXT,
   question_id TEXT, question TEXT, answer TEXT, citations TEXT, mentions TEXT,
-  brand_rank INTEGER, error TEXT, accuracy TEXT
+  brand_rank INTEGER, error TEXT, accuracy TEXT,
+  sample INTEGER DEFAULT 0  -- repeat number when each question is asked several times in one run (settings ai.samples)
 );
 CREATE INDEX IF NOT EXISTS ix_ai_run ON ai_results(run_at);
 
@@ -96,7 +97,7 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
 MIGRATIONS = [  # additive columns for databases created by earlier versions
     ("snapshots", "screenshot", "TEXT"), ("posts", "ctype", "TEXT"), ("ai_results", "accuracy", "TEXT"),
-    ("facts", "missing", "INTEGER DEFAULT 0"), ("events", "occurred_at", "TEXT"), ("events", "story", "TEXT"), ("events", "rating", "INTEGER"),
+    ("facts", "missing", "INTEGER DEFAULT 0"), ("events", "occurred_at", "TEXT"), ("events", "story", "TEXT"), ("events", "rating", "INTEGER"), ("ai_results", "sample", "INTEGER DEFAULT 0"),
 ]
 
 JSON_COLS = {"signals", "added", "removed", "citations", "mentions", "topics", "payload", "stats", "delivered",

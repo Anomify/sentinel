@@ -816,3 +816,31 @@ def test_rating_a_move_rates_every_report_and_feeds_evaluate():
     assert r["rated_moves"] == 2
     assert [(k["kind"], k["useful_rate"]) for k in r["by_kind"]] == [("radar/site_page_added", 0.0), ("money/funding_added", 1.0)]
     assert r["weekly_top"][0]["useful"] == 1 and r["weekly_top"][0]["rated"] == 2
+
+
+def test_repeated_samples_show_the_spread_and_majority_decides_the_grid(monkeypatch):
+    from cimonitor import db, insights
+    from cimonitor.collectors import ai_search
+    c = cfg()
+    c.settings["ai"] = {"samples": 3}
+    calls = []
+
+    def ask(model, q):
+        calls.append(q)
+        return ("Top tools: HiddenLayer and Hyperfence." if len(calls) % 3 else "Top tools: HiddenLayer."), []
+    class Serial:  # answers in request order, so which sample misses the brand is fixed
+        def __init__(self, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def map(self, fn, items): return [fn(i) for i in items]
+    monkeypatch.setattr(ai_search, "ThreadPoolExecutor", Serial)
+    monkeypatch.setitem(ai_search.ENGINES, "perplexity", (ask, "PERPLEXITY_API_KEY"))
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "x")
+    c.engines = {"perplexity": {"enabled": True, "model": "sonar"}}
+    r = ai_search.run(c)
+    assert r["answers"] == 3 * len(c.questions) == len(calls)
+    with db.connect() as con:
+        v = insights.visibility(c, con)
+    assert v["latest"]["samples"] == 3 and v["spread"]["__brand__"] == {"min": 0.0, "max": 1.0}
+    q1 = next(m for m in v["matrix"] if m["id"] == "q01")
+    assert q1["cells"]["hiddenlayer"]["perplexity"] == 1 and q1["cells"]["__brand__"]["perplexity"] == 2  # named in 2 of 3

@@ -77,6 +77,9 @@ export default function AiVisibility() {
                     {data.latest.errors ? `; ${data.latest.errors} requests failed` : ""}
                     {data.latest.no_answer ? `; ${data.latest.no_answer} showed no AI answer` : ""}
                     {data.latest.branded_excluded.length ? `; ${data.latest.branded_excluded.length} questions naming a vendor left out` : ""}.
+                    {(data.latest.samples ?? 1) > 1 && data.spread?.[brand.id]
+                      ? ` Asked ${data.latest.samples} times each: your share ranged ${pct(data.spread[brand.id].min)}–${pct(data.spread[brand.id].max)}, so smaller moves are noise.`
+                      : " One sample per question: a move of a few points can be chance."}
                     {!data.latest.complete && <span className="text-high"> Incomplete run: not comparable with others.</span>}
                   </p>
                 )}

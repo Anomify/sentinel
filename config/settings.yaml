@@ -28,6 +28,11 @@ analysis:
   model: "claude-opus-5-5"           # ANTHROPIC_API_KEY
   effort: low
 
+ai:
+  # How many times each question is asked per engine in one AI-visibility run. Answers vary between identical requests,
+  # so with 1 a share change of a few points can be chance; 3 shows the range. Each sample is a paid request (cost x N).
+  samples: 1
+
 digest:
   title: "Weekly Competitive Brief"
   to: "keith@hyperfence.io"   # comma-separate for more; DIGEST_TO in .env overrides

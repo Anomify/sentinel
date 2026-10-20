@@ -189,7 +189,7 @@ def score(cfg: Config, answer: str, cites: list[dict]) -> dict:
             for f in found}
 
 
-def _one(cfg, run_id, engine, model, q: Question) -> dict:
+def _one(cfg, run_id, engine, model, q: Question, sample: int = 0) -> dict:
     fn = ENGINES[engine][0]
     try:
         answer, cites = fn(model, q.text)
@@ -204,12 +204,12 @@ def _one(cfg, run_id, engine, model, q: Question) -> dict:
             seen.add(c["url"])
             uniq.append(c)
     acc = None
-    if not err and (mentions.get("__brand__") or {}).get("mentioned"):
+    if not err and sample == 0 and (mentions.get("__brand__") or {}).get("mentioned"):  # judge one sample: it costs a model call
         from .. import llm
         acc = llm.judge_accuracy(cfg, q.text, answer)
     return {"run_id": run_id, "run_at": db.now(), "engine": engine, "model": model, "question_id": q.id,
             "question": q.text, "answer": answer, "citations": uniq, "mentions": mentions,
-            "brand_rank": (mentions.get("__brand__") or {}).get("rank"), "error": err, "accuracy": acc}
+            "brand_rank": (mentions.get("__brand__") or {}).get("rank"), "error": err, "accuracy": acc, "sample": sample}
 
 
 def run(cfg: Config, limit: int | None = None) -> dict:
@@ -218,7 +218,10 @@ def run(cfg: Config, limit: int | None = None) -> dict:
         return {"skipped": "no AI engines enabled with API keys (set PERPLEXITY_API_KEY / OPENAI_API_KEY)"}
     run_id = uuid.uuid4().hex[:10]
     qs = cfg.questions[:limit] if limit else cfg.questions
-    jobs = [(e, m, q) for e, m in engines for q in qs]
+    # Answers vary between identical requests: asking each question several times (settings ai.samples) shows how much.
+    # Every sample is a paid request, so this multiplies cost; the default is 1.
+    samples = max(1, int((cfg.settings.get("ai") or {}).get("samples", 1)))
+    jobs = [(e, m, q, s) for e, m in engines for q in qs for s in range(samples)]
     with ThreadPoolExecutor(max_workers=6) as pool:
         results = list(pool.map(lambda j: _one(cfg, run_id, *j), jobs))
     with db.connect() as con:

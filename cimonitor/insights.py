@@ -119,6 +119,16 @@ def _dom(c: dict) -> str:
     return "" if d in REDIRECT_HOSTS else d
 
 
+def _cell(rows: list[dict], entity: str) -> dict:
+    """Question x engine cell: the best rank if the entity was named in most samples of that question, else None."""
+    by_engine: dict[str, list] = defaultdict(list)
+    for r in rows:
+        m = (r["mentions"] or {}).get(entity) or {}
+        by_engine[r["engine"]].append(m.get("rank") if m.get("mentioned") else None)
+    return {e: (min(x for x in ranks if x) if sum(x is not None for x in ranks) * 2 > len(ranks) else None)
+            for e, ranks in by_engine.items()}
+
+
 def branded_questions(cfg: Config) -> set[str]:
     """Questions that name a tracked vendor ("HiddenLayer alternatives") guarantee it a mention, so they're left out of share."""
     return {q.id for q in cfg.questions if any(e.mention_regex().search(q.text) for e in cfg.entities if not e.is_brand)}
@@ -127,7 +137,7 @@ def branded_questions(cfg: Config) -> set[str]:
 def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
     runs = ai_runs(con, len(cfg.questions))
     empty = {"runs": [], "latest": None, "share": [], "matrix": [], "trend": [], "citations": [], "engines": [], "per_engine": {},
-             "source_gaps": [], "accuracy": None}
+             "source_gaps": [], "accuracy": None, "spread": {}}
     if not runs:
         return empty
     complete = [r for r in runs if r["complete"]]
@@ -156,8 +166,7 @@ def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
     matrix = []
     for q in cfg.questions:
         rows = by_q.get(q.id, [])
-        cell = {i: {r["engine"]: ((r["mentions"] or {}).get(i) or {}).get("rank") if ((r["mentions"] or {}).get(i) or {}).get("mentioned") else None
-                    for r in rows} for i in ids}
+        cell = {i: _cell(rows, i) for i in ids}
         matrix.append({"id": q.id, "text": q.text, "category": q.category, "cells": cell})
 
     trend = []
@@ -189,8 +198,17 @@ def visibility(cfg: Config, con, run_id: str | None = None) -> dict:
     latest = {**next(r for r in runs if r["run_id"] == run_id), "measured": len(measured),
               "no_answer": con.execute("SELECT COUNT(*) FROM ai_results WHERE run_id=? AND error IS NULL AND answer LIKE ?",
                                        (run_id, NO_ANSWER + "%")).fetchone()[0],
-              "branded_excluded": sorted(branded) if len(measured) < len(res) else []}
-    return {"runs": runs, "latest": latest, "engines": engines,
+              "branded_excluded": sorted(branded) if len(measured) < len(res) else [],
+              "samples": len({r.get("sample") or 0 for r in measured}) or 1}
+    # With several samples per question, share is computed per sample too: the spread is how much it moves by chance.
+    by_sample: dict[int, list] = defaultdict(list)
+    for r in measured:
+        by_sample[r.get("sample") or 0].append(r)
+    spread = {}
+    if len(by_sample) > 1:
+        per = [share(rows) for rows in by_sample.values()]
+        spread = {i: {"min": min(p[k]["share"] for p in per), "max": max(p[k]["share"] for p in per)} for k, i in enumerate(ids)}
+    return {"runs": runs, "latest": latest, "engines": engines, "spread": spread,
             "share": share(measured), "per_engine": {e: share([r for r in measured if r["engine"] == e]) for e in engines},
             "matrix": matrix, "trend": trend,
             "citations": [{"domain": d, "count": n} for d, n in domains.most_common(15)],
