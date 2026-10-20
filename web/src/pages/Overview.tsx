@@ -133,7 +133,7 @@ function HealthStrip({ h }: { h: OV["health"] }) {
   const parts = [
     h.failing.length ? `failing: ${h.failing.join(", ")}` : "",
     h.stale.length ? `overdue: ${h.stale.join(", ")}` : "",
-    h.issues.length ? `${h.issues.length} partial read${h.issues.length > 1 ? "s" : ""} (${[...new Set(h.issues.map((i) => i.name))].slice(0, 3).join(", ")})` : "",
+    h.issues.length ? `not fully read: ${[...new Set(h.issues.map((i) => `${i.name} (${i.label})`))].slice(0, 3).join(", ")}` : "",
   ].filter(Boolean);
   return (
     <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-high/[0.08] px-5 py-3 text-[13px] text-ink ring-1 ring-inset ring-high/25">

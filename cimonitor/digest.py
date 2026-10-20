@@ -66,7 +66,7 @@ def health_note(h: dict | None) -> str:
         return "Collection: every module current."
     parts = [f"failing: {', '.join(h['failing'])}" if h.get("failing") else "",
              f"overdue: {', '.join(h['stale'])}" if h.get("stale") else "",
-             f"{len(h['issues'])} partial reads" if h.get("issues") else ""]
+             f"{len(h['issues'])} {'company' if len(h['issues']) == 1 else 'companies'} not fully read" if h.get("issues") else ""]
     return "Collection gaps (" + "; ".join(p for p in parts if p) + "): some moves may be missing from this brief."
 
 

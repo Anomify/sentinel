@@ -34,7 +34,7 @@ function HealthCard({ h }: { h: Health }) {
       </table>
       {h.issues.length > 0 && (
         <div className="border-t border-line px-6 py-4">
-          <div className="eyebrow mb-2">Partial reads on the last run</div>
+          <div className="eyebrow mb-2">Not fully read on the last run</div>
           <ul className="space-y-1 text-[12.5px] text-ink-2">
             {h.issues.map((i, k) => <li key={k}><span className="text-ink">{i.name}</span> · {i.label}: {i.detail}</li>)}
           </ul>
