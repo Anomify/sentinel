@@ -154,7 +154,7 @@ export function DeepDive() {
               {data.sections.map((s) => (
                 <section key={s.id} id={s.id} className="scroll-mt-24">
                   <h2 className="mb-6 border-b border-line pb-3 text-[22px] tracking-[-0.02em] text-ink">{s.title}</h2>
-                  <div className="space-y-8">{s.findings.map((f) => <FindingBlock key={f.id} f={f} />)}</div>
+                  <div className="space-y-8">{s.findings.map((f) => <FindingBlock key={f.id} f={f} asOf={data.profile_as_of} />)}</div>
                 </section>
               ))}
             </article>
@@ -165,7 +165,15 @@ export function DeepDive() {
   );
 }
 
-function FindingBlock({ f }: { f: Finding }) {
+/** "Vs. us" depends on what Sentinel knows about Hyperfence: say who wrote it and how current that knowledge is. */
+function vsUsSource(by: string | undefined, asOf: string | null | undefined) {
+  const who = by === "claude" ? "AI suggestion (Claude)" : by === "gemini" ? "AI suggestion (Gemini)" : by ? "AI suggestion" : "Rule of thumb";
+  if (!asOf) return { who, note: "Hyperfence profile undated", stale: true };
+  const days = Math.floor((Date.now() - new Date(asOf).getTime()) / 86400000);
+  return { who, note: `from the Hyperfence profile as of ${asOf}${days > 90 ? ", now out of date" : ""}`, stale: days > 90 };
+}
+
+function FindingBlock({ f, asOf }: { f: Finding; asOf?: string | null }) {
   const [open, setOpen] = useState(false);
   const shot = f.data?.screenshot;
   return (
@@ -178,7 +186,8 @@ function FindingBlock({ f }: { f: Finding }) {
       {shot && <Thumb name={shot} className="mt-4 aspect-[16/9] w-full max-w-md" />}
       {f.vs_us && (
         <div className="mt-4 border-l-2 border-accent pl-4">
-          <div className="text-[11.5px] text-accent-ink">Vs. us{f.vs_us_by === "claude" ? " · written by Claude" : f.vs_us_by === "gemini" ? " · written by Gemini" : ""}</div>
+          <div className="text-[11.5px] text-accent-ink">Vs. us · {vsUsSource(f.vs_us_by, asOf).who}
+            <span className={vsUsSource(f.vs_us_by, asOf).stale ? "text-high" : "text-ink-3"}> · {vsUsSource(f.vs_us_by, asOf).note}</span></div>
           <p className="mt-1 text-[14px] leading-relaxed text-ink">{f.vs_us}</p>
         </div>
       )}

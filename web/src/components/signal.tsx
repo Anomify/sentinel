@@ -9,6 +9,15 @@ export function moduleLabel(meta: { modules: Record<string, string> }, m: string
   return meta.modules?.[m] ?? m;
 }
 
+// Bookkeeping fields shown elsewhere (provenance labels, the suggested response) or not useful to a reader.
+const HIDDEN_DATA = ["kind", "key", "analysed_by", "so_what_by", "rule_severity", "action"];
+
+/** Who wrote the interpretation: the observed change is a fact, "why it matters" is not. */
+function interpretedBy(e: SignalEvent): string {
+  const by = e.data?.analysed_by;
+  return by ? `AI interpretation (${by === "claude" ? "Claude" : by === "gemini" ? "Gemini" : by})` : "rule of thumb for this kind of change";
+}
+
 /** The event's own date when it differs from the day Sentinel found it (late-discovered news, old releases). */
 function happenedEarlier(e: SignalEvent): string | null {
   return e.occurred_at && e.occurred_at.slice(0, 10) !== e.detected_at.slice(0, 10) ? e.occurred_at : null;
@@ -82,13 +91,13 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
           <div className="space-y-8 px-9 py-8">
             {(e.so_what || c?.so_what) && (
               <section>
-                <div className="eyebrow mb-2">Why it matters</div>
+                <div className="eyebrow mb-2">Why it matters <span className="normal-case tracking-normal">· {interpretedBy(e)}</span></div>
                 <p className="text-[15px] leading-relaxed text-ink">{e.so_what || c?.so_what}</p>
               </section>
             )}
             {(c?.action || e.data?.action) && (
               <section className="rounded-2xl bg-accent-soft px-5 py-4">
-                <div className="mb-1 text-[11.5px] text-accent-ink">Vs. us, recommended response</div>
+                <div className="mb-1 text-[11.5px] text-accent-ink">Suggested response · {interpretedBy(e)} · a judgement to check, not a finding</div>
                 <p className="text-[14px] leading-relaxed text-ink">{c?.action || e.data?.action}</p>
               </section>
             )}
@@ -100,11 +109,11 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
             )}
             {shot && <Thumb name={shot} className="aspect-[16/10] w-full" />}
             {c && <PageDiff c={c} />}
-            {!c && e.data && Object.keys(e.data).filter((k) => !["kind", "key"].includes(k)).length > 0 && (
+            {!c && e.data && Object.keys(e.data).filter((k) => !HIDDEN_DATA.includes(k)).length > 0 && (
               <section>
                 <div className="eyebrow mb-2">Data</div>
                 <div className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-1.5 text-[12.5px]">
-                  {Object.entries(e.data).filter(([k, v]) => !["kind", "key"].includes(k) && v != null && v !== "").slice(0, 14).map(([k, v]) => (
+                  {Object.entries(e.data).filter(([k, v]) => !HIDDEN_DATA.includes(k) && v != null && v !== "").slice(0, 14).map(([k, v]) => (
                     <div key={k} className="contents"><span className="text-ink-3">{k.replace(/_/g, " ")}</span><span className="break-words text-ink-2">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span></div>
                   ))}
                 </div>

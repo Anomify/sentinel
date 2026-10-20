@@ -147,6 +147,18 @@ def duplicate_digests(con) -> int:
     return n
 
 
+def ai_text_dashes(con) -> int:
+    """No em dashes in Sentinel's own AI-written text, including text stored before that rule. Source quotes are left alone."""
+    from .llm import no_dashes
+    n = 0
+    for table, cols in (("events", ("so_what",)), ("changes", ("headline", "summary", "so_what", "action"))):
+        for r in db.rows(con.execute(f"SELECT id, {', '.join(cols)} FROM {table} WHERE " +
+                                     " OR ".join(f"{c} LIKE ?" for c in cols), ["%—%"] * len(cols))):
+            con.execute(f"UPDATE {table} SET {', '.join(f'{c}=?' for c in cols)} WHERE id=?", [*(no_dashes(r[c]) for c in cols), r["id"]])
+            n += 1
+    return n
+
+
 def story_keys(con) -> int:
     """Events stored before stories existed get their story key, so old reports group like new ones."""
     from .facts import story_key
@@ -166,7 +178,7 @@ def run() -> dict:
                          ("redated", lambda: redate_events(con)), ("off_voice_comments", lambda: off_voice_comments(con)),
                          ("per_headline_deals", lambda: per_headline_deals(con)),
                          ("removed_competitors", lambda: removed_competitors(con, cfg)), ("duplicate_digests", lambda: duplicate_digests(con)),
-                         ("stories", lambda: story_keys(con))):
+                         ("stories", lambda: story_keys(con)), ("ai_text_dashes", lambda: ai_text_dashes(con))):
             try:
                 out[name] = fn()
             except Exception as e:  # a repair must never stop the app

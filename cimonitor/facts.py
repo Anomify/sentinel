@@ -183,7 +183,9 @@ def sync(con, competitor: str, module: str, observed: list[Fact], kinds: list[st
                 sev = rule.severity_fn(f) if rule.severity_fn else rule.severity
                 emit(con, competitor, module, f"{kind}_added", sev,
                      rule.title_add(f) if rule.title_add else f"New {kind.replace('_', ' ')}: {f.label}",
-                     confidence=f.confidence, evidence=f.evidence, data={"kind": kind, "key": key, **_slim(f.value)},
+                     confidence=f.confidence, evidence=f.evidence,
+                     # so_what here is a fixed rule of thumb for this kind of change, not an analysis of this one
+                     data={"kind": kind, "key": key, **_slim(f.value), **({"so_what_by": "rule"} if rule.so_what else {})},
                      so_what=rule.so_what(f) if rule.so_what else None)
         else:
             upd = {"last_seen": now, "label": f.label, "confidence": f.confidence, "missing": 0}

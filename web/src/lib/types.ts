@@ -120,6 +120,7 @@ export interface Finding {
 }
 export interface DeepDive {
   competitor: string; name: string; domain: string; generated_at: string;
+  profile_as_of?: string | null; // date the Hyperfence profile behind every "Vs. us" was last checked
   summary: { label: string; value: string }[]; sections: { id: string; title: string; findings: Finding[] }[];
   counts: Record<string, number>;
 }

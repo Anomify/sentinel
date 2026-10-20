@@ -639,3 +639,53 @@ def test_syndicated_copies_are_not_independent_confirmation():
     assert extract_money([item("PR Newswire", "Acme raises $40M Series A")], re.compile("Acme"))[0][0].confidence == "confirmed"
     two = [item("TechCrunch", "Acme raises $40M Series A"), item("SiliconANGLE", "Acme lands $40 million to secure AI agents")]
     assert extract_money(two, re.compile("Acme"))[0][0].confidence == "confirmed"
+
+
+# ── Evidence vs interpretation ───────────────────────────────────────────────
+def test_source_text_is_served_verbatim_and_only_ai_text_loses_em_dashes():
+    from fastapi.testclient import TestClient
+    from cimonitor import cleanup, db, facts
+    from cimonitor.api import app
+    with db.connect() as con:
+        eid = facts.emit(con, "hiddenlayer", "money", "press_added", "low", "In the news: HiddenLayer — the AI security company",
+                         so_what="Matters — a lot")
+        cleanup.ai_text_dashes(con)
+    e = TestClient(app).get(f"/api/events/{eid}").json()
+    assert "—" in e["title"] and "—" not in e["so_what"]
+
+
+def test_ai_cannot_silently_drop_a_page_change(monkeypatch):
+    from cimonitor import db, llm
+    from cimonitor.collectors import pages
+    from cimonitor.collectors.fetch import Fetched
+    from cimonitor.config import Page
+    c = cfg()
+    comp = next(x for x in c.competitors if x.tier != "self")
+    html = {"v": "<html><body><h1>Secure AI</h1><p>Plans from $99/month</p><p>Talk to sales</p></body></html>"}
+
+    class F:
+        def get(self, url, render=True, screenshot=None):
+            return Fetched(url, 200, html["v"])
+    monkeypatch.setattr(llm, "analyze_change", lambda *a, **k: {"headline": "Minor tweak", "category": "cosmetic", "severity": "noise",
+                                                                   "summary": "s", "so_what": "w", "action": "a"})
+    monkeypatch.setattr(llm, "provider", lambda cfg=None: "gemini")
+    page = Page("pricing", "https://example.test/pricing")
+    with db.connect() as con:
+        pages.check_page(con, c, F(), comp, page)                                  # baseline
+        html["v"] = html["v"].replace("$99", "$149")                               # a price change the model calls noise
+        r1 = pages.check_page(con, c, F(), comp, page)
+        html["v"] = html["v"].replace("Talk to sales", "Talk to our team today")   # a real but minor change
+        r2 = pages.check_page(con, c, F(), comp, page)
+        rows = db.rows(con.execute("SELECT severity, data FROM events ORDER BY id"))
+        n_changes = con.execute("SELECT COUNT(*) FROM changes").fetchone()[0]
+    assert r1["severity"] == "critical" and r2["status"] == "noise" and n_changes == 2
+    assert [r["severity"] for r in rows] == ["critical", "noise"] and rows[0]["data"]["analysed_by"] == "gemini"
+
+
+def test_recommendations_carry_the_date_of_what_we_know_about_ourselves():
+    from cimonitor import llm
+    from cimonitor.intel import deepdive
+    c = cfg()
+    assert c.brand.profile.get("profile_as_of")
+    assert c.brand.profile["profile_as_of"] in llm.brand_context(c)
+    assert deepdive.build(c, next(x for x in c.competitors if x.tier != "self"))["profile_as_of"] == c.brand.profile["profile_as_of"]

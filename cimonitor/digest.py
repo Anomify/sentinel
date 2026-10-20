@@ -39,7 +39,8 @@ def build(cfg: Config, days: int | None = None) -> dict:
           for e in sorted(evs, key=lambda e: -insights.SEV_WEIGHT.get(e["severity"], 0))]
     gaps = insights.gaps(cfg, vis)
     facts = {
-        "changes": [{k: c[k] for k in ("competitor", "kind", "severity", "category", "headline", "summary", "so_what", "url")}
+        "changes": [{k: c[k] for k in ("competitor", "kind", "severity", "category", "headline", "summary", "so_what", "url",
+                                       "confidence", "reports")}
                     for c in ch[:40]],
         "pre_launch_indicators": {names.get(k): {"count": v.get("n", 0), "kinds": v.get("kinds", {})} for k, v in launch.items() if v.get("n")},
         "posts": [{"competitor": p["competitor"], "title": p["title"], "topics": p["topics"]} for p in ps[:40]],

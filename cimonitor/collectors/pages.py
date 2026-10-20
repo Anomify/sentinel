@@ -215,13 +215,18 @@ def check_page(con, cfg: Config, fetcher: Fetcher, comp: Entity, page: Page) -> 
 
     severity, category, headline = heuristic(page.kind, delta, ratio)
     summary = f"{len(added)} lines added, {len(removed)} removed ({ratio:.0%} of page)."
-    so_what = action = None
+    so_what = action = analysed_by = None
+    rule_severity = severity
     ai = llm.analyze_change(cfg, comp.name, page.url, page.kind, removed, added, delta)
-    if ai:
-        severity, category, headline = ai["severity"], ai["category"], ai["headline"]
-        summary, so_what, action = ai["summary"], ai["so_what"], ai["action"]
-        if severity == "noise":
-            return {"url": page.url, "status": "noise"}
+    if ai and ai.get("severity") in llm.CHANGE_SCHEMA["properties"]["severity"]["enum"]:
+        severity, headline = ai["severity"], ai.get("headline") or headline
+        category = ai.get("category") if ai.get("category") in llm.CHANGE_SCHEMA["properties"]["category"]["enum"] else category
+        summary, so_what, action = ai.get("summary") or summary, ai.get("so_what"), ai.get("action")
+        analysed_by = llm.provider(cfg)
+        # The model reads competitor-written page text, which can mislead it: it may not dismiss a price or hero change alone.
+        if severity == "noise" and ("prices" in delta or "h1" in delta):
+            severity = rule_severity
+    # A "noise" change is still recorded (hidden from feeds, kept for audit), so nothing disappears without a trace.
 
     cid = db.insert(con, "changes", {
         "competitor": comp.id, "url": page.url, "kind": page.kind, "detected_at": db.now(),
@@ -231,8 +236,9 @@ def check_page(con, cfg: Config, fetcher: Fetcher, comp: Entity, page: Page) -> 
     })
     facts.emit(con, comp.id, "pages", "page_change", severity, headline, detail=summary, so_what=so_what,
                confidence=facts.CONFIRMED, evidence=[facts.ev(page.url, "page snapshot diff", f"{ratio:.0%} changed", f.screenshot)],
-               data={"category": category, "kind": page.kind, "action": action}, change_id=cid)
-    return {"url": page.url, "status": "changed", "severity": severity}
+               data={"category": category, "kind": page.kind, "action": action, "analysed_by": analysed_by,
+                     "rule_severity": rule_severity}, change_id=cid)
+    return {"url": page.url, "status": "noise" if severity == "noise" else "changed", "severity": severity}
 
 
 def run(cfg: Config, only: str | None = None) -> dict:

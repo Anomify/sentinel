@@ -334,6 +334,7 @@ def build(cfg: Config, comp: Entity) -> dict:
         log.exception("vs us")
     summary = _summary(comp, out, motion, jobs, funding, launch, stack_tools, subs, mna)
     return {"competitor": comp.id, "name": comp.name, "domain": comp.domain, "generated_at": db.now(),
+            "profile_as_of": (cfg.brand.profile or {}).get("profile_as_of"),
             "summary": summary, "sections": [{"id": s, "title": t, "findings": sorted([f for f in out if f["section"] == s], key=lambda f: -f["weight"])}
                                              for s, t in SECTIONS if any(f["section"] == s for f in out)],
             "counts": Counter(f["confidence"] for f in out)}

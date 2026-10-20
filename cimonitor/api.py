@@ -37,23 +37,11 @@ async def scope(request: Request, call_next):
     needs_auth = bool(TOKEN) or ws != tenancy.DEFAULT
     if needs_auth and not tenancy.authorize(ws, given, TOKEN):
         return JSONResponse({"detail": "unauthorized"}, status_code=401)
+    # Responses are passed through unchanged: quotes from sources (headlines, page text, AI answers) are evidence and
+    # must read exactly as published. Sentinel's own AI text has its em dashes removed when written (llm.no_dashes,
+    # cleanup.ai_text_dashes), not by rewriting every response.
     with tenancy.use(ws):
-        resp = await call_next(request)
-    return await _strip_dashes(resp)
-
-
-async def _strip_dashes(resp):
-    """No em dashes anywhere in the app, including stored data and AI text written before this rule."""
-    ctype = resp.headers.get("content-type", "")
-    if not (ctype.startswith("application/json") or ctype.startswith("text/html")):
-        return resp
-    body = b"".join([c async for c in resp.body_iterator])
-    text = body.decode("utf-8")
-    if "\u2014" not in text and "\\u2014" not in text:
-        return Response(body, status_code=resp.status_code, headers=dict(resp.headers))
-    text = re.sub(r"\s*(\u2014|\\u2014)\s*", ", ", text)
-    headers = {k: v for k, v in resp.headers.items() if k.lower() != "content-length"}
-    return Response(text.encode("utf-8"), status_code=resp.status_code, headers=headers)
+        return await call_next(request)
 
 
 def cfg():

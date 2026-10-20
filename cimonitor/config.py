@@ -139,7 +139,7 @@ def load() -> Config:
     b = wl.get("brand") or {}
     brand = Entity(id="__brand__", name=b.get("name", "Your Company"), color=b.get("color", "#6250d6"),
                    aliases=b.get("aliases") or [], domains=[clean_domain(d) for d in b.get("domains") or []], is_brand=True, tier="brand",
-                   profile={k: b[k] for k in ("positioning", "strengths", "products", "facts", "icp", "motion", "voice") if k in b})
+                   profile={k: b[k] for k in ("positioning", "strengths", "products", "facts", "icp", "motion", "voice", "profile_as_of") if k in b})
     comps = [entity_from(c) for c in wl.get("competitors") or []]
     if b.get("monitor", True) and brand.domains:
         # Track ourselves with every module, exactly as if we were a competitor.
