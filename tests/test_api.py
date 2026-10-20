@@ -49,3 +49,13 @@ def test_workspace_requires_its_token():
     r = c.get("/api/meta", headers={"X-Workspace": "acme", "Authorization": f"Bearer {tok}"})
     assert r.status_code == 200 and r.json()["workspace"] == "acme"
     assert c.get("/api/meta", headers={"X-Workspace": "nope"}).status_code == 404
+
+
+def test_demo_data_loads_and_every_page_reads_it(monkeypatch):
+    from cimonitor import config, demo
+    monkeypatch.setenv("SENTINEL_DEMO", "1")
+    demo.seed(config.load())
+    c = client()
+    for url in ["/api/overview", "/api/events", "/api/visibility", "/api/coverage", "/api/radar", "/api/digests/preview"]:
+        assert c.get(url).status_code == 200, url
+    assert c.get("/api/events").json()

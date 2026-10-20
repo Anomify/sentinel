@@ -100,6 +100,7 @@ def seed(cfg: Config) -> dict:
             os.remove(str(p) + suffix)
         except FileNotFoundError:
             pass
+    db.reset_cache()  # the file was just deleted: the next connection must create the schema again
     rnd = random.Random(42)
     now = datetime.now(timezone.utc)
     ids = {c.id for c in cfg.competitors}
