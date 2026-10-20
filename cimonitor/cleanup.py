@@ -147,6 +147,17 @@ def duplicate_digests(con) -> int:
     return n
 
 
+def story_keys(con) -> int:
+    """Events stored before stories existed get their story key, so old reports group like new ones."""
+    from .facts import story_key
+    n = 0
+    for r in db.rows(con.execute("SELECT id, kind, title, occurred_at, detected_at FROM events WHERE story IS NULL")):
+        k = story_key(r["kind"], r["title"], r["occurred_at"] or r["detected_at"])
+        if k:
+            con.execute("UPDATE events SET story=? WHERE id=?", (k, r["id"])); n += 1
+    return n
+
+
 def run() -> dict:
     cfg = config.load()
     out = {}
@@ -154,7 +165,8 @@ def run() -> dict:
         for name, fn in (("scoped_noise", lambda: scoped_noise(con, cfg)), ("irrelevant_news", lambda: irrelevant_news(con, cfg)),
                          ("redated", lambda: redate_events(con)), ("off_voice_comments", lambda: off_voice_comments(con)),
                          ("per_headline_deals", lambda: per_headline_deals(con)),
-                         ("removed_competitors", lambda: removed_competitors(con, cfg)), ("duplicate_digests", lambda: duplicate_digests(con))):
+                         ("removed_competitors", lambda: removed_competitors(con, cfg)), ("duplicate_digests", lambda: duplicate_digests(con)),
+                         ("stories", lambda: story_keys(con))):
             try:
                 out[name] = fn()
             except Exception as e:  # a repair must never stop the app

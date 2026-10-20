@@ -34,6 +34,7 @@ def build(cfg: Config, days: int | None = None) -> dict:
            "headline": e["title"], "summary": e.get("detail") or "", "so_what": e.get("so_what"),
            "action": (e.get("data") or {}).get("action"), "confidence": e.get("confidence"),
            "occurred": e.get("occurred_at") if (e.get("occurred_at") or "")[:10] != (e.get("detected_at") or "")[:10] else None,
+           "reports": e.get("related", 1),
            "url": next((x.get("url") for x in (e.get("evidence") or []) if x.get("url")), cfg.settings.get("digest", {}).get("app_url", ""))}
           for e in sorted(evs, key=lambda e: -insights.SEV_WEIGHT.get(e["severity"], 0))]
     gaps = insights.gaps(cfg, vis)
@@ -111,7 +112,8 @@ def render_html(d: dict) -> str:
         f'<tr><td style="padding:18px 0;border-top:1px solid #ececef">'
         f'<div style="{t(12, "#8a8a93")}"><span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:{SEV_COLOR.get(c["severity"], "#999")};margin-right:8px;vertical-align:middle"></span>'
         f'{_e(d["names"].get(c["competitor"]))} · {_e(c["kind"])}{(" · " + _e(c.get("confidence"))) if c.get("confidence") else ""}'
-        f'{(" · happened " + _e(c["occurred"][:10])) if c.get("occurred") else ""}</div>'
+        f'{(" · happened " + _e(c["occurred"][:10])) if c.get("occurred") else ""}'
+        f'{(" · " + str(c["reports"]) + " reports") if c.get("reports", 1) > 1 else ""}</div>'
         f'<div style="{t(16, "#16161a", "margin-top:4px;line-height:1.4")}"><a href="{_e(c["url"])}" style="color:#16161a;text-decoration:none">{_e(c["headline"])}</a></div>'
         + (f'<div style="{t(14, "#4a4a52", "margin-top:4px")}">{_e(c["so_what"] or c["summary"])}</div>' if (c.get("so_what") or c.get("summary")) else "")
         + (f'<div style="{t(13, "#5b45b8", "margin-top:6px")}">→ {_e(c["action"])}</div>' if c.get("action") else "")

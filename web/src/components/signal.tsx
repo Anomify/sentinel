@@ -28,6 +28,7 @@ export function EventRow({ e, onOpen, active, showCompetitor = true }: { e: Sign
           <span>{moduleLabel(meta, e.module)}</span>
           <span>·</span>
           <Confidence c={e.confidence} />
+          {(e.related ?? 1) > 1 && <><span>·</span><span className="text-ink-2" title="Reports of the same move, grouped into one signal">{e.related} reports</span></>}
         </div>
         <div className="mt-1 text-[14px] leading-snug text-ink">{e.title}</div>
         {(e.so_what || e.detail) && <div className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-ink-2">{e.so_what || e.detail}</div>}
@@ -113,6 +114,23 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
               <div className="eyebrow mb-3">Evidence trail</div>
               <EvidenceList items={e.evidence || []} />
             </section>
+            {(e.reports?.length ?? 0) > 1 && (
+              <section>
+                <div className="eyebrow mb-1">All {e.reports!.length} reports of this move</div>
+                <p className="mb-3 text-[12px] text-ink-3">Grouped into one signal. Identical headlines on several sites are one story, not independent confirmation.</p>
+                <ul className="divide-y divide-line rounded-xl ring-1 ring-inset ring-line">
+                  {e.reports!.map((r) => {
+                    const url = r.evidence?.find((x) => x.url)?.url;
+                    return (
+                      <li key={r.id} className="flex items-start gap-3 px-4 py-2.5 text-[12.5px]">
+                        <span className="w-16 shrink-0 text-ink-3 tnum">{day(r.occurred_at || r.detected_at)}</span>
+                        {url ? <a href={url} target="_blank" rel="noreferrer" className="min-w-0 text-ink-2 hover:text-ink">{r.title}</a> : <span className="min-w-0 text-ink-2">{r.title}</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
           </div>
         </div>
       )}

@@ -178,6 +178,25 @@ def purge_irrelevant(con, comp: Entity) -> int:
     return n
 
 
+# The company's own announcement, distributed by a newswire: a primary source, not a third-party report.
+WIRES = re.compile(r"pr newswire|prnewswire|business ?wire|globe ?newswire|accesswire|einpresswire|newsfile", re.I)
+
+
+def _headline(note: str) -> str:
+    """A headline without its " - Publisher" suffix, lowercased and depunctuated: syndicated copies compare equal."""
+    return " ".join(re.sub(r"[^a-z0-9 ]", " ", re.sub(r"\s+-\s+[^-]+$", "", note or "").lower()).split())
+
+
+def independent_reports(v: dict) -> int:
+    """Distinct headlines among the reports: the same wire story on ten sites counts once."""
+    return len({_headline(e.get("note") or "") for e in v["evidence"]} - {""})
+
+
+def corroborated(v: dict) -> bool:
+    """Confirmed: the company announced it (a newswire release), or at least two differently-worded reports carry it."""
+    return any(WIRES.search(s or "") for s in v["sources"]) or independent_reports(v) >= 2
+
+
 def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], list[Fact], list[Fact]]:
     rounds, arr, acq = {}, {}, {}
     for n in items:
@@ -218,8 +237,8 @@ def extract_money(items: list[dict], names_rx: re.Pattern) -> tuple[list[Fact], 
     rounds = merged
     fr = [Fact("funding", k, f"{v['series'] or 'Funding'} · ${v['amount_musd']:g}M", {
         "amount_musd": v["amount_musd"], "series": v["series"], "investors": sorted(v["investors"]), "date": v["date"],
-        "sources": sorted(set(filter(None, v["sources"])))[:6]},
-        facts.CONFIRMED if len(set(v["sources"])) >= 2 else facts.LIKELY, v["evidence"][:4]) for k, v in rounds.items()]
+        "sources": sorted(set(filter(None, v["sources"])))[:6], "independent_reports": independent_reports(v)},
+        facts.CONFIRMED if corroborated(v) else facts.LIKELY, v["evidence"][:4]) for k, v in rounds.items()]
     ar = [Fact("arr_claim", k[:150], v["claim"], {"headline": v["headline"], "date": v["date"]}, facts.LIKELY, v["evidence"]) for k, v in arr.items()]
     # One fact per deal: coverage of the same acquisition within ~4 months (announcement, close) is merged.
     deals: list[dict] = []

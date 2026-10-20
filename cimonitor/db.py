@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY, competitor TEXT, module TEXT, kind TEXT, severity TEXT, title TEXT,
   detail TEXT, so_what TEXT, confidence TEXT, evidence TEXT, data TEXT, detected_at TEXT,
   acknowledged INTEGER DEFAULT 0, change_id INTEGER,
-  occurred_at TEXT  -- when it happened (article / release date), if known; detected_at is when Sentinel found it
+  occurred_at TEXT,  -- when it happened (article / release date), if known; detected_at is when Sentinel found it
+  story TEXT         -- events with the same competitor + story are one move, shown as one signal (facts.story_key)
 );
 CREATE INDEX IF NOT EXISTS ix_events_time ON events(detected_at);
 
@@ -94,7 +95,7 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
 MIGRATIONS = [  # additive columns for databases created by earlier versions
     ("snapshots", "screenshot", "TEXT"), ("posts", "ctype", "TEXT"), ("ai_results", "accuracy", "TEXT"),
-    ("facts", "missing", "INTEGER DEFAULT 0"), ("events", "occurred_at", "TEXT"),
+    ("facts", "missing", "INTEGER DEFAULT 0"), ("events", "occurred_at", "TEXT"), ("events", "story", "TEXT"),
 ]
 
 JSON_COLS = {"signals", "added", "removed", "citations", "mentions", "topics", "payload", "stats", "delivered",

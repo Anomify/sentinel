@@ -104,6 +104,8 @@ def list_events(days: int = 30, competitor: str | None = None, module: str | Non
 def event_detail(eid: int):
     with db.connect() as con:
         e = db.row(con.execute("SELECT * FROM events WHERE id=?", (eid,)).fetchone())
+        if e:
+            e["reports"] = insights.story_events(con, e)  # every report of the same move, for the evidence trail
     if not e:
         raise HTTPException(404)
     if e.get("change_id"):
@@ -114,10 +116,16 @@ def event_detail(eid: int):
 @app.post("/api/events/{eid}/ack")
 def ack_event(eid: int, value: bool = True):
     with db.connect() as con:
-        con.execute("UPDATE events SET acknowledged=? WHERE id=?", (int(value), eid))
-        r = con.execute("SELECT change_id FROM events WHERE id=?", (eid,)).fetchone()
-        if r and r[0]:
-            con.execute("UPDATE changes SET acknowledged=? WHERE id=?", (int(value), r[0]))
+        e = db.row(con.execute("SELECT id, competitor, story, change_id FROM events WHERE id=?", (eid,)).fetchone())
+        if not e:
+            raise HTTPException(404)
+        # Reviewing a signal reviews every report of that move.
+        ids = [r["id"] for r in insights.story_events(con, e)] or [eid]
+        for i in ids:
+            con.execute("UPDATE events SET acknowledged=? WHERE id=?", (int(value), i))
+            r = con.execute("SELECT change_id FROM events WHERE id=?", (i,)).fetchone()
+            if r and r[0]:
+                con.execute("UPDATE changes SET acknowledged=? WHERE id=?", (int(value), r[0]))
     return {"ok": True}
 
 

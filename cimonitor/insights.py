@@ -38,7 +38,9 @@ def entities(cfg: Config) -> list[dict]:
             for e in [cfg.brand, *cfg.competitors]]
 
 
-def events(con, days=30, competitor=None, module=None, severity=None, limit=300) -> list[dict]:
+def events(con, days=30, competitor=None, module=None, severity=None, limit=300, group=True) -> list[dict]:
+    """Signals, newest first. group: events of the same story (facts.story_key) are one signal, represented by its
+    most severe (then earliest) report, with `related` = how many reports it stands for."""
     q, a = "SELECT * FROM events WHERE detected_at >= ? AND severity != 'noise'", [since(days)]
     if competitor:
         q += " AND competitor=?"; a.append(competitor)
@@ -47,7 +49,35 @@ def events(con, days=30, competitor=None, module=None, severity=None, limit=300)
         q += f" AND module IN ({','.join('?' * len(mods))})"; a += mods
     if severity:
         q += f" AND severity IN ({','.join('?' * len(severity))})"; a += severity
-    return db.rows(con.execute(q + " ORDER BY detected_at DESC, id DESC LIMIT ?", [*a, limit]))
+    rows = db.rows(con.execute(q + " ORDER BY detected_at DESC, id DESC LIMIT ?", [*a, limit * (4 if group else 1)]))
+    return group_stories(rows, limit) if group else rows
+
+
+def group_stories(rows: list[dict], limit: int = 10**6) -> list[dict]:
+    """Collapse newest-first event rows into one row per story, keeping the order of each story's newest report."""
+    stories: dict[tuple, list[dict]] = {}
+    order: list = []
+    for r in rows:
+        k = (r["competitor"], r["story"]) if r.get("story") else ("event", r["id"])
+        if k not in stories:
+            stories[k] = []
+            order.append(k)
+        stories[k].append(r)
+    out = []
+    for k in order[:limit]:
+        members = stories[k]
+        rep = min(members, key=lambda r: (-SEV_WEIGHT.get(r["severity"], 0), r.get("occurred_at") or r["detected_at"], r["id"]))
+        out.append({**rep, "related": len(members), "acknowledged": int(all(m.get("acknowledged") for m in members))})
+    return out
+
+
+def story_events(con, e: dict) -> list[dict]:
+    """Every report of the same move as event e (itself included), for the evidence drawer."""
+    if not e.get("story"):
+        return []
+    return db.rows(con.execute("SELECT id, title, severity, detected_at, occurred_at, evidence, module, kind FROM events "
+                               "WHERE competitor=? AND story=? ORDER BY COALESCE(occurred_at, detected_at), id",
+                               (e["competitor"], e["story"])))
 
 
 def changes(con, days=30, competitor=None, severity=None, limit=200) -> list[dict]:
@@ -185,8 +215,9 @@ def launch_scores(cfg: Config, con) -> dict:
 def overview(cfg: Config, con, days=7) -> dict:
     ev = events(con, days, limit=2000)
     # The previous period is measured exactly like this one (same filters, same weights) so deltas compare like with like.
-    prev = db.rows(con.execute("SELECT severity, competitor, module FROM events WHERE detected_at >= ? AND detected_at < ? "
-                               "AND severity != 'noise'", (since(days * 2), since(days))))
+    prev = group_stories(db.rows(con.execute(
+        "SELECT * FROM events WHERE detected_at >= ? AND detected_at < ? AND severity != 'noise' ORDER BY detected_at DESC, id DESC",
+        (since(days * 2), since(days)))))
     prev_posts = Counter(r["competitor"] for r in db.rows(con.execute(
         "SELECT competitor FROM posts WHERE first_seen >= ? AND first_seen < ?", (since(days * 2), since(days)))))
     # The overview ranks and counts competitors only: our own activity ("(us)") is shown elsewhere, not in "Who's moving".

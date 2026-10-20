@@ -593,3 +593,49 @@ def test_pre_launch_signals_are_reported_as_evidence_not_a_forecast():
     r = deepdive.build(c, rival)
     texts = " ".join(f["title"] for s in r["sections"] for f in s["findings"]) + " ".join(str(x["value"]) for x in r["summary"])
     assert "3 pre-launch indicators" in texts and "probability" not in texts.lower()
+
+
+# ── Stories: one move, one signal ────────────────────────────────────────────
+def test_reports_of_one_move_share_a_story():
+    from cimonitor.facts import story_key
+    now = _ago(0)
+    keys = {story_key("funding_added", "Funding: Series B · $100M", now),
+            story_key("press_added", "In the news: HiddenLayer Raises $100M Series B to Advance Trustworthy AI - PR Newswire", now),
+            story_key("press_added", "In the news: HiddenLayer nabs $100M as enterprises rush to secure AI - TechCrunch", now),
+            story_key("mention_added", "On Hacker News: HiddenLayer raises $100 million", now)}
+    assert keys == {"funding:100M"}
+    a = story_key("press_added", "In the news: HiddenLayer Unveils Agentic Runtime Security - PR Newswire", now)
+    b = story_key("press_added", "In the news: HiddenLayer Unveils Agentic Runtime Security - Yahoo Finance", now)
+    assert a == b and a != story_key("press_added", "In the news: HiddenLayer joins Databricks ecosystem", now)
+    assert story_key("site_page_added", "New page live: /a", now) == story_key("site_page_added", "New page live: /b", now)
+    assert story_key("page_change", "New hero headline", now) is None
+
+
+def test_feed_shows_one_signal_per_story_and_reviewing_it_reviews_every_report():
+    from fastapi.testclient import TestClient
+    from cimonitor import db, facts, insights
+    from cimonitor.api import app
+    with db.connect() as con:
+        ids = [facts.emit(con, "hiddenlayer", "money", "press_added", "low", f"In the news: HiddenLayer raises $100M Series B - {s}")
+               for s in ("Wire", "TechCrunch", "Yahoo")]
+        fund = facts.emit(con, "hiddenlayer", "money", "funding_added", "critical", "Funding: Series B · $100M")
+        other = facts.emit(con, "hiddenlayer", "pages", "page_change", "high", "New hero headline")
+        ev = insights.events(con, 7)
+    assert [(e["id"], e["related"]) for e in ev] == [(other, 1), (fund, 4)]
+    c = TestClient(app)
+    assert len(c.get(f"/api/events/{fund}").json()["reports"]) == 4
+    c.post(f"/api/events/{fund}/ack")
+    with db.connect() as con:
+        assert all(con.execute("SELECT acknowledged FROM events WHERE id=?", (i,)).fetchone()[0] for i in ids)
+
+
+def test_syndicated_copies_are_not_independent_confirmation():
+    import re
+    from cimonitor.collectors.money import extract_money
+    item = lambda src, title: {"title": f"{title} - {src}", "text": title, "url": f"https://{src}/x", "source": src,  # noqa: E731
+                               "published": "2026-09-02T00:00:00+00:00"}
+    same = [item(s, "Acme raises $40M Series A for AI security") for s in ("Yahoo Finance", "MSN", "Morningstar")]
+    assert extract_money(same, re.compile("Acme"))[0][0].confidence == "likely"
+    assert extract_money([item("PR Newswire", "Acme raises $40M Series A")], re.compile("Acme"))[0][0].confidence == "confirmed"
+    two = [item("TechCrunch", "Acme raises $40M Series A"), item("SiliconANGLE", "Acme lands $40 million to secure AI agents")]
+    assert extract_money(two, re.compile("Acme"))[0][0].confidence == "confirmed"

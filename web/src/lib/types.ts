@@ -104,6 +104,8 @@ export interface SignalEvent {
   id: number; competitor: string; module: string; kind: string; severity: Severity; title: string; detail: string | null;
   so_what: string | null; confidence: string; evidence: Evidence[]; data: Record<string, any>; detected_at: string;
   occurred_at?: string | null; // when it happened (article / release date), if known; detected_at is when Sentinel found it
+  related?: number; // reports of the same move this signal stands for (syndicated copies, coverage of one round)
+  reports?: { id: number; title: string; severity: Severity; detected_at: string; occurred_at: string | null; evidence: Evidence[] }[];
   acknowledged: number; change_id: number | null; change?: ChangeDetail;
 }
 

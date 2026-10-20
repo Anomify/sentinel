@@ -92,11 +92,46 @@ def emit(con, competitor: str, module: str, kind: str, severity: str, title: str
     happened = _happened(data or {})
     if happened and happened < (datetime.now(timezone.utc) - timedelta(days=30)).isoformat() and severity in ("critical", "high"):
         severity = "low"
+    now = db.now()
     return db.insert(con, "events", {
         "competitor": competitor, "module": module, "kind": kind, "severity": severity, "title": title,
         "detail": detail, "so_what": so_what, "confidence": confidence, "evidence": evidence or [],
-        "data": data or {}, "detected_at": db.now(), "occurred_at": happened, "change_id": change_id,
+        "data": data or {}, "detected_at": now, "occurred_at": happened, "change_id": change_id,
+        "story": story_key(kind, title, happened or now),
     })
+
+
+# ── Stories: many reports of one real-world move are shown as one signal ─────
+# Grouping is applied when reading (insights.events), so every raw event is kept and the rules can change.
+NEWS_KINDS = {"press_added", "funding_added", "m_and_a_added", "arr_claim_added", "launch_added", "mention_added", "blog_post", "post_added"}
+BULK_KINDS = {"site_page_added", "site_page_removed", "partner_added", "partner_removed", "job_added", "job_removed",
+              "gtm_tag_added", "gtm_tag_removed", "tool_added", "tool_removed", "third_party_added", "third_party_removed",
+              "subdomain_added", "product_page_added", "product_page_removed", "release_added", "repo_added", "repo_removed",
+              "ad_creative_added", "ad_creative_removed", "verification_added", "dkim_added", "staging_page_added"}
+TITLE_PREFIX = re.compile(r"^(In the news|Funding|Launch announced|On Hacker News|New blog post|Growth claim|M&A|Shipped)\s*:\s*", re.I)
+AMOUNT = re.compile(r"\$\s?(\d+(?:\.\d+)?)\s?(m|mn|million|b|bn|billion)\b", re.I)
+RAISE = re.compile(r"\b(rais\w*|secur\w*|clos\w*|lands?|nabs?|bags?|funding|series [a-f]|round)\b", re.I)
+ACQUIRE = re.compile(r"\b(acquires|acquired|to acquire|acquisition|merges with|merger)\b", re.I)
+
+
+def story_key(kind: str, title: str, when: str) -> str | None:
+    """Events with the same key (per competitor) describe the same move: syndicated copies of a headline, every report
+    of one funding round or acquisition, or a same-day burst of one kind of change (40 sitemap pages, 12 partner logos)."""
+    t = TITLE_PREFIX.sub("", title or "")
+    if kind in NEWS_KINDS:
+        m = AMOUNT.search(t)
+        if m and (kind == "funding_added" or RAISE.search(t)):
+            amount = float(m.group(1)) * (1000 if m.group(2).lower().startswith("b") else 1)
+            return f"funding:{amount:g}M"
+        if kind == "m_and_a_added" or ACQUIRE.search(t):
+            return f"mna:{(when or '')[:7]}"
+        norm = " ".join(re.sub(r"[^a-z0-9 ]", " ", re.sub(r"\s+-\s+[^-]+$", "", t).lower()).split())  # drop " - Source"
+        return f"title:{norm[:120]}" if norm else None
+    if kind == "first_role":
+        return "first_role:" + t.split(": ", 1)[-1].lower()  # several "firsts" for one job
+    if kind in BULK_KINDS:
+        return f"{kind}:{(when or '')[:10]}"
+    return None
 
 
 def _happened(data: dict) -> str | None:
