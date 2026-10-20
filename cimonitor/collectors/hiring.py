@@ -29,14 +29,18 @@ FUNCTIONS = [  # first match wins; order matters
     ("Marketing", r"marketing|\bpmm\b|demand gen|growth|brand|content|communications|\bpr\b|events|social media|seo"),
     ("Customer success", r"customer (success|support|experience)|implementation|onboarding|technical account|\btam\b|support engineer"),
     ("ML / Research", r"machine learning|\bml\b|research|scientist|\bai\b (engineer|researcher)|threat (intel|research)|adversarial"),
-    ("Security", r"security (engineer|analyst|architect|operations)|\bsoc\b|appsec|penetration|red team|grc|compliance"),
-    ("Product & design", r"product (manager|owner|lead|designer|marketing)|\bpm\b|designer|ux|ui"),
-    ("Engineering", r"engineer|developer|\bsre\b|devops|platform|backend|front-?end|full-?stack|software|architect|qa"),
-    ("G&A", r"finance|legal|counsel|people|\bhr\b|talent|recruit|accounting|controller|operations|office|executive assistant|it\b"),
+    ("Security", r"security (engineer|analyst|architect|operations)|\bsoc\b|appsec|penetration|red team|grc|compliance|"
+                 r"threat (analyst|hunter|expert)|fraud|osint|webint|cyber"),
+    ("Product & design", r"product (manager|owner|lead|designer|marketing)|\bpm\b|designer|\bux\b|\bui\b"),
+    ("Engineering", r"engineer|developer|\bsre\b|devops|platform|backend|front-?end|full-?stack|software|architect|qa|"
+                    r"technical staff|cto office|office of the cto"),
+    ("G&A", r"finance|legal|counsel|people|\bhr\b|talent|recruit|accounting|controller|operations|office manager|executive assistant|it\b"),
 ]
 FUNC_RX = [(n, re.compile(r, re.I)) for n, r in FUNCTIONS]
-SENIORITY = [("C-level", r"\bchief\b|\bc[etomrfi]o\b"), ("VP", r"\bvp\b|vice president|\bsvp\b|\bevp\b"),
-             ("Head / Director", r"\bhead of\b|(?<!account )(?<!client )director"), ("Staff / Principal", r"staff|principal|distinguished"), ("Senior", r"\bsenior\b|\bsr\.?\b"),
+# C-level excludes "CTO Office" (a team) and "Field CTO" (a senior sales-engineering role).
+SENIORITY = [("C-level", r"\bchief\b|(?<!field )\bc[etomrfi]o\b(?! office)"), ("VP", r"\bvp\b|vice president|\bsvp\b|\bevp\b"),
+             ("Head / Director", r"\bhead of\b|(?<!account )(?<!client )director|field cto"), ("Staff / Principal", r"staff|principal|distinguished"),
+             ("Senior", r"\bsenior\b|\bsr\.?\b|account director|client director"),  # an account director is a senior seller, not a manager of people
              ("Manager / Lead", r"manager|\blead\b|team lead"),
              ("Intern", r"intern|co-?op|apprentice"), ("Junior", r"junior|\bjr\.?\b|associate|entry")]
 SEN_RX = [(n, re.compile(r, re.I)) for n, r in SENIORITY]
@@ -65,10 +69,15 @@ TITLE_FAMILY = [("Partner Manager", r"partner (manager|development|account)"), (
                 ("Marketplace / cloud alliances", r"marketplace|aws|azure|gcp|cloud alliance")]
 
 
+# "Manager" in these titles names the thing managed (an account, a product, a community), not a team of people.
+IC_MANAGER = re.compile(r"\b(account|customer success|success|product|partner|program|project|community|marketing|campaign|"
+                        r"channel|territory|content|social media|technical account|solutions|release|brand|event)s? manager\b", re.I)
+
+
 def tag(title: str, dept: str, location: str, text: str) -> dict:
     t = f"{title} {dept}"
     fn = next((n for n, rx in FUNC_RX if rx.search(title)), None) or next((n for n, rx in FUNC_RX if rx.search(dept)), "Other")
-    sen = next((n for n, rx in SEN_RX if rx.search(title)), "Mid / IC")
+    sen = next((n for n, rx in SEN_RX if rx.search(IC_MANAGER.sub("", title) if n == "Manager / Lead" else title)), "Mid / IC")
     loc = f"{location}"
     reg = next((n for n, rx in REG_RX if rx.search(loc)), None)
     if not reg:

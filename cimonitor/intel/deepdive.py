@@ -214,7 +214,8 @@ def build(cfg: Config, comp: Entity) -> dict:
                       "By function: " + ", ".join(f"{k} {v}" for k, v in fn.most_common()) + ". By region: " + ", ".join(f"{k} {v}" for k, v in reg.most_common()),
                       "confirmed", _ev(boards), weight=3, data={"functions": dict(fn), "regions": dict(reg), "seniority": dict(sen)},
                       vs_us=("They're scaling sales capacity: a slower, demo-gated motion. Lean into ours: free plan, two-minute setup, no calls. Make that contrast explicit in comparison content."
-                             if gtm_share >= 0.5 else "R&D-heavy hiring: product velocity will rise. Watch the radar for launches.")))
+                             if gtm_share >= 0.5 else "R&D-heavy hiring: product velocity will rise. Watch the radar for launches."
+                             if gtm_share <= 0.3 else None)))  # a mixed hiring plan supports neither reading
         senior = [j for j in jobs if j["value"]["seniority"] in ("VP", "C-level", "Head / Director")]
         if senior:
             out.append(_f("hiring", "senior", "Senior hires: " + "; ".join(j["label"] for j in senior[:6]), "", "confirmed", _ev(senior), weight=2))

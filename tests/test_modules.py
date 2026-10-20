@@ -752,3 +752,31 @@ def test_browser_requests_to_private_addresses_are_aborted(monkeypatch):
     for u in ("http://127.0.0.1:8000/api/jobs/ai", "http://169.254.169.254/", "https://cdn.acme.com/app.js", "data:image/png;base64,x"):
         route_guard(Route(u))
     assert [a for a, _ in done] == ["abort", "abort", "continue", "continue"]
+
+
+# ── Classifier accuracy (cases from live data) ───────────────────────────────
+@pytest.mark.parametrize("title,function,seniority", [
+    ("Recruiting Sourcer", "G&A", "Mid / IC"),
+    ("Customer Success Manager", "Customer success", "Mid / IC"),
+    ("Technical Product Manager for AI Security Products", "Product & design", "Mid / IC"),
+    ("Enterprise Account Director- Federal", "Sales", "Senior"),
+    ("Member Of Technical Staff, CTO Office", "Engineering", "Staff / Principal"),
+    ("Field CTO", "Sales engineering", "Head / Director"),
+    ("Fraud Threat Analyst", "Security", "Mid / IC"),
+    ("VP of Solutions Architecture", "Sales engineering", "VP"),
+    ("Data Science Engineering Manager", "Engineering", "Manager / Lead"),
+    ("Chief Technology Officer", "Other", "C-level"),
+])
+def test_job_tagging_on_real_titles(title, function, seniority):
+    from cimonitor.collectors.hiring import tag
+    t = tag(title, "", "", title)
+    assert (t["function"], t["seniority"]) == (function, seniority)
+
+
+def test_a_self_serve_live_demo_is_not_a_sales_motion():
+    from cimonitor.collectors.stack import classify_motion, conversion_paths
+    ours = conversion_paths('<a href="/demo">Demo</a><a class="btn" href="https://app.hyperfence.io/signup">Sign Up Free</a>')
+    assert "demo" not in ours and classify_motion(set(), ours)["label"] == "Product-led"
+    theirs = conversion_paths('<a href="/request-a-demo">Demo</a><a href="/contact">Talk to sales</a>')
+    assert theirs.get("demo") == "Demo" and classify_motion(set(), theirs)["label"] == "Sales-led"
+    assert "demo" in conversion_paths('<a href="/x">Book a demo</a>')
