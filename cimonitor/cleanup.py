@@ -65,18 +65,22 @@ def irrelevant_news(con, cfg) -> int:
 
 
 def redate_events(con) -> int:
-    """Date news-driven events by when the event happened (article date), not when Sentinel saw it; old news is never Critical."""
+    """Record when news-driven events happened (article date) beside when Sentinel saw them; old news is never Critical.
+
+    Events from older versions had detected_at overwritten with the article date; their discovery date is lost,
+    so they keep it and gain occurred_at.
+    """
     n = 0
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    for r in db.rows(con.execute("SELECT id, detected_at, severity, data FROM events")):
+    for r in db.rows(con.execute("SELECT id, detected_at, occurred_at, severity, data FROM events")):
         d = _data(r["data"])
         happened = d.get("published") or d.get("date")
         if not happened or not re.match(r"\d{4}-\d{2}-\d{2}", str(happened)):
             continue
         happened = str(happened)[:25]
         upd = {}
-        if happened[:10] != str(r["detected_at"])[:10]:
-            upd["detected_at"] = happened if "T" in happened else happened + "T00:00:00+00:00"
+        if not r["occurred_at"]:
+            upd["occurred_at"] = happened if "T" in happened else happened + "T00:00:00+00:00"
         if happened < cutoff and r["severity"] in ("critical", "high"):
             upd["severity"] = "low"
         if upd:

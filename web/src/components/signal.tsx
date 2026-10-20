@@ -1,12 +1,17 @@
 import { Check, ExternalLink } from "lucide-react";
 import { api, invalidate, useApi } from "../lib/api";
 import type { SignalEvent } from "../lib/types";
-import { ago, host, path } from "../lib/format";
+import { ago, day, host, path } from "../lib/format";
 import { Button, Confidence, cx, Drawer, EntityTag, EvidenceList, Monogram, SeverityBadge, Skeleton, Thumb, useEntity, useMeta } from "./ui";
 import { useToast } from "./shell";
 
 export function moduleLabel(meta: { modules: Record<string, string> }, m: string) {
   return meta.modules?.[m] ?? m;
+}
+
+/** The event's own date when it differs from the day Sentinel found it (late-discovered news, old releases). */
+function happenedEarlier(e: SignalEvent): string | null {
+  return e.occurred_at && e.occurred_at.slice(0, 10) !== e.detected_at.slice(0, 10) ? e.occurred_at : null;
 }
 
 export function EventRow({ e, onOpen, active, showCompetitor = true }: { e: SignalEvent; onOpen: (id: number) => void; active?: boolean; showCompetitor?: boolean }) {
@@ -29,7 +34,9 @@ export function EventRow({ e, onOpen, active, showCompetitor = true }: { e: Sign
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1.5 pt-0.5">
         <SeverityBadge s={e.severity} />
-        <span className="text-[11px] text-ink-3 tnum">{ago(e.detected_at)}</span>
+        <span className="text-[11px] text-ink-3 tnum" title={`Found ${new Date(e.detected_at).toLocaleString()}`}>
+          {happenedEarlier(e) ? `happened ${day(happenedEarlier(e)!)}` : ago(e.detected_at)}
+        </span>
       </div>
     </button>
   );
@@ -62,7 +69,10 @@ export function EventDrawer({ id, onClose }: { id: number | null; onClose: () =>
               <Confidence c={e.confidence} />
             </div>
             <h2 className="mt-4 text-[24px] leading-tight tracking-[-0.02em] text-ink">{e.title}</h2>
-            <div className="mt-2 text-[12.5px] text-ink-3">Detected {ago(e.detected_at)} · {new Date(e.detected_at).toLocaleString()}</div>
+            <div className="mt-2 text-[12.5px] text-ink-3">
+              {happenedEarlier(e) && <>Happened {new Date(happenedEarlier(e)!).toLocaleDateString()} · </>}
+              Found by Sentinel {ago(e.detected_at)} · {new Date(e.detected_at).toLocaleString()}
+            </div>
             <div className="mt-5 flex gap-2">
               <Button variant="outline" size="sm" onClick={ack}><Check size={13} />{e.acknowledged ? "Mark unread" : "Mark reviewed"}</Button>
               {e.evidence?.[0]?.url && <Button variant="ghost" size="sm" onClick={() => window.open(e.evidence[0].url!, "_blank")}><ExternalLink size={13} />Open source</Button>}

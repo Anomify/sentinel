@@ -156,8 +156,11 @@ def launch_scores(cfg: Config, con) -> dict:
 
 def overview(cfg: Config, con, days=7) -> dict:
     ev = events(con, days, limit=2000)
-    prev = db.rows(con.execute("SELECT severity, competitor, module FROM events WHERE detected_at >= ? AND detected_at < ?",
-                               (since(days * 2), since(days))))
+    # The previous period is measured exactly like this one (same filters, same weights) so deltas compare like with like.
+    prev = db.rows(con.execute("SELECT severity, competitor, module FROM events WHERE detected_at >= ? AND detected_at < ? "
+                               "AND severity != 'noise'", (since(days * 2), since(days))))
+    prev_posts = Counter(r["competitor"] for r in db.rows(con.execute(
+        "SELECT competitor FROM posts WHERE first_seen >= ? AND first_seen < ?", (since(days * 2), since(days)))))
     # The overview ranks and counts competitors only: our own activity ("(us)") is shown elsewhere, not in "Who's moving".
     rivals = {c.id for c in cfg.competitors if c.tier != "self"}
     ev = [x for x in ev if x["competitor"] in rivals]
@@ -171,7 +174,7 @@ def overview(cfg: Config, con, days=7) -> dict:
             continue
         mine = [x for x in ev if x["competitor"] == c.id]
         heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in mine) + 1.5 * sum(p["competitor"] == c.id for p in ps)
-        prev_heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in prev if x["competitor"] == c.id)
+        prev_heat = sum(SEV_WEIGHT.get(x["severity"], 1) for x in prev if x["competitor"] == c.id) + 1.5 * prev_posts[c.id]
         sov = next((s for s in vis["share"] if s["id"] == c.id), None)
         comp.append({"id": c.id, "name": c.name, "color": c.color, "tier": c.tier, "changes": len(mine),
                      "critical": sum(x["severity"] in ("critical", "high") for x in mine),
@@ -195,7 +198,8 @@ def overview(cfg: Config, con, days=7) -> dict:
     last_run = db.row(con.execute("SELECT * FROM runs WHERE finished_at IS NOT NULL ORDER BY id DESC LIMIT 1").fetchone())
     n_facts = con.execute("SELECT COUNT(*) FROM facts WHERE removed_at IS NULL").fetchone()[0]
     by_module = Counter(MODULE_LABEL.get(x["module"], x["module"]) for x in ev)
-    ranked = sorted(ev, key=lambda x: (-SEV_WEIGHT.get(x["severity"], 0), x["detected_at"]), reverse=False)
+    # Highest severity first, newest first within a severity (ev is already newest-first; sorted() is stable).
+    ranked = sorted(ev, key=lambda x: -SEV_WEIGHT.get(x["severity"], 0))
     return {
         "days": days,
         "kpis": {

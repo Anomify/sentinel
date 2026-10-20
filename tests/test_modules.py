@@ -447,3 +447,51 @@ def test_dns_lookup_failure_is_not_a_record_removal(monkeypatch):
             guard.reset_caches()
             dns_infra.run_one(con, comp)
         assert _events(con, comp.id) == []
+
+
+# ── Dates and ranking ────────────────────────────────────────────────────────
+def _ago(days):
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+
+
+def test_late_discovered_news_is_in_this_weeks_view_with_both_dates():
+    from cimonitor import db, facts, insights
+    with db.connect() as con:
+        eid = facts.emit(con, "hiddenlayer", "content", "blog_post", "low", "Post from 9 days ago", data={"published": _ago(9)})
+        old = facts.emit(con, "hiddenlayer", "money", "funding_added", "critical", "Old round", data={"date": _ago(40)})
+        e = db.row(con.execute("SELECT * FROM events WHERE id=?", (eid,)).fetchone())
+        assert e["occurred_at"][:10] == _ago(9)[:10] and e["detected_at"][:10] == _ago(0)[:10]
+        assert eid in [x["id"] for x in insights.events(con, 7)]
+        assert con.execute("SELECT severity FROM events WHERE id=?", (old,)).fetchone()[0] == "low"
+
+
+def test_overview_top_signals_are_newest_first_within_severity_and_deltas_compare_like_with_like():
+    from cimonitor import db, insights
+    c = cfg()
+    rival = next(x.id for x in c.competitors if x.tier != "self")
+    with db.connect() as con:
+        for d in (6, 3, 0):
+            db.insert(con, "events", {"competitor": rival, "module": "pages", "kind": "page_change", "severity": "high",
+                                      "title": f"{d}d", "detected_at": _ago(d), "evidence": [], "data": {}})
+            db.insert(con, "events", {"competitor": rival, "module": "pages", "kind": "page_change", "severity": "high",
+                                      "title": f"prev {d}d", "detected_at": _ago(d + 7.5), "evidence": [], "data": {}})
+        db.insert(con, "events", {"competitor": rival, "module": "pages", "kind": "x", "severity": "noise",
+                                  "title": "noise", "detected_at": _ago(10), "evidence": [], "data": {}})
+        for i, d in enumerate((1, 2, 9, 10)):
+            con.execute("INSERT INTO posts (competitor,guid,title,url,first_seen) VALUES (?,?,?,?,?)", (rival, f"g{i}", "t", "u", _ago(d)))
+        ov = insights.overview(c, con, 7)
+    assert [e["title"] for e in ov["top_events"]] == ["0d", "3d", "6d"]
+    me = next(x for x in ov["competitors"] if x["id"] == rival)
+    assert me["heat_delta"] == 0 and ov["kpis"]["changes_prev"] == 3
+
+
+def test_digest_leaves_out_our_own_activity():
+    from cimonitor import db, digest
+    c = cfg()
+    us = next(x.id for x in c.competitors if x.tier == "self")
+    with db.connect() as con:
+        db.insert(con, "events", {"competitor": us, "module": "pages", "kind": "page_change", "severity": "critical",
+                                  "title": "Our pricing page changed", "detected_at": _ago(0), "evidence": [], "data": {}})
+    d = digest.build(c, 7)
+    assert all(ch["competitor"] != us for ch in d["changes"]) and us not in {l["id"] for l in d["launch"]}

@@ -216,7 +216,9 @@ HALF_LIFE_DAYS = 21
 
 def launch_score(con, comp: Entity, window_days: int = 45) -> dict:
     since = datetime.now(timezone.utc).timestamp() - window_days * 86400
-    evts = db.rows(con.execute("SELECT module, kind, title, detected_at, severity, data FROM events WHERE competitor=? AND detected_at>=?",
+    # Age a signal by when it happened, when known (a 3-month-old repo found today is not fresh).
+    evts = db.rows(con.execute("SELECT module, kind, title, COALESCE(occurred_at, detected_at) AS detected_at, severity, data "
+                               "FROM events WHERE competitor=? AND COALESCE(occurred_at, detected_at)>=?",
                                (comp.id, datetime.fromtimestamp(since, timezone.utc).isoformat(timespec="seconds"))))
     p_none, contrib = 1.0, []
     for e in evts:

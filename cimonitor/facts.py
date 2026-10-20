@@ -86,15 +86,16 @@ def history(con, competitor: str, module: str | None = None, kind: str | None = 
 def emit(con, competitor: str, module: str, kind: str, severity: str, title: str, detail: str = "",
          confidence: str = CONFIRMED, evidence: list | None = None, data: dict | None = None,
          so_what: str | None = None, change_id: int | None = None) -> int:
-    # Date the event by when it happened (article / post / release date) when we know it, not when we saw it.
-    # Anything that happened more than 30 days ago is history, not news: never Critical or High.
+    # Two dates: detected_at is when Sentinel found it (drives "this week"), occurred_at is when it happened
+    # (article / post / release date) when we know it. Anything that happened more than 30 days ago is history,
+    # not news: never Critical or High.
     happened = _happened(data or {})
     if happened and happened < (datetime.now(timezone.utc) - timedelta(days=30)).isoformat() and severity in ("critical", "high"):
         severity = "low"
     return db.insert(con, "events", {
         "competitor": competitor, "module": module, "kind": kind, "severity": severity, "title": title,
         "detail": detail, "so_what": so_what, "confidence": confidence, "evidence": evidence or [],
-        "data": data or {}, "detected_at": happened or db.now(), "change_id": change_id,
+        "data": data or {}, "detected_at": db.now(), "occurred_at": happened, "change_id": change_id,
     })
 
 
