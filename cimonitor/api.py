@@ -367,7 +367,10 @@ def scan_status(cid: str):
 
 @app.get("/api/coverage")
 def coverage_get():
-    return coverage.matrix(cfg())
+    c = cfg()
+    with db.connect() as con:
+        health = insights.collection_health(c, con)
+    return {**coverage.matrix(c), "health": health}
 
 
 @app.get("/api/guard")

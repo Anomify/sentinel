@@ -553,3 +553,22 @@ def test_alice_and_bob_is_not_a_competitor_mention():
     m = ai_search.score(c, "Top tools: HiddenLayer, Alice (formerly ActiveFence) and Lakera Guard.", [])
     assert m["alice"]["mentioned"] and m["hiddenlayer"]["rank"] == 1 and m["alice"]["rank"] == 2
     assert not ai_search.score(c, "the alice library is unrelated", [])["alice"]["mentioned"]
+
+
+# ── Collection health ────────────────────────────────────────────────────────
+def test_health_flags_overdue_failed_and_partially_read_modules():
+    from cimonitor import db, digest, insights
+    c = cfg()
+    rival = next(x for x in c.competitors if x.tier != "self")
+    with db.connect() as con:
+        db.insert(con, "runs", {"job": "dns", "started_at": _ago(0), "finished_at": _ago(0), "status": "ok",
+                                "stats": {rival.id: {"facts": 3, "unread": ["mx"], "failed_lookups": 2}}})
+        db.insert(con, "runs", {"job": "hiring", "started_at": _ago(5), "finished_at": _ago(5), "status": "ok", "stats": {}})
+        db.insert(con, "runs", {"job": "money", "started_at": _ago(0), "finished_at": _ago(0), "status": "error",
+                                "stats": {}, "error": "boom"})
+        h = insights.collection_health(c, con)
+    by = {m["job"]: m["status"] for m in h["modules"]}
+    assert by["dns"] == "ok" and by["hiring"] == "stale" and by["money"] == "error" and by["ai"] == "stale"
+    assert [(i["competitor"], i["job"], i["status"]) for i in h["issues"]] == [(rival.id, "dns", "partial")]
+    assert h["status"] == "degraded" and "Collection gaps" in digest.health_note(h)
+    assert digest.health_note({"status": "ok"}) == "Collection: every module current."

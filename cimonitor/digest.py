@@ -54,7 +54,18 @@ def build(cfg: Config, days: int | None = None) -> dict:
         "changes": ch[:15], "posts": ps[:15], "share": vis["share"], "gaps": gaps[:8],
         "launch": sorted(({"id": k, **v} for k, v in launch.items() if v.get("probability", 0) >= 0.2), key=lambda x: -x["probability"]),
         "names": names, "colors": colors, "app_url": cfg.settings.get("digest", {}).get("app_url", ""),
+        "health": ov["health"],
     }
+
+
+def health_note(h: dict | None) -> str:
+    """One line on whether this brief saw everything: a quiet week and a broken collector look the same otherwise."""
+    if not h or h.get("status") == "ok":
+        return "Collection: every module current."
+    parts = [f"failing: {', '.join(h['failing'])}" if h.get("failing") else "",
+             f"overdue: {', '.join(h['stale'])}" if h.get("stale") else "",
+             f"{len(h['issues'])} partial reads" if h.get("issues") else ""]
+    return "Collection gaps (" + "; ".join(p for p in parts if p) + "): some moves may be missing from this brief."
 
 
 def _fallback_brief(cfg, ov, ch, ps, gaps, names) -> dict:
@@ -132,6 +143,7 @@ def render_html(d: dict) -> str:
   <div style="{t(12, "#8a8a93", "letter-spacing:.12em;text-transform:uppercase")}">Sentinel · {_e(d['title'])}</div>
   <div style="{t(26, "#16161a", "letter-spacing:-.02em;line-height:1.25;margin-top:14px")}">{_e(b.get('headline'))}</div>
   <div style="{t(13, "#8a8a93", "margin-top:8px")}">{period}</div>
+  <div style="{t(12, "#8a8a93" if (d.get('health') or {}).get('status', 'ok') == 'ok' else "#b4470b", "margin-top:4px")}">{_e(health_note(d.get('health')))}</div>
 </td></tr>
 <tr><td style="padding:28px 44px 44px">
   <table role="presentation" width="100%"><tr>

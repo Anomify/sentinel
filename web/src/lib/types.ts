@@ -62,6 +62,16 @@ export interface Overview {
   recent_posts: Post[];
   share: Share[];
   last_run: { job: string; finished_at: string; status: string } | null;
+  health: Health;
+}
+
+/** Whether "nothing changed" can be trusted: module freshness and companies a module couldn't read. */
+export interface Health {
+  status: "ok" | "degraded";
+  modules: { job: string; label: string; spec: string; last_ok: string | null; last_error: string | null; status: "ok" | "stale" | "error" }[];
+  issues: { competitor: string; name: string; job: string; label: string; status: "error" | "partial"; detail: string }[];
+  stale: string[];
+  failing: string[];
 }
 
 export interface Visibility {

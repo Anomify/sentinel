@@ -243,7 +243,63 @@ def overview(cfg: Config, con, days=7) -> dict:
         "competitors": comp, "timeline": [{"date": d, **v} for d, v in buckets.items()],
         "top_events": ranked[:10], "by_module": dict(by_module), "recent_posts": ps[:8],
         "share": vis["share"], "last_run": last_run, "launch": launch,
+        "health": collection_health(cfg, con),
     }
+
+
+# ── collection health: "nothing changed" vs "nothing was collected" ──────────
+JOB_LABEL = {**MODULE_LABEL, "feeds": "Content", "ai": "AI search", "deepdive": "Deep dives", "digest": "Digest"}
+PER_COMPANY = {"dns", "subdomains", "stack", "radar", "hiring", "money", "ads", "product", "social"}
+
+
+def _interval(spec: str) -> timedelta | None:
+    """How often a schedule entry runs: "every 6h" → 6h, "daily 05:10" → 1 day, "weekly mon 08:30" → 7 days."""
+    spec = (spec or "").strip().lower()
+    if spec.startswith("every "):
+        n, unit = spec[6:-1].strip(), spec[-1]
+        if n.isdigit() and unit in "mhd":
+            return timedelta(**{{"m": "minutes", "h": "hours", "d": "days"}[unit]: int(n)})
+    if spec.startswith("daily"):
+        return timedelta(days=1)
+    if spec.startswith("weekly"):
+        return timedelta(days=7)
+    return None
+
+
+def collection_health(cfg: Config, con) -> dict:
+    """Per scheduled module: when it last succeeded, whether that is overdue, and which companies it couldn't read."""
+    now = datetime.now(timezone.utc)
+    names = {c.id: c.name for c in cfg.competitors}
+    modules, issues = [], []
+    for job, spec in (cfg.settings.get("schedule") or {}).items():
+        if job == "digest":
+            continue
+        last = db.row(con.execute("SELECT * FROM runs WHERE job=? AND finished_at IS NOT NULL ORDER BY id DESC LIMIT 1", (job,)).fetchone())
+        ok = con.execute("SELECT MAX(finished_at) FROM runs WHERE job=? AND status='ok'", (job,)).fetchone()[0]
+        every = _interval(spec)
+        # Overdue: no success within two scheduled intervals (one missed run is tolerated), and never sooner than 12h,
+        # since the GitHub Actions mode runs every module every 6h whatever settings.yaml says.
+        stale = not ok or bool(every and datetime.fromisoformat(ok) < now - max(2 * every, timedelta(hours=12)))
+        status = "error" if last and last["status"] == "error" else "stale" if stale else "ok"
+        modules.append({"job": job, "label": JOB_LABEL.get(job, job), "spec": spec, "last_ok": ok,
+                        "last_error": last["error"] if last and last["status"] == "error" else None, "status": status})
+        stats = (last or {}).get("stats")
+        if job in PER_COMPANY and isinstance(stats, dict):
+            for cid, s in stats.items():
+                if cid not in names or not isinstance(s, dict):
+                    continue
+                gaps = [*(s.get("unread") or []), *(["boards: " + ", ".join(s["failed_boards"])] if s.get("failed_boards") else []),
+                        *([f"{s['failed_lookups']} DNS lookups failed"] if s.get("failed_lookups") else [])]
+                if s.get("error"):
+                    issues.append({"competitor": cid, "name": names[cid], "job": job, "label": JOB_LABEL.get(job, job),
+                                   "status": "error", "detail": str(s["error"])[:200]})
+                elif gaps:
+                    issues.append({"competitor": cid, "name": names[cid], "job": job, "label": JOB_LABEL.get(job, job),
+                                   "status": "partial", "detail": "not read this run: " + "; ".join(map(str, gaps))[:200]})
+    bad = [m for m in modules if m["status"] != "ok"]
+    return {"status": "ok" if not bad and not issues else "degraded", "modules": modules, "issues": issues,
+            "stale": [m["label"] for m in modules if m["status"] == "stale"],
+            "failing": [m["label"] for m in modules if m["status"] == "error"]}
 
 
 # ── module views ─────────────────────────────────────────────────────────────

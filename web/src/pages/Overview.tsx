@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
-import { Activity, ArrowRight } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight } from "lucide-react";
 import { useApi } from "../lib/api";
 import type { Overview as OV } from "../lib/types";
 import { ago, day, greeting, pct } from "../lib/format";
@@ -22,9 +22,12 @@ export default function Overview() {
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   const lead = data?.competitors[0];
   const top = data ? Object.entries(data.launch).sort((a, b) => b[1].probability - a[1].probability)[0] : null;
+  const gaps = data?.health.status === "degraded";
   const headline = !data ? "" : data.kpis.critical
     ? `${data.kpis.critical} high-impact move${data.kpis.critical > 1 ? "s" : ""} this ${days === 7 ? "week" : `${days} days`}.`
-    : data.kpis.changes ? "Steady, nothing high-impact." : data.kpis.facts ? "Baseline recorded. Watching for changes." : "All quiet.";
+    : data.kpis.changes ? "Steady, nothing high-impact."
+    : gaps ? "Quiet, but some collection is failing." // never call it quiet when we may simply not have looked
+    : data.kpis.facts ? "Baseline recorded. Watching for changes." : "All quiet.";
 
   return (
     <div>
@@ -32,6 +35,7 @@ export default function Overview() {
         right={<Segmented value={days} onChange={setDays} options={[{ value: 7, label: "7 days" }, { value: 30, label: "30 days" }, { value: 90, label: "90 days" }]} />} />
       {!data ? <Skel /> : (
         <div className="space-y-5">
+          {gaps && <HealthStrip h={data.health} />}
           <motion.div {...fade}>
             <Card className="grid grid-cols-2 divide-line lg:grid-cols-4 lg:divide-x">
               <Stat className="p-6" label="Signals" value={data.kpis.changes} sub={data.kpis.changes || data.kpis.changes_prev
@@ -121,6 +125,21 @@ export default function Overview() {
         </div>
       )}
       <EventDrawer id={open} onClose={() => setOpen(null)} />
+    </div>
+  );
+}
+
+function HealthStrip({ h }: { h: OV["health"] }) {
+  const parts = [
+    h.failing.length ? `failing: ${h.failing.join(", ")}` : "",
+    h.stale.length ? `overdue: ${h.stale.join(", ")}` : "",
+    h.issues.length ? `${h.issues.length} partial read${h.issues.length > 1 ? "s" : ""} (${[...new Set(h.issues.map((i) => i.name))].slice(0, 3).join(", ")})` : "",
+  ].filter(Boolean);
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-high/[0.08] px-5 py-3 text-[13px] text-ink ring-1 ring-inset ring-high/25">
+      <AlertTriangle size={14} className="shrink-0 text-high" />
+      <span>Collection gaps: {parts.join(" · ")}. Missing changes here may not mean nothing happened.</span>
+      <Link to="/coverage" className="ml-auto text-[12.5px] text-ink-2 underline-offset-4 hover:text-ink hover:underline">Details</Link>
     </div>
   );
 }
