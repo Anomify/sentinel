@@ -79,6 +79,20 @@ class Capture:
         return {urlparse(u).hostname or "" for u in self.requests + self.requests_post} - {""}
 
 
+def route_guard(route) -> None:
+    """Browser request filter: a page's scripts, images, iframes and redirects may not reach private or internal
+    addresses. robots.txt governs pages we choose to load, not the resources a page pulls in, so only the host is checked."""
+    url = route.request.url
+    if url.startswith(("http://", "https://")):
+        try:
+            guard.check_host(url)
+        except guard.Blocked as b:
+            guard.audit(url, "blocked", f"browser request: {b.reason}")
+            route.abort("blockedbyclient")
+            return
+    route.continue_()
+
+
 def _playwright_ok() -> bool:
     try:
         import playwright.sync_api  # noqa: F401
@@ -119,8 +133,10 @@ class Fetcher:
             pass
 
     def _ctx(self):
-        return self._browser.new_context(user_agent=guard.BROWSER_UA, viewport={"width": 1440, "height": 900},
-                                         locale="en-US")
+        ctx = self._browser.new_context(user_agent=guard.BROWSER_UA, viewport={"width": 1440, "height": 900},
+                                        locale="en-US")
+        ctx.route("**/*", route_guard)  # every request the page makes, redirects included, is vetted
+        return ctx
 
     def get(self, url: str, render: bool = True, screenshot: str | None = None) -> Fetched:
         """screenshot: filename prefix to save an evidence screenshot (browser only)."""
@@ -146,10 +162,11 @@ class Fetcher:
             except Exception as e:
                 log.info("browser fetch failed for %s: %s, retrying over HTTP", url, e)
         try:
-            r = guard._session.get(url, timeout=self.timeout)
-            guard.audit(url, "allowed", f"HTTP {r.status_code}")
+            r = guard.get(url, timeout=self.timeout)  # checks every redirect hop
             return Fetched(url, r.status_code, r.text, None if r.ok else f"HTTP {r.status_code}", dict(r.headers),
                            final_url=r.url)
+        except guard.Blocked as b:
+            return Fetched(url, 0, "", f"blocked: {b.reason}")
         except Exception as e:
             return Fetched(url, 0, "", str(e)[:300])
 

@@ -697,3 +697,58 @@ def test_partner_extraction_skips_menus_and_customer_logos():
             '<img alt="AISPM navigation item"><img alt="Alice client logo of Amazon Web Services">'
             '<section><img alt="Nvidia partner"><img alt="Optiv logo"></section><footer><img alt="LinkedIn"></footer>')
     assert partner_names(html, "https://www.acme.com/partners") == ["Nvidia", "Optiv"]
+
+
+# ── SSRF ─────────────────────────────────────────────────────────────────────
+def _public_dns(monkeypatch, guard, private=()):
+    monkeypatch.setattr(guard, "resolve_ips", lambda h: ["10.0.0.9"] if h in private else ["93.184.216.34"])
+    monkeypatch.setattr(guard, "system_ips", lambda h: [])
+    monkeypatch.setattr(guard, "robots_allowed", lambda url, ua=guard.UA: True)
+    monkeypatch.setattr(guard, "throttle", lambda url: None)
+
+
+def test_guard_fails_closed_on_unresolvable_or_partly_private_hosts(monkeypatch):
+    from cimonitor import guard
+    monkeypatch.setattr(guard, "resolve_ips", lambda h: [])
+    monkeypatch.setattr(guard, "system_ips", lambda h: [])
+    with pytest.raises(guard.Blocked, match="does not resolve"):
+        guard.check_host("https://ghost.acme.com/")
+    monkeypatch.setattr(guard, "resolve_ips", lambda h: ["93.184.216.34"])
+    monkeypatch.setattr(guard, "system_ips", lambda h: ["127.0.0.1"])  # local resolver disagrees (rebinding, hosts file)
+    with pytest.raises(guard.Blocked, match="private"):
+        guard.check_host("https://acme.com/")
+
+
+def test_redirects_to_internal_addresses_are_never_followed(monkeypatch):
+    from cimonitor import guard
+    _public_dns(monkeypatch, guard, private={"intranet.acme.com"})
+    calls = []
+
+    class R:
+        def __init__(self, status, loc=None):
+            self.status_code, self.headers, self.is_redirect = status, {"location": loc} if loc else {}, bool(loc)
+    hops = {"https://acme.com/": R(302, "http://169.254.169.254/latest/meta-data/"),
+            "https://acme.com/a": R(301, "https://intranet.acme.com/admin"),
+            "https://acme.com/b": R(302, "/c"), "https://acme.com/c": R(200)}
+    monkeypatch.setattr(guard._session, "get", lambda url, **kw: calls.append(url) or hops[url])
+    for start in ("https://acme.com/", "https://acme.com/a"):
+        with pytest.raises(guard.Blocked):
+            guard.get(start)
+    assert guard.get("https://acme.com/b").status_code == 200
+    assert calls == ["https://acme.com/", "https://acme.com/a", "https://acme.com/b", "https://acme.com/c"]  # never the internal hops
+
+
+def test_browser_requests_to_private_addresses_are_aborted(monkeypatch):
+    from cimonitor import guard
+    from cimonitor.collectors.fetch import route_guard
+    _public_dns(monkeypatch, guard)
+    done = []
+
+    class Route:
+        def __init__(self, url):
+            self.request = type("Req", (), {"url": url})()
+        def abort(self, reason): done.append(("abort", self.request.url))
+        def continue_(self): done.append(("continue", self.request.url))
+    for u in ("http://127.0.0.1:8000/api/jobs/ai", "http://169.254.169.254/", "https://cdn.acme.com/app.js", "data:image/png;base64,x"):
+        route_guard(Route(u))
+    assert [a for a, _ in done] == ["abort", "abort", "continue", "continue"]
