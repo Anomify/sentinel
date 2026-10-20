@@ -172,7 +172,7 @@ export function RadarPage() {
   const { data } = useApi<{ competitors: any[] }>("/api/radar");
   return (
     <div>
-      <PageHeader eyebrow="Module 5" title="Launch radar" sub="Weak signals combined into one probability: new campaign subdomains, pages on staging, new repos, first-of-their-kind hires, new verifications and conversion events, decayed over time. Inferred, never certain." />
+      <PageHeader eyebrow="Module 5" title="Pre-launch radar" sub="Weak signals that often come before a launch: pages on staging, new campaign subdomains and repos, first-of-their-kind hires, new verifications and conversion events. Evidence to read, not a prediction: none of these has been validated against actual launches." />
       {!data ? <Skeleton className="h-96 rounded-2xl" /> : (
         <div className="space-y-5">{data.competitors.map((r) => <RadarCard key={r.id} r={r} />)}</div>
       )}
@@ -183,21 +183,19 @@ export function RadarPage() {
 function RadarCard({ r }: { r: any }) {
   const e = useEntity(r.id)!;
   const l: Launch = r.launch;
-  const p = l.probability || 0;
   return (
     <Card className="overflow-hidden">
       <div className="grid gap-6 p-6 lg:grid-cols-[220px_1fr_1fr]">
         <div>
           <div className="flex items-center gap-2.5"><Monogram id={r.id} size={26} /><span className="text-[14px] text-ink">{e.name}</span></div>
-          <div className="mt-5 text-[44px] leading-none tracking-[-0.04em] tnum text-ink">{Math.round(p * 100)}<span className="text-[20px] text-ink-3">%</span></div>
-          <div className="mt-2 text-[12.5px] text-ink-3">launch probability{p >= 0.3 ? ` · within ${l.horizon}` : ""}</div>
-          <div className="mt-4 h-1 rounded-full bg-sunken"><div className="h-1 rounded-full bg-ink" style={{ width: `${Math.max(2, p * 100)}%` }} /></div>
+          <div className="mt-5 text-[44px] leading-none tracking-[-0.04em] tnum text-ink">{l.n || 0}</div>
+          <div className="mt-2 text-[12.5px] text-ink-3">pre-launch indicator{l.n === 1 ? "" : "s"} · last 45 days</div>
         </div>
         <div>
-          <div className="eyebrow mb-3">Contributing signals</div>
+          <div className="eyebrow mb-3">Indicators, newest first</div>
           {l.signals?.length ? l.signals.slice(0, 6).map((s, i) => (
             <div key={i} className="flex items-start gap-3 py-1.5 text-[12.5px]">
-              <span className="w-10 shrink-0 text-ink-3 tnum">+{Math.round(s.weight * 100)}</span>
+              <span className="w-14 shrink-0 text-ink-3 tnum">{day(s.at)}</span>
               <span className="min-w-0 text-ink-2"><span className="text-ink">{s.signal}</span> · {s.title}</span>
             </div>
           )) : <div className="text-[12.5px] text-ink-3">No launch signals in the last 45 days.</div>}

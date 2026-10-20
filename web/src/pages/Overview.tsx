@@ -21,7 +21,7 @@ export default function Overview() {
   const { start } = useJobs();
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
   const lead = data?.competitors[0];
-  const top = data ? Object.entries(data.launch).sort((a, b) => b[1].probability - a[1].probability)[0] : null;
+  const top = data ? Object.entries(data.launch).filter(([id]) => data.competitors.some((c) => c.id === id)).sort((a, b) => b[1].n - a[1].n)[0] : null;
   const gaps = data?.health.status === "degraded";
   const headline = !data ? "" : data.kpis.critical
     ? `${data.kpis.critical} high-impact move${data.kpis.critical > 1 ? "s" : ""} this ${days === 7 ? "week" : `${days} days`}.`
@@ -42,7 +42,7 @@ export default function Overview() {
                 ? <span className="inline-flex items-center gap-1.5"><Delta value={data.kpis.changes - data.kpis.changes_prev} neutral /> vs prior period</span>
                 : `Baseline · ${data.kpis.facts.toLocaleString()} facts on file`} />
               <Stat className="p-6" label="High-impact" value={<span className={data.kpis.critical ? "text-crit" : ""}>{data.kpis.critical}</span>} sub={lead ? `Most active: ${lead.name}` : "-"} />
-              <Stat className="p-6" label="Launch risk" value={pct(data.kpis.launch_max)} sub={top && top[1].probability > 0 ? `${meta.entities.find((e) => e.id === top[0])?.name} · ${top[1].horizon}` : "No launch signals"} />
+              <Stat className="p-6" label="Pre-launch indicators" value={data.kpis.launch_indicators} sub={top && top[1].n > 0 ? `Most: ${meta.entities.find((e) => e.id === top[0])?.name} (${top[1].n}) · 45 days` : "None in 45 days"} />
               <Stat className="p-6" label="AI share of voice" value={pct(data.kpis.ai_share)}
                 sub={data.kpis.ai_share != null ? <span className="inline-flex items-center gap-1.5">{data.kpis.ai_share_prev != null && <Delta value={Math.round((data.kpis.ai_share - data.kpis.ai_share_prev) * 100)} suffix=" pts" />}{data.kpis.ai_gaps} gaps</span> : <Link to="/ai" className="hover:text-ink">Connect engines →</Link>} />
             </Card>
@@ -62,7 +62,7 @@ export default function Overview() {
                     <Monogram id={c.id} size={28} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13.5px] text-ink">{c.name}</div>
-                      <div className="text-[11.5px] text-ink-3 tnum">{c.changes} signals{c.critical ? <span className="text-high"> · {c.critical} high</span> : null}{c.launch >= 0.3 ? ` · launch ${pct(c.launch)}` : ""}</div>
+                      <div className="text-[11.5px] text-ink-3 tnum">{c.changes} signals{c.critical ? <span className="text-high"> · {c.critical} high</span> : null}{c.launch >= 3 ? ` · ${c.launch} pre-launch indicators` : ""}</div>
                     </div>
                     <Sparkline values={data.timeline.slice(-14).map((d) => Number(d[c.id]) || 0)} color={c.color} width={56} height={20} />
                   </Link>

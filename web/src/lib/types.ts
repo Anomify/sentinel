@@ -49,7 +49,7 @@ export interface Overview {
   days: number;
   kpis: {
     changes: number; critical: number; pricing: number; posts: number; changes_prev: number;
-    ai_share: number | null; ai_share_prev: number | null; ai_gaps: number; pages: number; feeds: number; questions: number; launch_max: number; facts: number;
+    ai_share: number | null; ai_share_prev: number | null; ai_gaps: number; pages: number; feeds: number; questions: number; launch_indicators: number; facts: number;
   };
   competitors: {
     id: string; name: string; color: string; tier: string; changes: number; critical: number; posts: number;
@@ -121,4 +121,5 @@ export interface DeepDive {
   summary: { label: string; value: string }[]; sections: { id: string; title: string; findings: Finding[] }[];
   counts: Record<string, number>;
 }
-export interface Launch { probability: number; horizon: string; signals: { signal: string; title: string; at: string; weight: number }[]; n: number }
+/** Pre-launch indicators: evidence count and the signals themselves. `probability` is an unvalidated internal score: never show it. */
+export interface Launch { probability: number; signals: { signal: string; title: string; at: string; weight: number }[]; n: number; kinds?: Record<string, number> }

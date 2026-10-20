@@ -115,7 +115,7 @@ export const NAV: { group: string; items: { to: string; label: string; icon: any
   { group: "Modules", items: [
     { to: "/stack", label: "GTM stack", icon: Layers },
     { to: "/infrastructure", label: "Infrastructure", icon: Network },
-    { to: "/radar", label: "Launch radar", icon: Rocket },
+    { to: "/radar", label: "Pre-launch radar", icon: Rocket },
     { to: "/product", label: "Product launches", icon: Package },
     { to: "/messaging", label: "Messaging", icon: MessagesSquare },
     { to: "/hiring", label: "Hiring", icon: Briefcase },

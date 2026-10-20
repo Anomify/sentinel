@@ -183,11 +183,12 @@ def build(cfg: Config, comp: Entity) -> dict:
 
     # ── Radar
     if launch:
-        p = launch.get("probability", 0)
-        out.append(_f("radar", "launch", f"Launch probability {round(p * 100)}%" + (f" · likely within {launch['horizon']}" if p >= 0.3 else ""),
-                      "; ".join(s["signal"] + ": " + s["title"] for s in launch.get("signals", [])[:4]) or "No launch signals in the last 45 days.",
-                      "inferred", [], data=launch, vs_us="A launch looks close. Prepare a response: a blog or changelog post on how Hyperfence handles the same problem, and an updated comparison page." if p >= 0.5 else None,
-                      weight=5 if p >= 0.5 else 1))
+        # Evidence, not a forecast: the count and the signals themselves. No probability or launch date is claimed.
+        n = launch.get("n", 0)
+        out.append(_f("radar", "launch", f"{n} pre-launch indicator{'s' if n != 1 else ''} in the last 45 days" if n else "No pre-launch indicators in the last 45 days",
+                      "; ".join(s["signal"] + ": " + s["title"] for s in launch.get("signals", [])[:4]),
+                      "inferred", [], data=launch, vs_us="Several pre-launch signals at once. Read the evidence; if it points at something we cover, have a post or comparison page ready." if n >= 3 else None,
+                      weight=5 if n >= 3 else 1))
     for s in stg:
         out.append(_f("radar", f"stg:{s['key']}", f"Staging site: {s['key']}", s["value"].get("crawl") or "Public staging mirror monitored for pre-launch pages.",
                       "confirmed", s["evidence"], first_seen=s["first_seen"]))
@@ -351,7 +352,7 @@ def _summary(comp, out, motion, jobs, funding, launch, tools, subs, mna=()) -> l
     lat = sorted([*funding, *mna], key=lambda f: f["value"].get("date") or "", reverse=True)
     return [
         {"label": "Motion", "value": motion[0]["label"] if motion else "-"},
-        {"label": "Launch probability", "value": f"{round((launch or {}).get('probability', 0) * 100)}%"},
+        {"label": "Pre-launch indicators", "value": str((launch or {}).get("n", 0))},
         {"label": "Open roles", "value": str(len(jobs))},
         {"label": "Latest funding / M&A", "value": (_short(lat[0]["label"], 70) + (f" ({lat[0]['value']['date'][:7]})" if lat[0]["value"].get("date") else "")) if lat else "-"},
         {"label": "GTM tools", "value": str(len(tools))},

@@ -40,7 +40,7 @@ def build(cfg: Config, days: int | None = None) -> dict:
     facts = {
         "changes": [{k: c[k] for k in ("competitor", "kind", "severity", "category", "headline", "summary", "so_what", "url")}
                     for c in ch[:40]],
-        "launch": {names.get(k): v.get("probability") for k, v in launch.items()},
+        "pre_launch_indicators": {names.get(k): {"count": v.get("n", 0), "kinds": v.get("kinds", {})} for k, v in launch.items() if v.get("n")},
         "posts": [{"competitor": p["competitor"], "title": p["title"], "topics": p["topics"]} for p in ps[:40]],
         "ai_share": [{"entity": names.get(s["id"]), "share": s["share"], "avg_rank": s["avg_rank"]} for s in vis["share"]],
         "ai_gaps": gaps[:10],
@@ -52,7 +52,7 @@ def build(cfg: Config, days: int | None = None) -> dict:
         "brand": cfg.brand.name, "period_start": insights.since(days), "period_end": end.isoformat(timespec="seconds"),
         "brief": brief, "kpis": ov["kpis"], "competitors": ov["competitors"],
         "changes": ch[:15], "posts": ps[:15], "share": vis["share"], "gaps": gaps[:8],
-        "launch": sorted(({"id": k, **v} for k, v in launch.items() if v.get("probability", 0) >= 0.2), key=lambda x: -x["probability"]),
+        "launch": sorted(({"id": k, **v} for k, v in launch.items() if v.get("n")), key=lambda x: -x["n"]),
         "names": names, "colors": colors, "app_url": cfg.settings.get("digest", {}).get("app_url", ""),
         "health": ov["health"],
     }
@@ -127,7 +127,8 @@ def render_html(d: dict) -> str:
                  f'<td style="width:100%;padding:5px 0"><div style="background:#f0f0f2;border-radius:3px;height:4px">'
                  f'<div style="background:{d["colors"].get(s["id"])};width:{max(pct, 1)}%;height:4px;border-radius:3px"></div></div></td>'
                  f'<td style="{t(13, "#16161a", "padding:5px 0 5px 14px;text-align:right")}">{pct}%</td></tr>')
-    launch = "".join(f'<li style="margin:0 0 6px">{_e(d["names"].get(l["id"]))}: {round(l["probability"] * 100)}% · likely within {_e(l.get("horizon"))}</li>'
+    launch = "".join(f'<li style="margin:0 0 6px">{_e(d["names"].get(l["id"]))}: {l["n"]} indicator{"s" if l["n"] != 1 else ""}'
+                     f'{(" · latest: " + _e(l["signals"][0]["title"][:90])) if l.get("signals") else ""}</li>'
                      for l in d.get("launch", [])[:4])
     gaps = "".join(f'<li style="margin:0 0 6px">{_e(g["text"])}</li>' for g in d["gaps"])
     tldr = "".join(f'<li style="margin:0 0 10px">{_e(x)}</li>' for x in b.get("tldr", []))
@@ -148,13 +149,13 @@ def render_html(d: dict) -> str:
 <tr><td style="padding:28px 44px 44px">
   <table role="presentation" width="100%"><tr>
     {kpi('Signals', k['changes'], f"{k['critical']} high-impact")}
-    {kpi('Launch risk', f"{round((k.get('launch_max') or 0) * 100)}%", 'highest competitor')}
+    {kpi('Pre-launch', k.get('launch_indicators', 0), 'indicators, 45 days')}
     {kpi('New content', k['posts'], 'pieces')}
     {kpi('AI share', f"{round(brand_share * 100)}%" if brand_share is not None else '-', f"{k['ai_gaps']} gaps")}
   </tr></table>
   {sec('In brief')}{ul(tldr, 15)}
   {sec('What moved')}<table role="presentation" width="100%">{rows}</table>
-  {(sec('Launch radar') + ul(launch)) if launch else ''}
+  {(sec('Pre-launch indicators (evidence, not predictions)') + ul(launch)) if launch else ''}
   {sec('New content')}{ul(posts)}
   {(sec('AI search share of voice') + '<table role="presentation" width="100%">' + bars + '</table>') if bars else ''}
   {(sec("Where we're missing from AI answers") + ul(gaps)) if gaps else ''}

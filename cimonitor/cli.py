@@ -15,7 +15,7 @@ MODULE_HELP = {
     "stack": "Modules 1+2 · stack fingerprint (pre/post consent) + GTM container forensics",
     "dns": "Module 3 · TXT/SPF/MX/DMARC/DKIM",
     "subdomains": "Module 4 · certificate transparency + hosting + screenshots",
-    "radar": "Module 5 · staging, sitemaps, publishes, GitHub, launch probability",
+    "radar": "Module 5 · staging, sitemaps, publishes, GitHub, pre-launch indicators",
     "social": "Social media · YouTube, Bluesky, Medium, X (with API key), Hacker News, LinkedIn links",
     "product": "Product intelligence · new products, release notes, launch announcements",
     "hiring": "Module 6 · Greenhouse/Lever/Ashby",

@@ -5,13 +5,14 @@
   • Production sitemap diffs: new pages as they go live.
   • Webflow "Last Published" stamps → release cadence.
   • Public GitHub org repos: new repos and push cadence.
-  • Launch probability: combines recent weak signals into one score (inferred).
+  • Pre-launch indicators: recent weak signals, listed with their evidence (no probability or date is claimed).
 """
 from __future__ import annotations
 
 import logging
 import math
 import re
+from collections import Counter
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from urllib.parse import urlparse
@@ -233,10 +234,12 @@ def launch_score(con, comp: Entity, window_days: int = 45) -> dict:
                 p_none *= (1 - wt)
                 contrib.append({"signal": why, "title": e["title"], "at": e["detected_at"], "weight": round(wt, 3)})
     p = 1 - p_none
-    contrib.sort(key=lambda c: -c["weight"])
-    kinds = {c["signal"] for c in contrib}
-    horizon = "2–4 weeks" if "new page on staging" in kinds else "4–8 weeks" if p >= 0.3 else "-"
-    out = {"probability": round(p, 3), "horizon": horizon, "signals": contrib[:8], "n": len(contrib)}
+    contrib.sort(key=lambda c: c["at"], reverse=True)
+    # What the product shows is the evidence: how many pre-launch indicators, of which kinds, newest first.
+    # `probability` is an unvalidated heuristic (hand-set weights, never backtested against real launches): it is kept
+    # for history and comparison only and must not be presented as a probability or a launch date.
+    out = {"probability": round(p, 3), "signals": contrib[:8], "n": len(contrib),
+           "kinds": dict(Counter(c["signal"] for c in contrib))}
     facts.metric(con, comp.id, MODULE, "launch_probability", datetime.now(timezone.utc).strftime("%Y-%m-%d"), out["probability"])
     db.set_meta(con, f"launch:{comp.id}", out)
     return out

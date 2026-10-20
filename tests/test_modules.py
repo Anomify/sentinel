@@ -138,7 +138,8 @@ def test_launch_score_combines_and_decays():
         facts.emit(con, c.id, "radar", "staging_page_added", "high", "Pre-launch page /pricing-v2")
         facts.emit(con, c.id, "subdomains", "subdomain_added", "high", "New subdomain", data={"kind": "campaign / product"})
         s = launch_score(con, c)
-    assert 0.45 < s["probability"] < 0.6 and s["horizon"] == "2–4 weeks"
+    assert 0.45 < s["probability"] < 0.6 and s["n"] == 2 and "horizon" not in s
+    assert s["kinds"] == {"new page on staging": 1, "new campaign/product subdomain": 1}
 
 
 def test_deep_dive_builds_with_vs_us_and_evidence():
@@ -572,3 +573,23 @@ def test_health_flags_overdue_failed_and_partially_read_modules():
     assert [(i["competitor"], i["job"], i["status"]) for i in h["issues"]] == [(rival.id, "dns", "partial")]
     assert h["status"] == "degraded" and "Collection gaps" in digest.health_note(h)
     assert digest.health_note({"status": "ok"}) == "Collection: every module current."
+
+
+def test_pre_launch_signals_are_reported_as_evidence_not_a_forecast():
+    import re
+    from cimonitor import db, digest, facts
+    from cimonitor.collectors.radar import launch_score
+    from cimonitor.intel import deepdive
+    c = cfg()
+    rival = next(x for x in c.competitors if x.tier != "self")
+    with db.connect() as con:
+        for i in range(3):
+            facts.emit(con, rival.id, "radar", "staging_page_added", "high", f"Pre-launch page /new-{i}")
+        launch_score(con, rival)
+    d = digest.build(c, 7)
+    html = digest.render_html(d)
+    assert d["kpis"]["launch_indicators"] == 3 and "3 indicators" in html
+    assert not re.search(r"likely within|Launch risk|launch probability", html, re.I)
+    r = deepdive.build(c, rival)
+    texts = " ".join(f["title"] for s in r["sections"] for f in s["findings"]) + " ".join(str(x["value"]) for x in r["summary"])
+    assert "3 pre-launch indicators" in texts and "probability" not in texts.lower()

@@ -179,7 +179,7 @@ def gaps(cfg: Config, vis: dict) -> list[dict]:
 
 
 def launch_scores(cfg: Config, con) -> dict:
-    return {c.id: db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "horizon": "-", "n": 0} for c in cfg.competitors}
+    return {c.id: db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "n": 0, "kinds": {}} for c in cfg.competitors}
 
 
 def overview(cfg: Config, con, days=7) -> dict:
@@ -208,7 +208,7 @@ def overview(cfg: Config, con, days=7) -> dict:
                      "critical": sum(x["severity"] in ("critical", "high") for x in mine),
                      "posts": sum(p["competitor"] == c.id for p in ps), "heat": round(heat, 1),
                      "heat_delta": round(heat - prev_heat, 1), "ai_share": sov["share"] if sov else None,
-                     "launch": launch[c.id].get("probability", 0), "latest": mine[0] if mine else None,
+                     "launch": launch[c.id].get("n", 0), "latest": mine[0] if mine else None,
                      "modules": dict(Counter(MODULE_LABEL.get(x["module"], x["module"]) for x in mine))})
     comp.sort(key=lambda x: -x["heat"])
     span = max(days * 2, 28)
@@ -237,7 +237,8 @@ def overview(cfg: Config, con, days=7) -> dict:
             "ai_share_prev": (vis["trend"][-2].get("__brand__") if len(vis["trend"]) > 1 else None),
             "ai_gaps": len(gaps(cfg, vis)), "pages": sum(len(c.pages) for c in cfg.competitors),
             "feeds": sum(len(c.feeds) for c in cfg.competitors), "questions": len(cfg.questions),
-            "launch_max": max((v.get("probability", 0) for v in launch.values()), default=0),
+            # Pre-launch indicators (evidence count, last 45 days); no probability is shown, it was never validated.
+            "launch_indicators": sum(launch[c].get("n", 0) for c in rivals),
             "facts": n_facts,
         },
         "competitors": comp, "timeline": [{"date": d, **v} for d, v in buckets.items()],
@@ -346,7 +347,7 @@ def hiring_view(cfg: Config, con) -> dict:
 def radar_view(cfg: Config, con) -> dict:
     out = []
     for c in cfg.competitors:
-        lp = db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "horizon": "-"}
+        lp = db.get_meta(con, f"launch:{c.id}") or {"probability": 0, "signals": [], "n": 0, "kinds": {}}
         hist = [{"date": s["period"], "p": s["value"]} for s in facts.series(con, c.id, "radar", "launch_probability")]
         pubs = sorted({s["period"] for s in facts.series(con, c.id, "radar", "publish") if s["metric"] == "publish"})
         out.append({"id": c.id, "launch": lp, "history": hist[-60:], "publishes": pubs[-40:],
@@ -359,7 +360,7 @@ def radar_view(cfg: Config, con) -> dict:
                     "campaign_subdomains": [{"host": f["key"], "first_seen": f["first_seen"], **{k: f["value"].get(k) for k in ("hosting", "title", "screenshot", "first_cert")}}
                                             for f in facts.active(con, c.id, "subdomains", "subdomain") if f["value"].get("kind") == "campaign / product"
                                             and not (f["value"].get("private") or f["value"].get("internal") or "not contacted" in (f["value"].get("note") or ""))]})
-    out.sort(key=lambda r: -r["launch"].get("probability", 0))
+    out.sort(key=lambda r: -r["launch"].get("n", 0))
     return {"competitors": out}
 
 
