@@ -122,8 +122,10 @@ def test_fact_sync_baseline_then_alerts_and_removals():
     with db.connect() as con:
         r1 = facts.sync(con, "x", "stack", [facts.Fact("tool", "hubspot", "HubSpot")], ["tool"])
         r2 = facts.sync(con, "x", "stack", [facts.Fact("tool", "linkedin-insight", "LinkedIn Insight Tag")], ["tool"])
+        r3 = facts.sync(con, "x", "stack", [facts.Fact("tool", "linkedin-insight", "LinkedIn Insight Tag")], ["tool"])
         ev = [e["title"] for e in db.rows(con.execute("SELECT title FROM events"))]
     assert r1["baseline"] and not r2["baseline"]
+    assert r2["pending_removal"] == 1 and r3["removed"] == 1  # removed only after two complete reads without it
     assert ev == ["New tool: LinkedIn Insight Tag", "Tool removed: HubSpot"]
 
 
@@ -310,3 +312,138 @@ def test_each_job_sees_fresh_dns(monkeypatch):
     assert dnsq.query("rival.example", "MX") == []
     guard.reset_caches()
     assert dnsq.query("rival.example", "MX") == ["10 aspmx.l.google.com"]
+
+
+# ── Collection failures never become signals ────────────────────────────────
+def _events(con, competitor=None):
+    from cimonitor import db
+    q, a = "SELECT kind, title FROM events", ()
+    if competitor:
+        q, a = q + " WHERE competitor=?", (competitor,)
+    return [(r["kind"], r["title"]) for r in db.rows(con.execute(q, a))]
+
+
+def test_one_missed_read_is_not_a_removal_and_a_quick_return_is_not_news():
+    from cimonitor import db, facts
+    pages = [facts.Fact("site_page", f"/p{i}", f"/p{i}") for i in range(30)]
+    with db.connect() as con:
+        facts.sync(con, "x", "radar", pages, ["site_page"])          # baseline
+        facts.sync(con, "x", "radar", [], ["site_page"])            # one bad read
+        facts.sync(con, "x", "radar", pages, ["site_page"])         # back
+        assert _events(con) == []
+        facts.sync(con, "x", "radar", [], ["site_page"])            # two bad reads: removed
+        facts.sync(con, "x", "radar", [], ["site_page"])
+        removed = len(_events(con))
+        facts.sync(con, "x", "radar", pages, ["site_page"])         # back within 30 days: restored quietly
+        assert len(_events(con)) == removed
+        assert len(facts.active(con, "x", "radar", "site_page")) == 30
+
+
+def test_unread_kinds_and_append_only_kinds_are_never_removed():
+    from cimonitor import db, facts
+    rules = {"press": facts.Rule(append_only=True)}
+    with db.connect() as con:
+        facts.sync(con, "x", "money", [facts.Fact("partner", "ibm", "IBM"), facts.Fact("press", "u1", "Story")], ["partner", "press"], rules)
+        for _ in range(3):
+            facts.sync(con, "x", "money", [], ["partner", "press"], rules, unread={"partner"})
+        assert _events(con) == []
+        assert {f["key"] for f in facts.active(con, "x", "money")} == {"ibm", "u1"}
+
+
+def test_radar_sitemap_and_github_outage_raise_no_signals_or_launch_score(monkeypatch):
+    from cimonitor import db
+    from cimonitor.collectors import radar
+    comp = next(c for c in cfg().competitors if c.tier != "self")
+    sitemap = {f"/platform/p{i}" for i in range(40)}
+    state = {"ok": True}
+    monkeypatch.setattr(radar, "_sitemap", lambda base, limit=5000: set(sitemap) if state["ok"] else set())
+    monkeypatch.setattr(radar, "_last_published", lambda url: (None, ""))
+    monkeypatch.setattr(radar, "staging_candidates", lambda con, c: [])
+    monkeypatch.setattr(radar, "github_orgs", lambda con, c: ["acme"])
+
+    def gh(url, **kw):
+        if not state["ok"]:
+            raise RuntimeError("API rate limit exceeded")
+        return [{"full_name": "acme/sdk", "name": "sdk", "fork": False}] if "/orgs/" in url else []
+    monkeypatch.setattr(radar.guard, "get_json", gh)
+    with db.connect() as con:
+        for ok in (True, False, False, False, True):
+            state["ok"] = ok
+            r = radar.run_one(con, cfg(), comp)
+        assert _events(con, comp.id) == []
+        assert r["launch"]["probability"] == 0
+
+
+def test_hiring_board_outage_does_not_close_roles(monkeypatch):
+    from cimonitor import db
+    from cimonitor.collectors import hiring
+    comp = next(c for c in cfg().competitors if c.tier != "self")
+    state = {"ok": True}
+
+    def board(token):
+        if not state["ok"]:
+            raise RuntimeError("502")
+        return [{"id": f"j{i}", "title": f"Engineer {i}", "department": "Engineering", "location": "London",
+                 "text": "", "url": f"https://jobs/{i}", "posted": "2026-10-01"} for i in range(5)]
+    monkeypatch.setattr(hiring, "discover", lambda con, c: [("greenhouse", "acme")])
+    monkeypatch.setitem(hiring.FETCH, "greenhouse", board)
+    with db.connect() as con:
+        for ok in (True, False, False, False, True):
+            state["ok"] = ok
+            hiring.run_one(con, comp)
+        assert _events(con, comp.id) == []
+
+
+def test_money_partner_page_outage_and_news_window_raise_no_signals(monkeypatch):
+    from cimonitor import db
+    from cimonitor.collectors import money
+    comp = next(c for c in cfg().competitors if c.tier != "self")
+    dom = comp.domain.removeprefix("www.")
+    state = {"ok": True, "news": True}
+
+    class R:
+        ok, url = True, f"https://{dom}/partners"
+        text = '<a href="https://ibm.com"><img alt="IBM"></a><a href="https://optiv.com"><img alt="Optiv"></a> Become a partner'
+
+    def get(url, **kw):
+        if not state["ok"]:
+            raise RuntimeError("timeout")
+        return R()
+    story = {"title": f"{comp.name} raises $50M Series B for AI security", "url": "https://news/1", "source": "Wire",
+             "published": "2026-10-01T00:00:00+00:00", "text": f"{comp.name} raises $50M Series B for AI security"}
+    monkeypatch.setattr(money, "_home_links", lambda c: ([f"https://{dom}/partners"], "") if state["ok"] else ([], ""))
+    monkeypatch.setattr(money.guard, "get", get)
+    monkeypatch.setattr(money, "news", lambda c: [story] if state["news"] else [])
+    with db.connect() as con:
+        for ok, nw in ((True, True), (False, False), (False, True), (False, False), (True, True)):
+            state["ok"], state["news"] = ok, nw
+            money.run_one(con, comp)
+        assert _events(con, comp.id) == []
+
+
+def test_dns_lookup_failure_is_not_a_record_removal(monkeypatch):
+    import requests
+    from cimonitor import db, guard
+    from cimonitor.collectors import dns_infra
+    comp = next(c for c in cfg().competitors if c.tier != "self")
+    state = {"ok": True}
+
+    class R:
+        def __init__(self, ans): self.ans = ans
+        def json(self): return {"Status": 0, "Answer": self.ans}
+
+    def get(url, params=None, timeout=None):
+        if params["type"] == "MX":
+            if not state["ok"]:
+                raise requests.ConnectionError("DoH down")
+            return R([{"type": 15, "data": "10 aspmx.l.google.com."}])
+        if params["type"] == "TXT" and params["name"] == comp.domain.removeprefix("www."):
+            return R([{"type": 16, "data": '"v=spf1 include:_spf.google.com ~all"'}])
+        return R([])
+    monkeypatch.setattr(requests, "get", get)
+    with db.connect() as con:
+        for ok in (True, False, False, False, True):
+            state["ok"] = ok
+            guard.reset_caches()
+            dns_infra.run_one(con, comp)
+        assert _events(con, comp.id) == []

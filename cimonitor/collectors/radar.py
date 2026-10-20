@@ -105,7 +105,7 @@ RULES = {
                          so_what=lambda f: "This page exists on their staging site but not on production, an upcoming launch, campaign or pricing change."),
     "site_page": Rule(severity="low", on_remove=True, title_add=lambda f: f"New page live: {f.label}",
                       severity_fn=lambda f: "medium" if not NOISE_PATH.search(f.key) else "low"),
-    "publish": Rule(severity="low", on_remove=False, title_add=lambda f: f"Site republished ({f.value.get('site')})"),
+    "publish": Rule(severity="low", on_remove=False, append_only=True, title_add=lambda f: f"Site republished ({f.value.get('site')})"),
     "repo": Rule(severity="high", title_add=lambda f: f"New public GitHub repo: {f.label}",
                  so_what=lambda f: "New open-source repos often precede product or developer-facing launches."),
 }
@@ -127,6 +127,8 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
         t = _parse_lp(lp)
         if t:
             facts.metric(con, comp.id, MODULE, "publish", t.strftime("%Y-%m-%dT%H:%M"), 1)
+    # Kinds we could not read completely this run: their known facts stay as they are (no false removals).
+    unread = set() if prod else {"site_page", "staging_page"}
     staging_found = 0
     for s in staging_candidates(con, comp):
         try:
@@ -140,6 +142,7 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
                                 facts.CONFIRMED, [ev(s + "/robots.txt", "robots.txt (host exists; crawling disallowed)")]))
             continue
         except Exception:
+            unread |= {"staging_site", "staging_page"}
             continue
         if r.status_code != 200 or "Page not found" in r.text[:3000]:
             continue
@@ -153,18 +156,26 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
             if t:
                 facts.metric(con, comp.id, MODULE, "publish_staging", t.strftime("%Y-%m-%dT%H:%M"), 1)
         spaths = _sitemap(s)
+        if not spaths or not prod:  # without both sitemaps every staging page would look "pre-launch"
+            unread.add("staging_page")
+            continue
         only = sorted(p for p in spaths - prod if not NOISE_PATH.search(p))[:60]
         for p in only:
             obs.append(Fact("staging_page", f"{urlparse(s).hostname}{p}", p, {"staging_url": s + p, "staging": s},
                             facts.CONFIRMED, [ev(s + p, "staging sitemap vs production sitemap diff")]))
     # GitHub
     repos = 0
-    for org in github_orgs(con, comp):
+    orgs = github_orgs(con, comp)
+    if not orgs:
+        unread.add("repo")  # the org link comes from their homepage; a failed fetch must not drop every repo
+    for org in orgs:
         for kind in ("orgs", "users"):
             try:
                 data = guard.get_json(f"https://api.github.com/{kind}/{org}/repos?per_page=100&sort=pushed", respect_robots=False)
             except Exception as e:
                 log.info("github %s/%s: %s", kind, org, e)
+                if kind == "users":  # neither endpoint answered (rate limit, outage)
+                    unread.add("repo")
                 continue
             for rp in data:
                 if rp.get("fork"):
@@ -179,8 +190,8 @@ def run_one(con, cfg: Config, comp: Entity) -> dict:
                     facts.metric(con, comp.id, MODULE, f"repo_push:{rp['name']}", pushed, 1)
             break
     kinds = ["site_page", "publish", "staging_site", "staging_page", "repo"]
-    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES)
-    stats.update(prod_pages=len(prod), staging_sites=staging_found, repos=repos)
+    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES, unread=unread)
+    stats.update(prod_pages=len(prod), staging_sites=staging_found, repos=repos, unread=sorted(unread))
     stats["launch"] = launch_score(con, comp)
     return stats
 

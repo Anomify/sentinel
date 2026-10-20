@@ -230,11 +230,13 @@ def run_one(con, comp: Entity) -> dict:
         return {"skipped": "no public job board found (set ats: in watchlist.yaml)"}
     jobs = []
     obs: list[Fact] = []
+    failed = []
     for ats, token in boards:
         try:
             got = FETCH[ats](token)
         except Exception as e:
             log.info("%s %s failed: %s", ats, token, e)
+            failed.append(f"{ats}:{token}")
             continue
         shown = token if ats == "greetinghr" else token.split(":")[0]
         api = API_URL[ats].format(t=shown)
@@ -252,7 +254,8 @@ def run_one(con, comp: Entity) -> dict:
     seen_reg = {h["value"].get("region") for h in hist}
     seen_fam = {x for h in hist for x in h["value"].get("families", [])}
     seen_ids = {h["key"] for h in hist}
-    stats = facts.sync(con, comp.id, MODULE, obs, ["job", "board"], RULES)
+    # A board that didn't answer must not make its open roles look closed.
+    stats = facts.sync(con, comp.id, MODULE, obs, ["job", "board"], RULES, unread={"job", "board"} if failed else ())
     if not stats["baseline"]:
         for j, t in jobs:
             if j["id"] in seen_ids:
@@ -270,9 +273,10 @@ def run_one(con, comp: Entity) -> dict:
                 seen_fn.add(t["function"]); seen_reg.add(t["region"]); seen_fam.update(t["families"])
     # Monthly series: open roles by function (snapshot) and roles posted per month (from posting dates)
     month = datetime.now(timezone.utc).strftime("%Y-%m")
-    for fn, n in Counter(t["function"] for _, t in jobs).items():
-        facts.metric(con, comp.id, MODULE, f"open:{fn}", month, n)
-    facts.metric(con, comp.id, MODULE, "open:total", month, len(jobs))
+    if not failed:  # a partial read would under-count open roles
+        for fn, n in Counter(t["function"] for _, t in jobs).items():
+            facts.metric(con, comp.id, MODULE, f"open:{fn}", month, n)
+        facts.metric(con, comp.id, MODULE, "open:total", month, len(jobs))
     posted = Counter()
     for h in facts.history(con, comp.id, MODULE, "job"):
         p = (h["value"].get("posted") or h["first_seen"] or "")[:7]
@@ -280,7 +284,7 @@ def run_one(con, comp: Entity) -> dict:
             posted[(h["value"].get("function"), p)] += 1
     for (fn, p), n in posted.items():
         facts.metric(con, comp.id, MODULE, f"posted:{fn}", p, n)
-    stats.update(boards=[f"{a}:{t}" for a, t in boards], open_roles=len(jobs))
+    stats.update(boards=[f"{a}:{t}" for a, t in boards], open_roles=len(jobs), failed_boards=failed)
     return stats
 
 

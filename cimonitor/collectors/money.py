@@ -249,11 +249,12 @@ RULES = {
                         so_what=lambda f: "Marketplace listings let buyers burn committed cloud spend, a big enterprise procurement accelerator."),
     "partner_program": Rule(severity="high", title_add=lambda f: f"Partner programme signal: {f.label}",
                             so_what=lambda f: "A formal channel/reseller motion is being built."),
-    "press": Rule(severity="low", on_remove=False, title_add=lambda f: f"In the news: {f.label}"),
-    "funding": Rule(severity="critical", on_remove=False, title_add=lambda f: f"Funding: {f.label}",
+    # News search returns a moving window: a story dropping out of it is not a removal, and coming back is not new.
+    "press": Rule(severity="low", on_remove=False, append_only=True, title_add=lambda f: f"In the news: {f.label}"),
+    "funding": Rule(severity="critical", on_remove=False, append_only=True, title_add=lambda f: f"Funding: {f.label}",
                     so_what=lambda f: "Fresh capital usually means hiring sprees, bigger launches and aggressive pricing in the next 2–3 quarters."),
-    "arr_claim": Rule(severity="high", on_remove=False, title_add=lambda f: f"Growth claim: {f.label}"),
-    "m_and_a": Rule(severity="critical", on_remove=False, title_add=lambda f: f"M&A: {f.label}"),
+    "arr_claim": Rule(severity="high", on_remove=False, append_only=True, title_add=lambda f: f"Growth claim: {f.label}"),
+    "m_and_a": Rule(severity="critical", on_remove=False, append_only=True, title_add=lambda f: f"M&A: {f.label}"),
 }
 
 
@@ -266,12 +267,17 @@ def run_one(con, comp: Entity) -> dict:
     ppages = list(dict.fromkeys(u.split("#")[0].rstrip("/") for u in ppages))[:4]
     mkt_links = [u for u in links if any(rx.search(u) for rx, _ in MKT_RX)] + list(comp.marketplaces)
     names_all: set[str] = set()
+    # Partner pages and marketplace links are found from their homepage; if it or a partner page can't be read,
+    # leave what we know alone rather than reporting every partner as removed.
+    unread = set() if links else {"partner", "partner_program", "marketplace"}
     for pu in ppages:
         try:
             r = guard.get(pu)
         except Exception:
+            unread |= {"partner", "partner_program", "marketplace"}
             continue
         if not r.ok:
+            unread |= {"partner", "partner_program", "marketplace"}
             continue
         for n in partner_names(r.text, pu):
             names_all.add(n)
@@ -299,14 +305,14 @@ def run_one(con, comp: Entity) -> dict:
                             facts.CONFIRMED, [ev(n["url"], "Google News RSS")]))
     fr, ar, aq = extract_money(items, rx)
     obs += fr + ar + aq
-    kinds = ["partner", "marketplace", "partner_program", "funding", "arr_claim", "m_and_a"]
-    if items:
-        kinds.append("press")
-    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES)
+    kinds = ["partner", "marketplace", "partner_program", "funding", "arr_claim", "m_and_a", "press"]
+    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES, unread=unread)
     month = datetime.now(timezone.utc).strftime("%Y-%m")
-    facts.metric(con, comp.id, MODULE, "partners", month, len(names_all))
-    facts.metric(con, comp.id, MODULE, "marketplaces", month, len({f.label for f in obs if f.kind == "marketplace"}))
-    stats.update(partner_pages=ppages, partners=len(names_all), news=len(items), funding=len(fr), irrelevant_purged=purged)
+    if not unread:  # a partial read would under-count
+        facts.metric(con, comp.id, MODULE, "partners", month, len(names_all))
+        facts.metric(con, comp.id, MODULE, "marketplaces", month, len({f.label for f in obs if f.kind == "marketplace"}))
+    stats.update(partner_pages=ppages, partners=len(names_all), news=len(items), funding=len(fr), irrelevant_purged=purged,
+                 unread=sorted(unread))
     return stats
 
 

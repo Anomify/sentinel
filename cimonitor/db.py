@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE TABLE IF NOT EXISTS facts (
   id INTEGER PRIMARY KEY, competitor TEXT, module TEXT, kind TEXT, key TEXT, label TEXT,
   value TEXT, confidence TEXT, evidence TEXT, first_seen TEXT, last_seen TEXT, removed_at TEXT,
+  missing INTEGER DEFAULT 0,  -- consecutive complete reads without this fact
   UNIQUE (competitor, module, kind, key)
 );
 CREATE INDEX IF NOT EXISTS ix_facts_comp ON facts(competitor, module);
@@ -92,6 +93,7 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
 MIGRATIONS = [  # additive columns for databases created by earlier versions
     ("snapshots", "screenshot", "TEXT"), ("posts", "ctype", "TEXT"), ("ai_results", "accuracy", "TEXT"),
+    ("facts", "missing", "INTEGER DEFAULT 0"),
 ]
 
 JSON_COLS = {"signals", "added", "removed", "citations", "mentions", "topics", "payload", "stats", "delivered",

@@ -52,6 +52,13 @@ class Rule:
     so_what: Callable[[Fact], str | None] | None = None
     severity_fn: Callable[[Fact], str] | None = None
     alert_if: Callable[[Fact], bool] | None = None   # extra gate on "added" alerts (fact is still recorded)
+    # History-like sources (news, release notes, posts): an item dropping out of a feed or search is not a removal.
+    append_only: bool = False
+    remove_after: int = 2   # consecutive complete reads a fact must be missing from before it counts as removed
+
+
+# A fact that comes back this soon after being marked removed was a collection gap, not news: restore it quietly.
+REAPPEAR_QUIET_DAYS = 30
 
 
 KIND_TITLE = {"mx": "Mail routing", "dmarc": "DMARC policy", "ns": "Nameservers", "motion": "GTM motion", "funnel": "Funnel",
@@ -100,18 +107,20 @@ def _happened(data: dict) -> str | None:
 
 
 def sync(con, competitor: str, module: str, observed: list[Fact], kinds: list[str],
-         rules: dict[str, Rule] | None = None, baseline_quiet: bool = True) -> dict:
+         rules: dict[str, Rule] | None = None, baseline_quiet: bool = True, unread=()) -> dict:
     """Reconcile observed facts for the given kinds. Returns counts.
 
     baseline_quiet: the first time a module runs for a competitor we record facts
     without alerting (otherwise day one is 300 "new subdomain" alerts).
+    unread: kinds the collector could not read completely this run (a page, feed or API failed):
+    new facts are still added, but nothing of these kinds is counted as missing.
     """
     rules = rules or {}
     now = db.now()
     existing = {(f["kind"], f["key"]): f for f in active(con, competitor, module) if f["kind"] in kinds}
     first_run = baseline_quiet and not con.execute(
         "SELECT 1 FROM facts WHERE competitor=? AND module=? LIMIT 1", (competitor, module)).fetchone()
-    seen, added, removed, changed = set(), 0, 0, 0
+    seen, added, removed, changed, restored, pending = set(), 0, 0, 0, 0, 0
     obs_by_key = {}
     for f in observed:
         obs_by_key[(f.kind, f.key)] = f  # last one wins on duplicates
@@ -123,8 +132,12 @@ def sync(con, competitor: str, module: str, observed: list[Fact], kinds: list[st
             prev = db.row(con.execute("SELECT * FROM facts WHERE competitor=? AND module=? AND kind=? AND key=?",
                                       (competitor, module, kind, key)).fetchone())
             if prev:  # re-appeared after removal
-                db.update(con, "facts", prev["id"], {"removed_at": None, "last_seen": now, "value": f.value,
+                db.update(con, "facts", prev["id"], {"removed_at": None, "missing": 0, "last_seen": now, "value": f.value,
                                                      "label": f.label, "confidence": f.confidence, "evidence": f.evidence})
+                gone = str(prev.get("removed_at") or "")
+                if gone and gone >= (datetime.now(timezone.utc) - timedelta(days=REAPPEAR_QUIET_DAYS)).isoformat():
+                    restored += 1
+                    continue
             else:
                 db.insert(con, "facts", {"competitor": competitor, "module": module, "kind": kind, "key": key,
                                          "label": f.label, "value": f.value, "confidence": f.confidence,
@@ -137,7 +150,7 @@ def sync(con, competitor: str, module: str, observed: list[Fact], kinds: list[st
                      confidence=f.confidence, evidence=f.evidence, data={"kind": kind, "key": key, **_slim(f.value)},
                      so_what=rule.so_what(f) if rule.so_what else None)
         else:
-            upd = {"last_seen": now, "label": f.label, "confidence": f.confidence}
+            upd = {"last_seen": now, "label": f.label, "confidence": f.confidence, "missing": 0}
             if json.dumps(cur["value"], sort_keys=True, default=str) != json.dumps(f.value, sort_keys=True, default=str):
                 upd["value"] = f.value
                 upd["evidence"] = f.evidence
@@ -150,13 +163,21 @@ def sync(con, competitor: str, module: str, observed: list[Fact], kinds: list[st
         if (kind, key) in seen:
             continue
         rule = rules.get(kind, Rule())
-        db.update(con, "facts", cur["id"], {"removed_at": now})
+        if kind in unread or rule.append_only:
+            continue
+        missing = (cur.get("missing") or 0) + 1
+        if missing < rule.remove_after:
+            db.update(con, "facts", cur["id"], {"missing": missing})
+            pending += 1
+            continue
+        db.update(con, "facts", cur["id"], {"removed_at": now, "missing": missing})
         removed += 1
         if rule.on_remove:
             emit(con, competitor, module, f"{kind}_removed", "low" if rule.severity in ("low", "info") else "medium",
                  rule.title_remove(cur) if rule.title_remove else f"{kind.replace('_', ' ').capitalize()} removed: {cur['label']}",
                  confidence=cur["confidence"], evidence=cur["evidence"] or [], data={"kind": kind, "key": key})
-    return {"facts": len(obs_by_key), "added": added, "removed": removed, "changed": changed, "baseline": first_run}
+    return {"facts": len(obs_by_key), "added": added, "removed": removed, "changed": changed, "baseline": first_run,
+            "restored": restored, "pending_removal": pending}
 
 
 def _slim(v: dict) -> dict:

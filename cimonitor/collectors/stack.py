@@ -183,7 +183,10 @@ def run_one(con, cfg: Config, fetcher: Fetcher, comp: Entity) -> tuple[dict, lis
     if all(c.error and not c.html for c in caps):
         return {"error": home.error}, caps
     observed = analyse(comp, caps)
-    stats = facts.sync(con, comp.id, MODULE, observed, ["tool", "third_party", "conversion_path", "motion", "cookies"], RULES)
+    kinds = ["tool", "third_party", "conversion_path", "motion", "cookies"]
+    # A page that failed to load hides whatever only it loads: nothing is "removed" on a partial capture.
+    unread = set(kinds) if any(c.error and not c.html for c in caps) else set()
+    stats = facts.sync(con, comp.id, MODULE, observed, kinds, RULES, unread=unread)
     stats["pages"] = [c.url for c in caps]
     return stats, caps
 

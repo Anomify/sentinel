@@ -12,6 +12,7 @@ import re
 from .. import db, facts
 from ..config import Config, Entity
 from ..facts import Fact, Rule, ev
+from . import dnsq
 from .dnsq import query
 
 log = logging.getLogger(__name__)
@@ -144,6 +145,7 @@ def run_one(con, comp: Entity) -> dict:
         return {"skipped": "no domain"}
     src = f"https://dns.google/resolve?name={d}&type=TXT"
     obs: list[Fact] = []
+    failed_before = dnsq.failures
     txts = query(d, "TXT")
     for t in txts:
         dec = decode_txt(t)
@@ -184,7 +186,11 @@ def run_one(con, comp: Entity) -> dict:
     kinds = ["txt", "verification", "spf", "email_sender", "mx", "dmarc", "dkim", "ns"]
     if not obs:
         return {"error": "no DNS answers"}
-    return facts.sync(con, comp.id, MODULE, obs, kinds, RULES)
+    # Any failed lookup: a record we didn't get back is unknown, not deleted.
+    unread = set(kinds) if dnsq.failures > failed_before else set()
+    stats = facts.sync(con, comp.id, MODULE, obs, kinds, RULES, unread=unread)
+    stats["failed_lookups"] = dnsq.failures - failed_before
+    return stats
 
 
 def run(cfg: Config, only: str | None = None) -> dict:

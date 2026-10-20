@@ -88,16 +88,19 @@ def run_one(con, comp: Entity) -> dict:
     obs: list[Fact] = []
     status = {}
     lib: dict[str, list | None] = {"linkedin": None}
+    unread: set[str] = set()  # an ad library that errored: its creatives are unknown this run, not ended
     try:
         lib["google"] = google_bigquery(comp)
     except Exception as e:
         log.info("BigQuery ads lookup failed: %s", e)
         lib["google"] = None
+        unread |= {"ad_channel", "ad_creative"}
     try:
         lib["meta"] = meta_api(comp)
     except Exception as e:
         log.info("Meta Ad Library failed: %s", e)
         lib["meta"] = None
+        unread |= {"ad_channel", "ad_creative"}
     # LinkedIn: check policy explicitly and log the decision (it is disallowed → manual link).
     li_ok = guard.robots_allowed(links["linkedin"])
     guard.audit(links["linkedin"], "allowed" if li_ok else "blocked",
@@ -136,7 +139,7 @@ def run_one(con, comp: Entity) -> dict:
                                 {"platform": "Meta", "first_shown": a.get("ad_delivery_start_time"), "last_shown": a.get("ad_delivery_stop_time"),
                                  "placements": a.get("publisher_platforms")}, facts.CONFIRMED,
                                 [ev(f"https://www.facebook.com/ads/library/?id={a['id']}", "Meta Ad Library API")]))
-    stats = facts.sync(con, comp.id, MODULE, obs, ["ad_channel", "ad_creative"], RULES)
+    stats = facts.sync(con, comp.id, MODULE, obs, ["ad_channel", "ad_creative"], RULES, unread=unread)
     stats.update(channels=status, sources={"google": lib["google"] is not None, "meta": lib["meta"] is not None,
                                            "linkedin": "manual (robots.txt)"}, links=links)
     db.set_meta(con, f"ads_links:{comp.id}", links)
