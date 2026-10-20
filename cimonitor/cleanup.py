@@ -115,6 +115,10 @@ def per_headline_deals(con) -> int:
 
 def removed_competitors(con, cfg) -> int:
     """Data for a company that is no longer on the watchlist is deleted."""
+    # A missing, empty or unreadable watchlist must never look like "every company was removed".
+    if not any(c.source == "config" and c.tier != "self" for c in cfg.competitors):
+        log.warning("cleanup: watchlist has no competitors, skipping removed-company cleanup")
+        return 0
     keep = {c.id for c in cfg.competitors} | {"__brand__"}
     n = 0
     for t in ("facts", "events", "metrics", "posts", "snapshots", "changes"):

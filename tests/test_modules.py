@@ -275,3 +275,38 @@ def test_brand_voice_is_developer_first():
     from cimonitor import llm
     ctx = llm.brand_context(cfg())
     assert "no sales team" in ctx.lower() and "developer" in ctx.lower()
+
+
+def test_cleanup_never_wipes_data_when_the_watchlist_is_empty(tmp_path, monkeypatch):
+    from cimonitor import cleanup, db, tenancy
+    with db.connect() as con:
+        db.insert(con, "events", {"competitor": "hiddenlayer", "module": "pages", "kind": "x", "severity": "low",
+                                  "title": "t", "detected_at": db.now(), "evidence": [], "data": {}})
+    empty = tmp_path / "empty-config"
+    empty.mkdir()
+    monkeypatch.setattr(tenancy, "BASE_CONFIG", empty)
+    assert cleanup.run()["removed_competitors"] == 0
+    with db.connect() as con:
+        assert con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+
+
+def test_each_job_sees_fresh_dns(monkeypatch):
+    import requests
+    from cimonitor import guard
+    from cimonitor.collectors import dnsq
+
+    class R:
+        def json(self):
+            return {"Answer": [{"type": 15, "data": "10 aspmx.l.google.com."}]}
+    calls = []
+
+    def get(url, params=None, timeout=None):
+        calls.append(1)
+        if len(calls) == 1:
+            raise requests.ConnectionError("transient")
+        return R()
+    monkeypatch.setattr(requests, "get", get)
+    dnsq.clear()
+    assert dnsq.query("rival.example", "MX") == []
+    guard.reset_caches()
+    assert dnsq.query("rival.example", "MX") == ["10 aspmx.l.google.com"]

@@ -37,10 +37,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Restore database
+        id: restore
         run: |
           mkdir -p state
-          if git fetch --depth 1 origin sentinel-data 2>/dev/null; then
-            git show origin/sentinel-data:sentinel.db > state/sentinel.db
+          # No data branch yet: first run. Branch exists but can't be read: stop, or the persist step would overwrite history.
+          if git ls-remote --exit-code --heads origin sentinel-data >/dev/null; then
+            git fetch --depth 1 origin sentinel-data
+            git show FETCH_HEAD:sentinel.db > state/sentinel.db
           fi
       - uses: actions/setup-python@v5
         with: { python-version: "3.12", cache: pip }
@@ -49,9 +52,12 @@ jobs:
         if: inputs.target != ''
         run: sentinel scan "${{ inputs.target }}"
       - name: Collect (all modules)
+        id: collect
         if: github.event.schedule == '17 */6 * * *' || (github.event_name == 'workflow_dispatch' && inputs.target == '')
         run: |
-          for m in dns subdomains stack pages feeds radar hiring money ads deepdive; do sentinel $m || true; done
+          failed=""
+          for m in dns subdomains stack pages feeds radar product social hiring money ads deepdive; do sentinel $m || failed="$failed $m"; done
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
       - name: AI visibility
         if: github.event.schedule == '41 4 * * *' || inputs.full
         run: sentinel ai
@@ -59,8 +65,24 @@ jobs:
         if: github.event.schedule == '43 12 * * 1' || inputs.full
         run: sentinel digest
       - name: Persist database
+        # Save whatever was collected even if a later step failed, but never after a failed restore.
+        if: always() && steps.restore.outcome == 'success'
         run: |
           cd state
           git init -q -b sentinel-data && git add sentinel.db evidence 2>/dev/null || git add sentinel.db
           git -c user.name=sentinel -c user.email=sentinel@users.noreply.github.com commit -qm "data: $(date -u +%FT%TZ)"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" sentinel-data
+      - name: Back up database
+        if: always() && steps.restore.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with: { name: "sentinel-db-${{ github.run_id }}", path: state/sentinel.db, retention-days: 30, if-no-files-found: ignore }
+      - name: Report failed modules
+        if: steps.collect.outputs.failed != ''
+        run: |
+          echo "::error::Modules failed:${{ steps.collect.outputs.failed }}"
+          exit 1
+      - name: Alert on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        run: |
+          curl -sS -X POST -H 'Content-type: application/json' "$SLACK_WEBHOOK_URL" \
+            --data "{\"text\":\"Sentinel monitor run failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"

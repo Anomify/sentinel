@@ -74,6 +74,14 @@ def resolve_ips(host: str) -> list[str]:
     return ips
 
 
+def reset_caches() -> None:
+    """Forget resolved addresses, robots.txt rules and DNS answers (including failed lookups)."""
+    from .collectors import dnsq
+    _resolved.clear()
+    _robots.clear()
+    dnsq.clear()
+
+
 def check_host(url: str) -> None:
     u = urlparse(url)
     if u.scheme not in ("http", "https"):

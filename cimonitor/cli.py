@@ -63,6 +63,9 @@ def main(argv=None):
             if a.cmd == "digest":
                 kw = {"deliver": not a.no_send}
             out = jobs.run_job(a.cmd, **{k: v for k, v in kw.items() if v is not None})
+            if out.get("status") == "error":  # cron / CI must see a failed module
+                print(json.dumps(out, indent=2, default=str))
+                raise SystemExit(1)
         elif a.cmd == "scan":
             cfg = config.load()
             comp = cfg.competitor(a.target) or next((c for c in cfg.competitors if a.target.removeprefix("www.") in
