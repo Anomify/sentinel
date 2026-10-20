@@ -33,7 +33,7 @@ export default function AiVisibility() {
     const ready = meta.engines.filter((e) => e.enabled && e.has_key);
     return (
       <div>
-        <PageHeader title="AI Visibility" sub="Track whether answer engines recommend you, or your competitors, for the questions buyers actually ask." />
+        <PageHeader title="AI visibility" sub="Track whether answer engines recommend you, or your competitors, for the questions buyers actually ask." />
         <Card><Empty icon={<Bot size={18} />} title={ready.length ? "No runs yet" : "Connect an answer engine"}
           action={ready.length ? <Button variant="primary" onClick={() => start("ai")}><Play size={14} />Run {meta.questions.length} questions now</Button> : undefined}>
           {ready.length ? `Ready to ask ${ready.map((e) => ENGINE_LABEL[e.id]).join(" and ")} your ${meta.questions.length} target questions.`
@@ -45,7 +45,7 @@ export default function AiVisibility() {
 
   return (
     <div>
-      <PageHeader title="AI Visibility"
+      <PageHeader title="AI visibility"
         sub={`How often ${brand.name} shows up when buyers ask AI search your ${meta.questions.length} target questions, and who shows up instead.`}
         right={<>
           {data && data.runs.length > 1 && (
@@ -122,11 +122,11 @@ export default function AiVisibility() {
                   <button key={g.id} onClick={() => setSp({ q: g.id })} className="block w-full border-b border-line px-5 py-3 text-left last:border-0 hover:bg-hover/60">
                     <div className="text-[13px] leading-snug text-ink">{g.text}</div>
                     <div className="mt-1.5 flex items-center gap-1">
-                      {g.competitors.map((c) => <EntityDot key={c} color={meta.entities.find((e) => e.id === c)?.color ?? "#888"} size={8} ring />)}
+                      {g.competitors.map((c) => <EntityDot key={c} color={meta.entities.find((e) => e.id === c)?.color ?? "var(--mauve-500)"} size={8} ring />)}
                       <span className="ml-1 text-[11px] text-ink-3">{g.competitors.length} competitor{g.competitors.length > 1 ? "s" : ""} cited</span>
                     </div>
                   </button>
-                )) : <Empty title="No gaps 🎉">You appear wherever a competitor does.</Empty>}
+                )) : <Empty title="No gaps">You appear wherever a competitor does.</Empty>}
               </div>
             </Card>
             <Card>
@@ -134,7 +134,7 @@ export default function AiVisibility() {
               <div className="px-5 pb-5">
                 <BarList fmt={(v) => String(v)} rows={data.citations.slice(0, 8).map((c) => {
                   const own = meta.entities.find((e) => e.domains.some((d) => c.domain.endsWith(d)));
-                  return { id: c.domain, label: c.domain, value: c.count, color: own?.color ?? "var(--ink-3)", strong: own?.is_brand };
+                  return { id: c.domain, label: c.domain, value: c.count, color: own?.color ?? "var(--text-muted)", strong: own?.is_brand };
                 })} />
               </div>
             </Card>
@@ -144,7 +144,7 @@ export default function AiVisibility() {
             <Card>
               <CardHeader title="Source gaps" sub="Domains cited in answers that name a competitor but not you, where to earn coverage next" />
               <div className="px-5 pb-5">
-                {data.source_gaps?.length ? <BarList fmt={(v) => String(v)} rows={data.source_gaps.slice(0, 8).map((c) => ({ id: c.domain, label: c.domain, value: c.count, color: "var(--ink)" }))} />
+                {data.source_gaps?.length ? <BarList fmt={(v) => String(v)} rows={data.source_gaps.slice(0, 8).map((c) => ({ id: c.domain, label: c.domain, value: c.count, color: "var(--text)" }))} />
                   : <div className="py-6 text-center text-[13px] text-ink-3">No source gaps in this run.</div>}
               </div>
             </Card>
@@ -172,10 +172,10 @@ export default function AiVisibility() {
               <table className="w-full min-w-[820px] text-[12.5px]">
                 <thead>
                   <tr className="border-b border-line text-left text-[11px] text-ink-3">
-                    <th className="sticky left-0 z-10 bg-elev px-5 py-2.5 font-normal">Question</th>
+                    <th className="sticky left-0 z-10 bg-solid px-5 py-2.5 font-normal">Question</th>
                     {[brand, ...series.filter((s) => !s.is_brand)].map((e) => (
                       <th key={e.id} className={cx("px-2 py-2.5 text-center font-normal", e.is_brand && "bg-accent-soft")}>
-                        <div className="flex flex-col items-center gap-1"><EntityDot color={e.color} size={8} /><span className="max-w-20 truncate">{e.is_brand ? "You" : e.name.replace(/\s*\(.*\)/, "")}</span></div>
+                        <div className="flex flex-col items-center gap-1"><EntityDot color={e.color} size={8} /><span className={cx("max-w-20 truncate", e.is_brand && "text-ink-2")}>{e.is_brand ? "You" : e.name.replace(/\s*\(.*\)/, "")}</span></div>
                       </th>
                     ))}
                   </tr>
@@ -183,7 +183,7 @@ export default function AiVisibility() {
                 <tbody>
                   {data.matrix.filter((r) => !cat || r.category === cat).map((r) => (
                     <tr key={r.id} onClick={() => setSp({ q: r.id })} className="cursor-pointer border-b border-line last:border-0 hover:bg-hover/50">
-                      <td className="sticky left-0 z-10 max-w-[360px] bg-elev px-5 py-2.5">
+                      <td className="sticky left-0 z-10 max-w-[360px] bg-solid px-5 py-2.5">
                         <div className="truncate text-ink">{r.text}</div>
                         <div className="text-[10.5px] text-ink-3">{r.category}</div>
                       </td>
@@ -218,9 +218,9 @@ function RankCell({ e, cell, engine }: { e: Entity; cell: Record<string, number 
   return (
     <td className={cx("px-2 py-2.5 text-center", e.is_brand && "bg-accent-soft/60")} title={tip}>
       {best ? (
-        <span className="inline-flex h-6 min-w-9 items-center justify-center gap-0.5 rounded-md px-1.5 text-[11px] tnum text-ink ring-1 ring-inset"
+        <span className="mono inline-flex h-6 min-w-9 items-center justify-center gap-0.5 rounded-md px-1.5 text-[11px] text-ink ring-1 ring-inset"
           style={{ background: `color-mix(in oklab, ${e.color} ${best === 1 ? 32 : best <= 3 ? 20 : 10}%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${e.color} 40%, transparent)` }}>
-          #{best}{entries.length > 1 && <span className="font-normal text-ink-3">·{ranks.length}/{entries.length}</span>}
+          #{best}{entries.length > 1 && <span className="font-normal text-ink-2">·{ranks.length}/{entries.length}</span>}
         </span>
       ) : <span className="text-ink-3/60">·</span>}
     </td>
@@ -255,7 +255,7 @@ function AnswerDrawer({ qid, runId, onClose }: { qid: string | null; runId: stri
                 <span className="tnum text-ink-3">#{m.rank}</span><EntityTag id={id} />
               </span>
             ))}
-            {!a.mentions["__brand__"]?.mentioned && <span className="inline-flex items-center gap-1.5 rounded-full bg-crit/10 px-2.5 py-1 text-[12px] text-crit ring-1 ring-inset ring-crit/20"><AlertTriangle size={12} />You're not mentioned</span>}
+            {!a.mentions["__brand__"]?.mentioned && <span className="inline-flex items-center gap-1.5 rounded-full bg-red/12 px-2.5 py-1 text-[12px] text-crit ring-1 ring-inset ring-red/30"><AlertTriangle size={12} />You're not mentioned</span>}
           </div>
           <div>
             <div className="eyebrow mb-2">Answer · {a.model}</div>

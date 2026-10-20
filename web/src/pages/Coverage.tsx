@@ -6,7 +6,7 @@ import type { Health } from "../lib/types";
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   covered: { label: "Covered", cls: "bg-ink" },
-  partial: { label: "Partial", cls: "border border-ink bg-[linear-gradient(90deg,var(--ink)_50%,transparent_50%)]" },
+  partial: { label: "Partial", cls: "border border-ink bg-[linear-gradient(90deg,var(--text)_50%,transparent_50%)]" },
   "no data": { label: "Ran · nothing found", cls: "border border-ink-3" },
   "needs setup": { label: "Needs API key", cls: "border border-dashed border-ink-3" },
   "not run": { label: "Not run yet", cls: "bg-line-strong" },
@@ -61,7 +61,7 @@ export default function Coverage() {
                 <th className="px-3 py-4">Replaces</th>
                 {data.rows.map((r: any) => (
                   <th key={r.competitor} className="px-3 py-4 text-center">
-                    <div className="flex flex-col items-center gap-1.5"><EntityDot color={meta.entities.find((e) => e.id === r.competitor)?.color ?? "#999"} size={7} /><span className="max-w-[88px] truncate">{r.name.replace(/\s*\(.*\)/, "")}</span></div>
+                    <div className="flex flex-col items-center gap-1.5"><EntityDot color={meta.entities.find((e) => e.id === r.competitor)?.color ?? "var(--mauve-500)"} size={7} /><span className="max-w-[88px] truncate">{r.name.replace(/\s*\(.*\)/, "")}</span></div>
                   </th>
                 ))}
               </tr>

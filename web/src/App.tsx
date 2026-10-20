@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { KeyRound, Sparkles } from "lucide-react";
 import { AuthError, setToken, useApi } from "./lib/api";
 import type { Meta } from "./lib/types";
@@ -23,6 +23,8 @@ export default function App() {
   if (!meta) return <Boot error={error} />;
   return (
     <MetaCtx.Provider value={meta}>
+      {/* Every animation honours prefers-reduced-motion (CSS transitions do so in index.css). */}
+      <MotionConfig reducedMotion="user">
       <BrowserRouter>
         <ToastProvider>
           <JobProvider>
@@ -30,6 +32,7 @@ export default function App() {
           </JobProvider>
         </ToastProvider>
       </BrowserRouter>
+      </MotionConfig>
     </MetaCtx.Provider>
   );
 }
@@ -44,8 +47,8 @@ function Layout({ meta }: { meta: Meta }) {
       <div className="lg:pl-60">
         <Topbar onMenu={() => setNav(true)} onSearch={() => setCmd(true)} />
         {meta.demo && (
-          <div className="mx-4 rounded-full bg-elev px-4 py-2 text-center text-[12px] text-ink-2 ring-1 ring-line sm:mx-8">
-            <Sparkles size={12} className="mr-1.5 inline -mt-0.5 text-med" />Demo workspace, competitor moves shown here are illustrative samples, not real observations.
+          <div className="mx-4 rounded-xl bg-amber/12 px-4 py-2 text-center text-[12px] text-ink-2 ring-1 ring-inset ring-amber/30 sm:mx-8">
+            <Sparkles size={12} className="mr-1.5 inline -mt-0.5 text-high" />Demo workspace, competitor moves shown here are illustrative samples, not real observations.
             <span className="hidden sm:inline"> Run without <code className="font-mono">SENTINEL_DEMO</code> for live data.</span>
           </div>
         )}

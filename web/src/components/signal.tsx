@@ -165,12 +165,12 @@ function PageDiff({ c }: { c: NonNullable<SignalEvent["change"]> }) {
         <div className="eyebrow">Page diff · <a href={c.url} target="_blank" rel="noreferrer" className="normal-case tracking-normal hover:text-ink">{host(c.url)}{path(c.url)}</a></div>
         <div className="text-[11.5px] text-ink-3 tnum">+{c.added.length} · −{c.removed.length} · {Math.round(c.change_ratio * 100)}%</div>
       </div>
-      <div className="overflow-hidden rounded-2xl border border-line bg-[#fbfbfa] font-mono text-[12px] leading-[1.7]">
+      <div className="overflow-hidden rounded-2xl border border-line bg-sunken font-mono text-[12px] leading-[1.7]">
         {c.diff.length === 0 && <div className="p-4 font-sans text-ink-3">Snapshot text not available.</div>}
         {c.diff.map((l, i) => l.t === "gap" ? (
           <div key={i} className="border-y border-line px-4 py-1 text-center font-sans text-[11px] text-ink-3">{l.s}</div>
         ) : (
-          <div key={i} className={cx("flex gap-3 px-4", l.t === "add" && "bg-good/[0.07] text-ink", l.t === "del" && "bg-crit/[0.06] text-ink-2 line-through decoration-crit/30", l.t === "eq" && "text-ink-3")}>
+          <div key={i} className={cx("flex gap-3 px-4", l.t === "add" && "bg-green/12 text-ink", l.t === "del" && "bg-red/12 text-ink-2 line-through decoration-crit/30", l.t === "eq" && "text-ink-3")}>
             <span className={cx("w-3 shrink-0 select-none", l.t === "add" ? "text-good" : l.t === "del" ? "text-crit" : "text-transparent")}>{l.t === "add" ? "+" : l.t === "del" ? "−" : " "}</span>
             <span className="whitespace-pre-wrap break-words">{l.s}</span>
           </div>

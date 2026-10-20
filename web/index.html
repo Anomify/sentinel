@@ -3,10 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f7f7f5" />
+    <meta name="theme-color" content="oklch(98.5% 0.003 324)" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="oklch(16% 0.009 324)" media="(prefers-color-scheme: dark)" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" href="/fonts/AlphaLyrae-Medium.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preconnect" href="https://rsms.me/" />
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
     <title>Sentinel</title>
+    <script>
+      // Theme before first paint: the viewer's choice if they made one, otherwise the system setting.
+      (function () {
+        var t = null;
+        try { t = localStorage.getItem("sentinel-theme"); } catch (e) {}
+        var dark = t === "dark" || ((t === null || t === "system") && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

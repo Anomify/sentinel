@@ -107,8 +107,8 @@ def _read(name: str) -> dict:
 
 
 EXT = ("staging", "github", "ats", "partner_pages", "marketplaces", "ads", "news_query", "social", "scope", "careers")
-# Palette slots (validated categorical order) for competitors added without a colour
-PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#c2410c", "#0e7490"]
+# Palette slots for competitors added without a colour: the chart series in web/src/index.css (no orange).
+PALETTE = ["#2a78d6", "#6250d6", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#807780", "#0e7490"]
 
 
 def clean_domain(d: str) -> str:
@@ -137,7 +137,7 @@ def _ui_targets() -> list[dict]:
 def load() -> Config:
     wl, qs, st = _read("watchlist.yaml"), _read("questions.yaml"), _read("settings.yaml")
     b = wl.get("brand") or {}
-    brand = Entity(id="__brand__", name=b.get("name", "Your Company"), color=b.get("color", "#6250d6"),
+    brand = Entity(id="__brand__", name=b.get("name", "Your Company"), color=b.get("color", "#2ED58C"),
                    aliases=b.get("aliases") or [], domains=[clean_domain(d) for d in b.get("domains") or []], is_brand=True, tier="brand",
                    profile={k: b[k] for k in ("positioning", "strengths", "products", "facts", "icp", "motion", "voice", "profile_as_of") if k in b})
     comps = [entity_from(c) for c in wl.get("competitors") or []]

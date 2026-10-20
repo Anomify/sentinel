@@ -150,7 +150,7 @@ function Row({ label, detail, on, env }: { label: string; detail: string; on: bo
     <div className="flex items-center gap-3 px-5 py-3">
       {on ? <CheckCircle2 size={15} className="text-good" /> : <Circle size={15} className="text-ink-3" />}
       <div className="flex-1"><div className="text-[13px] text-ink">{label}</div><div className="text-[11.5px] text-ink-3">{detail}</div></div>
-      <code className={cx("rounded px-1.5 py-0.5 font-mono text-[10.5px] ring-1 ring-inset", on ? "text-good ring-good/25" : "text-ink-3 ring-line")}>{env}</code>
+      <code className={cx("rounded px-1.5 py-0.5 font-mono text-[10.5px] ring-1 ring-inset", on ? "text-good ring-green/30" : "text-ink-3 ring-line")}>{env}</code>
     </div>
   );
 }

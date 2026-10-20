@@ -221,7 +221,7 @@ function ScanProgress({ scan }: { scan: Scan }) {
         {steps.map((s, i) => (
           <li key={s} className={cx("flex items-center gap-3 text-[13px]", i < idx ? "text-ink-2" : i === idx ? "text-ink" : "text-ink-3")}>
             <span className="grid size-4 place-items-center">
-              {i < idx ? <Check size={13} className="text-good" /> : i === idx ? <EntityDot color="var(--ink)" size={6} /> : <EntityDot color="var(--line-strong)" size={5} />}
+              {i < idx ? <Check size={13} className="text-good" /> : i === idx ? <EntityDot color="var(--text)" size={6} /> : <EntityDot color="var(--border-strong)" size={5} />}
             </span>
             {STEP_LABEL[s]}
           </li>

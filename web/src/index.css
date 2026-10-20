@@ -1,85 +1,169 @@
 @import "tailwindcss";
-@import "@fontsource-variable/geist-mono";
 
-/* Alpha Lyrae, Fontfabric, SIL Open Font License 1.1 (see /fonts/AlphaLyrae-OFL.md).
-   One weight only, mapped across the whole weight range so nothing is ever faux-bolded. */
-@font-face {
-  font-family: "Alpha Lyrae";
-  src: url("/fonts/AlphaLyrae-Medium.woff2") format("woff2"), url("/fonts/AlphaLyrae-Medium.woff") format("woff");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
+/* Hyperfence design system. Dark mode is first class: `.dark` on <html> (set before first paint in index.html,
+   following the system setting unless the viewer picks a theme). Every colour below is a token; components use
+   the Tailwind names in @theme (bg-elev, text-ink-3, bg-primary…), never raw values. */
+@custom-variant dark (&:where(.dark, .dark *));
 
-/* ── Tokens (light only) ───────────────────────────────────────────────────── */
 :root {
-  --bg: #f7f7f5;
-  --bg-elev: #ffffff;
-  --bg-sunken: #f2f2ef;
-  --bg-hover: #f0f0ed;
-  --line: #e9e9e5;
-  --line-strong: #dcdcd7;
-  --ink: #111113;
-  --ink-2: #57575e;
-  --ink-3: #6b6b73;   /* secondary text: ≥4.5:1 on every surface (was #96969d, 2.6–2.9:1) */
-  --accent: #6250d6;
-  --accent-ink: #4f3fbf;
-  --accent-soft: rgba(98, 80, 214, 0.08);
-  --crit: #c4262c;
-  --high: #b8500b;
-  --med: #8a6200;
-  --low: #6e6e76;
-  --good: #1a7a49;  /* status colours are also used as text: all ≥4.4:1 on every surface */
+  /* Warm mauve neutrals, hue 324 */
+  --mauve-50: oklch(98.5% 0.003 324);  --mauve-100: oklch(96.5% 0.005 324);
+  --mauve-200: oklch(92.5% 0.007 324); --mauve-300: oklch(88% 0.009 324);
+  --mauve-400: oklch(73% 0.013 324);   --mauve-500: oklch(58% 0.017 324);
+  --mauve-600: oklch(50% 0.019 324);   --mauve-700: oklch(42% 0.020 324);
+  --mauve-800: oklch(32% 0.016 324);   --mauve-900: oklch(24% 0.012 324);
+  --mauve-950: oklch(16% 0.009 324);
+
+  /* Brand: the logo and rare brand fills only. Text on it is near black, never white. */
+  --brand: oklch(77.4% 0.169 158.4);
+  --brand-fg: oklch(18% 0.02 160);
+
+  /* Light theme */
+  --bg: var(--mauve-50);
+  --surface: oklch(100% 0 0 / 0.9);
+  --surface-solid: oklch(100% 0 0);
+  --sunken: var(--mauve-100);
+  --hover: var(--mauve-100);
+  --border: color-mix(in oklab, var(--mauve-300) 60%, transparent);
+  --border-strong: var(--mauve-300);
+  --text: oklch(21% 0.019 324);
+  --text-2: var(--mauve-700);
+  --text-muted: oklch(54% 0.020 324);
+  --primary: var(--mauve-950);
+  --primary-fg: var(--mauve-50);
+  --primary-hover: var(--mauve-800);
+  --overlay: color-mix(in oklab, var(--mauve-950) 20%, transparent);
+
+  /* Functional accents, never decorative: green allowed / safe / input; blue output / inspected and focus;
+     amber flagged / uncertain; red blocked / danger. Fills use these exactly. */
+  --green: oklch(52% 0.15 158);
+  --blue: oklch(57% 0.19 260);
+  --amber: oklch(70% 0.14 70);
+  --red: oklch(58% 0.20 25);
+  /* The same hues as text: mixed toward the text colour so they reach 4.5:1 on every light surface. */
+  --green-text: color-mix(in oklab, var(--green) 80%, var(--text));
+  --blue-text: color-mix(in oklab, var(--blue) 80%, var(--text));
+  --amber-text: color-mix(in oklab, var(--amber) 60%, var(--text));
+  --red-text: color-mix(in oklab, var(--red) 80%, var(--text));
+
+  /* Categorical series for charts (competitors, job functions): data identities, not status. These are the colours
+     Sentinel already used for competitors, with the oranges retired; the same in both themes. */
+  --series-1: #2a78d6; --series-2: #6250d6; --series-3: #1baf7a; --series-4: #eda100;
+  --series-5: #e87ba4; --series-6: #0e7490; --series-7: #008300; --series-8: var(--mauve-500);
+
+  --shadow-card: 0 1px 2px color-mix(in oklab, var(--mauve-900) 5%, transparent),
+                 0 8px 24px color-mix(in oklab, var(--mauve-900) 5%, transparent);
+  --shadow-panel: 0 24px 64px -24px color-mix(in oklab, var(--mauve-950) 28%, transparent);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
   color-scheme: light;
 }
 
+.dark {
+  --bg: var(--mauve-950);
+  --surface: oklch(24% 0.012 324 / 0.65);
+  --surface-solid: var(--mauve-900);
+  --sunken: var(--mauve-900);
+  --hover: color-mix(in oklab, var(--mauve-800) 70%, var(--mauve-900));
+  --border: var(--mauve-700);
+  --border-strong: var(--mauve-600);
+  --text: oklch(96% 0.003 324);
+  --text-2: var(--mauve-300);
+  --text-muted: oklch(71% 0.018 324);
+  --primary: var(--mauve-200);
+  --primary-fg: var(--mauve-950);
+  --primary-hover: var(--mauve-100);
+  --overlay: color-mix(in oklab, var(--mauve-950) 55%, transparent);
+
+  --green: oklch(76% 0.16 158);
+  --blue: oklch(68% 0.20 260);
+  --amber: oklch(80% 0.14 75);
+  --red: oklch(68% 0.20 25);
+  --green-text: var(--green);
+  --blue-text: color-mix(in oklab, var(--blue) 85%, var(--text));
+  --amber-text: var(--amber);
+  --red-text: color-mix(in oklab, var(--red) 85%, var(--text));
+
+  --shadow-card: none;  /* dark mode relies on borders */
+  --shadow-panel: 0 24px 64px -24px oklch(0% 0 0 / 0.6);
+  color-scheme: dark;
+}
+
 @theme inline {
-  --font-sans: "Alpha Lyrae", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --font-sans: "Inter", "InterVariable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --default-transition-timing-function: var(--ease);
+  --default-transition-duration: 180ms;
+  --ease-out: var(--ease);
+
   --color-bg: var(--bg);
-  --color-elev: var(--bg-elev);
-  --color-sunken: var(--bg-sunken);
-  --color-hover: var(--bg-hover);
-  --color-line: var(--line);
-  --color-line-strong: var(--line-strong);
-  --color-ink: var(--ink);
-  --color-ink-2: var(--ink-2);
-  --color-ink-3: var(--ink-3);
-  --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
-  --color-accent-soft: var(--accent-soft);
-  --color-crit: var(--crit);
-  --color-high: var(--high);
-  --color-med: var(--med);
-  --color-low: var(--low);
-  --color-good: var(--good);
+  --color-elev: var(--surface);
+  --color-solid: var(--surface-solid);
+  --color-sunken: var(--sunken);
+  --color-hover: var(--hover);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-muted);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-hover: var(--primary-hover);
+  --color-overlay: var(--overlay);
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  /* Fills (dots, bars) use the exact accent; text utilities use the accessible text variant. */
+  --color-green: var(--green);
+  --color-blue: var(--blue);
+  --color-amber: var(--amber);
+  --color-red: var(--red);
+  --color-good: var(--green-text);
+  --color-crit: var(--red-text);
+  --color-high: var(--amber-text);
+  --color-med: var(--amber-text);
+  --color-low: var(--mauve-400);
+  --color-accent: var(--blue);
+  --color-accent-ink: var(--blue-text);
+  --color-accent-soft: color-mix(in oklab, var(--blue) 12%, transparent);
+  --color-mauve-400: var(--mauve-400);
+  --color-mauve-500: var(--mauve-500);
 }
 
 html, body, #root { height: 100%; }
 html { font-synthesis: none; }
 body {
   background: var(--bg);
-  color: var(--ink);
+  color: var(--text);
   font-family: var(--font-sans);
-  font-feature-settings: "calt" 0;  /* as on raindrop.ai: no contextual alternates */
-  font-weight: 400;
-  letter-spacing: -0.005em;
+  font-size: 14px;
+  font-feature-settings: "cv11", "ss01";  /* Inter: single-storey a, open digits */
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-/* No bold, anywhere: hierarchy comes from size, colour and space. */
-b, strong, h1, h2, h3, h4, h5, h6, th, mark { font-weight: inherit; }
-::selection { background: var(--accent-soft); color: var(--ink); }
-* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.015em; }
+b, strong { font-weight: 600; }
+th { font-weight: 500; }
+::selection { background: color-mix(in oklab, var(--blue) 22%, transparent); color: var(--text); }
+* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 
+/* Machine values (IDs, timestamps, scores, code): system mono, tabular figures. Counts in prose stay sans. */
 .tnum { font-variant-numeric: tabular-nums; }
-.card { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 16px; }
-.eyebrow { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
-.focus-ring:focus-visible { outline: 1.5px solid var(--ink); outline-offset: 2px; }
-.hairline { border-color: var(--line); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+code, kbd, samp, pre { font-family: var(--font-mono); }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-card); }
+/* Frosted glass: top bar, sidebar and floating panels only. */
+.glass { background: var(--surface); -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%); }
+.eyebrow { font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); }
+.hairline { border-color: var(--border); }
+
+/* A visible blue focus ring on every interactive element. */
+:focus-visible, .focus-ring:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* One stroke weight for every Lucide icon (CSS overrides the per-icon attribute). */
+svg.lucide { stroke-width: 1.75; }
 
 .shimmer {
-  background: linear-gradient(90deg, var(--bg-sunken) 0%, #f7f7f4 50%, var(--bg-sunken) 100%);
+  background: linear-gradient(90deg, var(--sunken) 0%, var(--hover) 50%, var(--sunken) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite linear;
 }
@@ -88,18 +172,18 @@ b, strong, h1, h2, h3, h4, h5, h6, th, mark { font-weight: inherit; }
 .pulse-dot { position: relative; }
 .pulse-dot::after {
   content: ""; position: absolute; inset: -3px; border-radius: 999px; border: 1px solid currentColor;
-  animation: ping 2s cubic-bezier(0, 0, .2, 1) infinite; opacity: .5;
+  animation: ping 2s var(--ease) infinite; opacity: .5;
 }
 @keyframes ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
 
 .dotgrid {
-  background-image: radial-gradient(circle at 1px 1px, var(--line-strong) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, var(--border-strong) 1px, transparent 0);
   background-size: 18px 18px;
 }
 
-[cmdk-item][data-selected="true"] { background: var(--bg-hover); }
-[cmdk-group-heading] { padding: 10px 12px 4px; font-size: 10.5px; color: var(--ink-3); letter-spacing: .12em; text-transform: uppercase; }
+[cmdk-item][data-selected="true"] { background: var(--hover); }
+[cmdk-group-heading] { padding: 10px 12px 4px; font-size: 11px; color: var(--text-muted); letter-spacing: .14em; text-transform: uppercase; }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
 }

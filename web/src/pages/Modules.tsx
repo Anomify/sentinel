@@ -46,7 +46,7 @@ export function StackPage() {
             <div className="overflow-x-auto border-t border-line">
               <table className="w-full min-w-[760px] text-[12.5px]">
                 <thead><tr className="border-b border-line text-left text-ink-3">
-                  <th className="sticky left-0 bg-elev px-6 py-3">Tool</th>
+                  <th className="sticky left-0 bg-solid px-6 py-3">Tool</th>
                   {cs.map((c) => <th key={c.id} className="px-3 py-3 text-center"><div className="flex flex-col items-center gap-1.5"><EntityDot color={c.color} size={7} /><span className="max-w-[90px] truncate">{c.name.replace(/\s*\(.*\)/, "")}</span></div></th>)}
                 </tr></thead>
                 <tbody>
@@ -70,13 +70,13 @@ function FragmentRows({ c, rows, cs }: { c: any; rows: any[]; cs: any[] }) {
       <tr><td colSpan={cs.length + 1} className="bg-sunken/60 px-6 py-2 text-[11px] uppercase tracking-[.1em] text-ink-3">{c.label}</td></tr>
       {c.tools.map((tid: string) => (
         <tr key={tid} className="border-b border-line last:border-0">
-          <td className="sticky left-0 bg-elev px-6 py-2.5 text-ink">{label(tid)}</td>
+          <td className="sticky left-0 bg-solid px-6 py-2.5 text-ink">{label(tid)}</td>
           {cs.map((co) => {
             const t = rows.find((r) => r.id === co.id)?.tools[tid];
             return (
               <td key={co.id} className="px-3 py-2.5 text-center" title={t ? `since ${day(t.first_seen)} · ${t.phases?.join(", ")}` : ""}>
                 {t ? <span className="relative inline-block">
-                  <span className={cx("inline-block size-2.5 rounded-full", t.confidence === "confirmed" ? "bg-ink" : "border border-ink bg-[linear-gradient(90deg,var(--ink)_50%,transparent_50%)]")} />
+                  <span className={cx("inline-block size-2.5 rounded-full", t.confidence === "confirmed" ? "bg-ink" : "border border-ink bg-[linear-gradient(90deg,var(--text)_50%,transparent_50%)]")} />
                   {t.pre_consent && <span className="absolute -right-1.5 -top-1 size-1.5 rounded-full bg-crit" />}
                 </span> : <span className="text-line-strong">·</span>}
               </td>
@@ -218,7 +218,9 @@ function RadarCard({ r }: { r: any }) {
 
 /* ── Hiring ─────────────────────────────────────────────────────────────────── */
 const FN_ORDER = ["Sales", "Sales engineering", "Marketing", "Partnerships", "DevRel", "Customer success", "Engineering", "ML / Research", "Security", "Product & design", "G&A", "Other"];
-const FN_COLORS: Record<string, string> = { "Sales": "#2a78d6", "Sales engineering": "#eb6834", "Marketing": "#1baf7a", "Partnerships": "#eda100", "DevRel": "#e87ba4", "Engineering": "#008300", "ML / Research": "#6250d6" };
+// Job-function series: chart category colours from the design tokens (no orange).
+const FN_COLORS: Record<string, string> = { "Sales": "var(--series-1)", "Sales engineering": "var(--series-6)", "Marketing": "var(--series-3)", "Partnerships": "var(--series-4)",
+  "DevRel": "var(--series-5)", "Engineering": "var(--series-7)", "ML / Research": "var(--series-2)" };
 
 export function HiringPage() {
   const meta = useMeta();
@@ -239,7 +241,7 @@ export function HiringPage() {
               <tbody>
                 {rows.map((r: any) => (
                   <tr key={r.id} onClick={() => setSel(r.id)} className={cx("cursor-pointer border-b border-line last:border-0 hover:bg-hover/60", cur?.id === r.id && "bg-hover/60")}>
-                    <td className="px-6 py-3"><span className="inline-flex items-center gap-2 text-ink"><EntityDot color={meta.entities.find((e) => e.id === r.id)?.color ?? "#999"} size={7} />{meta.entities.find((e) => e.id === r.id)?.name}</span>
+                    <td className="px-6 py-3"><span className="inline-flex items-center gap-2 text-ink"><EntityDot color={meta.entities.find((e) => e.id === r.id)?.color ?? "var(--mauve-500)"} size={7} />{meta.entities.find((e) => e.id === r.id)?.name}</span>
                       {!r.boards.length && <span className="ml-2 text-ink-3">no public board</span>}</td>
                     <td className="px-3 py-3 text-right text-ink tnum">{r.open || "-"}</td>
                     {FN_ORDER.slice(0, 8).map((f) => <td key={f} className="px-3 py-3 text-right tnum text-ink-2">{r.functions[f] || ""}</td>)}
@@ -260,8 +262,8 @@ export function HiringPage() {
               <Card>
                 <CardHeader title="Mix" />
                 <div className="space-y-6 px-6 pb-6">
-                  <BarList fmt={(v) => String(v)} rows={Object.entries(cur.regions).map(([k, v]) => ({ id: k, label: k, value: v as number, color: "var(--ink)" }))} />
-                  <BarList fmt={(v) => String(v)} rows={Object.entries(cur.seniority).map(([k, v]) => ({ id: k, label: k, value: v as number, color: "var(--ink-3)" }))} />
+                  <BarList fmt={(v) => String(v)} rows={Object.entries(cur.regions).map(([k, v]) => ({ id: k, label: k, value: v as number, color: "var(--text)" }))} />
+                  <BarList fmt={(v) => String(v)} rows={Object.entries(cur.seniority).map(([k, v]) => ({ id: k, label: k, value: v as number, color: "var(--text-muted)" }))} />
                   {cur.tech.length > 0 && <div className="flex flex-wrap gap-1.5">{cur.tech.map(([t, n]: [string, number]) => <span key={t} className="rounded-full bg-sunken px-2.5 py-0.5 text-[11.5px] text-ink-2">{t} <span className="text-ink-3">{n}</span></span>)}</div>}
                 </div>
               </Card>

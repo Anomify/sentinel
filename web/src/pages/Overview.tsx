@@ -90,7 +90,7 @@ export default function Overview() {
                 <CardHeader title="Signals by module" />
                 <div className="px-6 pb-6">
                   {Object.keys(data.by_module).length ? (
-                    <BarList fmt={(v) => String(v)} rows={Object.entries(data.by_module).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ id: k, label: k, value: v, color: "var(--ink)" }))} />
+                    <BarList fmt={(v) => String(v)} rows={Object.entries(data.by_module).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ id: k, label: k, value: v, color: "var(--text)" }))} />
                   ) : <div className="py-6 text-center text-[13px] text-ink-3">-</div>}
                 </div>
               </Card>
@@ -136,7 +136,7 @@ function HealthStrip({ h }: { h: OV["health"] }) {
     h.issues.length ? `not fully read: ${[...new Set(h.issues.map((i) => `${i.name} (${i.label})`))].slice(0, 3).join(", ")}` : "",
   ].filter(Boolean);
   return (
-    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-high/[0.08] px-5 py-3 text-[13px] text-ink ring-1 ring-inset ring-high/25">
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-amber/12 px-5 py-3 text-[13px] text-ink ring-1 ring-inset ring-amber/30">
       <AlertTriangle size={14} className="shrink-0 text-high" />
       <span>Collection gaps: {parts.join(" · ")}. Missing changes here may not mean nothing happened.</span>
       <Link to="/coverage" className="ml-auto text-[12.5px] text-ink-2 underline-offset-4 hover:text-ink hover:underline">Details</Link>

@@ -31,7 +31,7 @@ function barPath(x: number, y: number, w: number, h: number, r = 4) {
 export function Tooltip({ x, y, children, containerW }: { x: number; y: number; children: ReactNode; containerW: number }) {
   const left = Math.min(Math.max(x, 90), containerW - 90);
   return (
-    <div className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg bg-elev/95 backdrop-blur px-3 py-2 text-[12px] shadow-xl ring-1 ring-line-strong min-w-36"
+    <div className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg bg-solid/95 backdrop-blur px-3 py-2 text-[12px] shadow-xl ring-1 ring-line-strong min-w-36"
       style={{ left, top: y - 10 }}>
       {children}
     </div>
@@ -77,7 +77,7 @@ export function StackedBars({ data, series, height = 180, fmtDate }: {
           <svg width={W} height={height} role="img" aria-label="Competitor activity by day">
             {ticks.map((t) => (
               <g key={t}>
-                <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="var(--line)" strokeDasharray={t ? "2 4" : undefined} />
+                <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeDasharray={t ? "2 4" : undefined} />
                 <text x={pad.l - 8} y={y(t) + 3.5} textAnchor="end" className="fill-ink-3 text-[10px] tnum">{Math.round(t)}</text>
               </g>
             ))}
@@ -159,14 +159,14 @@ export function LineChart({ data, series, height = 220, emphasize, fmtX, fmtY = 
           <svg width={W} height={height} role="img" aria-label="Share of AI answers over time">
             {[0, 0.25, 0.5, 0.75, 1].map((f) => (
               <g key={f}>
-                <line x1={pad.l} x2={W - pad.r} y1={y(max * f)} y2={y(max * f)} stroke="var(--line)" strokeDasharray={f ? "2 4" : undefined} />
+                <line x1={pad.l} x2={W - pad.r} y1={y(max * f)} y2={y(max * f)} stroke="var(--border)" strokeDasharray={f ? "2 4" : undefined} />
                 <text x={pad.l - 8} y={y(max * f) + 3.5} textAnchor="end" className="fill-ink-3 text-[10px] tnum">{fmtY(max * f)}</text>
               </g>
             ))}
             {data.map((d, i) => (i % Math.ceil(data.length / 6) === 0 || i === data.length - 1) && (
               <text key={d.date + i} x={x(i)} y={height - 6} textAnchor="middle" className="fill-ink-3 text-[10px]">{fmtX(d.date)}</text>
             ))}
-            {hover != null && <line x1={x(hover)} x2={x(hover)} y1={pad.t} y2={pad.t + ih} stroke="var(--line-strong)" />}
+            {hover != null && <line x1={x(hover)} x2={x(hover)} y1={pad.t} y2={pad.t + ih} stroke="var(--border-strong)" />}
             {paths.map(({ s, d }) => {
               const em = emphasize === s.id;
               return (
@@ -180,11 +180,11 @@ export function LineChart({ data, series, height = 220, emphasize, fmtX, fmtY = 
               const s = series.find((z) => z.id === emphasize)!;
               const i = data.length - 1, v = Number(data[i][s.id]) || 0;
               return <g>
-                <circle cx={x(i)} cy={y(v)} r={5} fill={s.color} stroke="var(--bg-elev)" strokeWidth={2} />
+                <circle cx={x(i)} cy={y(v)} r={5} fill={s.color} stroke="var(--surface-solid)" strokeWidth={2} />
               </g>;
             })()}
             {hover != null && vis.map((s) => (
-              <circle key={s.id} cx={x(hover)} cy={y(Number(data[hover][s.id]) || 0)} r={4.5} fill={s.color} stroke="var(--bg-elev)" strokeWidth={2} />
+              <circle key={s.id} cx={x(hover)} cy={y(Number(data[hover][s.id]) || 0)} r={4.5} fill={s.color} stroke="var(--surface-solid)" strokeWidth={2} />
             ))}
           </svg>
         )}
@@ -215,7 +215,7 @@ export function Sparkline({ values, color, width = 96, height = 28 }: { values: 
     <svg width={width} height={height} aria-hidden>
       {values.map((v, i) => {
         const h = v ? Math.max(2, (v / max) * (height - 2)) : 1;
-        return <rect key={i} x={i * step} y={height - h} width={bw} height={h} rx={1} fill={v ? color : "var(--line-strong)"} opacity={v ? 0.9 : 1} />;
+        return <rect key={i} x={i * step} y={height - h} width={bw} height={h} rx={1} fill={v ? color : "var(--border-strong)"} opacity={v ? 0.9 : 1} />;
       })}
     </svg>
   );
@@ -250,11 +250,11 @@ export function BarList({ rows, fmt = (v) => `${Math.round(v * 100)}%`, max: max
 }
 
 /* ── Radial gauge for a single headline percentage ──────────────────────────── */
-export function Ring({ value, size = 56, stroke = 5, color = "var(--accent)" }: { value: number; size?: number; stroke?: number; color?: string }) {
+export function Ring({ value, size = 56, stroke = 5, color = "var(--blue)" }: { value: number; size?: number; stroke?: number; color?: string }) {
   const r = (size - stroke) / 2, c = 2 * Math.PI * r;
   return (
     <svg width={size} height={size} className="-rotate-90" aria-hidden>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--line-strong)" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border-strong)" strokeWidth={stroke} />
       <motion.circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
         strokeDasharray={c} initial={{ strokeDashoffset: c }} animate={{ strokeDashoffset: c * (1 - Math.min(1, value)) }}
         transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }} />

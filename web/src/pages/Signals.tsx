@@ -73,7 +73,7 @@ export default function Signals() {
             </Empty>
           ) : groups.map(([label, items]) => (
             <div key={label}>
-              <div className="sticky top-16 z-10 border-b border-line bg-elev/95 px-6 py-2 text-[11.5px] text-ink-3 backdrop-blur">{label}</div>
+              <div className="sticky top-16 z-10 border-b border-line bg-solid/95 px-6 py-2 text-[11.5px] text-ink-3 backdrop-blur">{label}</div>
               <div className="divide-y divide-line">{items.map((e) => <EventRow key={e.id} e={e} onOpen={setOpen} active={open === e.id} />)}</div>
             </div>
           ))}

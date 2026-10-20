@@ -116,7 +116,7 @@ cimonitor/
   intel/deepdive.py        auto-generated deep dive with Vs. us
   intel/coverage.py        method tracker
   insights.py digest.py jobs.py api.py tenancy.py db.py (SQLite | Postgres)
-web/                       React 19 · Vite · Tailwind v4 · Motion · cmdk, set in Alpha Lyrae
+web/                       React 19 · Vite · Tailwind v4 · Motion · cmdk, Hyperfence design system (light and dark)
 ```
 
 ## Develop
@@ -129,4 +129,4 @@ TEST_DATABASE_URL=postgresql://… pytest -q           # also exercises the Post
 
 ---
 
-Typeface: **Alpha Lyrae** by Fontfabric, under the SIL Open Font License 1.1 (`web/public/fonts/AlphaLyrae-OFL.md`).
+Dashboard: the Hyperfence design system. Tokens (mauve neutrals, functional green / blue / amber / red, light and dark themes) live in `web/src/index.css`; UI text is set in [Inter](https://rsms.me/inter/), machine values in the system mono. The email digest is still set in **Alpha Lyrae** by Fontfabric, under the SIL Open Font License 1.1 (`web/public/fonts/AlphaLyrae-OFL.md`).

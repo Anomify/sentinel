@@ -10,7 +10,7 @@ brand:
   name: "Hyperfence"
   aliases: []
   domains: ["hyperfence.io"]       # used to match AI citations (bare hostname)
-  color: "#6250d6"
+  color: "#2ED58C"     # Hyperfence brand green: our line in every chart
   # monitor: true tracks Hyperfence with every module (Signals, stack, DNS, hiring, product...) as if it
   # were a competitor. Optional, same keys as a competitor: pages, feeds, staging, github, ats, news_query.
   monitor: true
@@ -103,7 +103,7 @@ competitors:
   - id: alice
     name: Alice (WonderFence)
     tier: primary
-    color: "#eb6834"
+    color: "#6250d6"
     aliases: ["Alice", "WonderFence", "ActiveFence", "Active Fence"]
     domains: ["alice.io", "activefence.com"]
     pages:
@@ -174,7 +174,7 @@ competitors:
   - id: zenity
     name: Zenity
     tier: primary
-    color: "#c2410c"
+    color: "#807780"
     aliases: ["Zenity Labs", "AI Total"]
     domains: ["zenity.io"]
     pages:

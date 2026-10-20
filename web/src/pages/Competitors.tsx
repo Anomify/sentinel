@@ -207,7 +207,7 @@ function summary(f: Fact): string {
     case "motion": return (v.reasons ?? []).join(" · ");
     case "funding": return [v.date?.slice(0, 10), v.investors?.join(", ")].filter(Boolean).join(" · ");
     case "ad_channel": return `${v.status} · ${v.reading ?? ""}`;
-    case "repo": return [v.language, v.stars != null ? `${v.stars}★` : null, v.pushed_at ? `pushed ${v.pushed_at.slice(0, 10)}` : null].filter(Boolean).join(" · ");
+    case "repo": return [v.language, v.stars != null ? `${v.stars} stars` : null, v.pushed_at ? `pushed ${v.pushed_at.slice(0, 10)}` : null].filter(Boolean).join(" · ");
     case "press": return [v.source, v.published?.slice(0, 10)].filter(Boolean).join(" · ");
     case "email_sender": return v.include ?? "";
     case "staging_site": return v.crawl ?? v.url ?? "";
