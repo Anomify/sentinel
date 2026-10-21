@@ -75,10 +75,36 @@ def meta_api(comp: Entity) -> list[dict] | None:
     return [a for a in j.get("data", []) if name.lower() in (a.get("page_name") or "").lower()]
 
 
+# How each channel reads in a sentence: "{who} started running Microsoft (Bing) search ads".
+CHANNEL_WORDS = {"google": "Google search ads", "linkedin": "LinkedIn ads", "meta": "Meta (Facebook/Instagram) ads",
+                 "microsoft": "Microsoft (Bing) search ads", "reddit": "Reddit ads", "x": "X (Twitter) ads"}
+
+
+def _state(v: dict) -> str:
+    """live: the ad library shows ads · tag: only their tracking tag is installed · none: tag, but no ads in the library."""
+    st = str((v or {}).get("status") or "")
+    return "live" if st.startswith("active") else "tag" if st.startswith("pixel only") else "none"
+
+
+def _channel_title(f: Fact, before: str | None = None) -> str:
+    what, now = CHANNEL_WORDS.get(f.key, f.label), _state(f.value)
+    if now == "live":
+        n = f.value.get("library_ads")
+        return f"{{who}} started running {what}" + (f" ({n} ads live)" if n else "") if before in (None, "tag") else f"{{who}}'s {what} are live again"
+    if now == "tag":
+        return f"{{who}} is setting up {what}: the tracking tag is on their site"
+    return f"{{who}} paused their {what}" if before == "live" else f"{{who}} has the {what} tag but no ads running"
+
+
 RULES = {
-    "ad_channel": Rule(severity="high", on_change=True, title_add=lambda f: f"Ad channel: {f.label}",
+    # Only a move between live, tag-only and paused is news; creative counts change every day.
+    "ad_channel": Rule(severity="medium", on_change=True, severity_fn=lambda f: "low" if _state(f.value) == "none" else "medium",
+                       title_add=lambda f: _channel_title(f),
+                       title_change=lambda cur, f: _channel_title(f, _state(cur.get("value"))),
+                       alert_change=lambda cur, f: _state(cur.get("value")) != _state(f.value),
+                       title_remove=lambda r: f"{{who}} removed their {CHANNEL_WORDS.get(r['key'], r['label'])} tag",
                        so_what=lambda f: f.value.get("reading")),
-    "ad_creative": Rule(severity="medium", title_add=lambda f: f"New ad creative ({f.value.get('platform')}): {f.label}"),
+    "ad_creative": Rule(severity="medium", title_add=lambda f: f"{{who}} is running a new {f.value.get('platform')} ad: {f.label}"),
 }
 
 

@@ -252,7 +252,8 @@ ID_PATTERNS = {
     "meta_pixel": (r"fbq\(\s*['\"]init['\"]\s*,\s*['\"](\d{12,17})['\"]", "Meta Pixel"),
     "linkedin_partner": (r"_linkedin_partner_id\s*=\s*['\"]?(\d{4,10})", "LinkedIn Insight partner ID"),
     "hubspot_portal": (r"js\.hs-scripts\.com/(\d{5,10})\.js|hsforms\.net/forms/[^\"']*portalId[\"':= ]+(\d{5,10})|//js\.hs-analytics\.net/analytics/\d+/(\d{5,10})\.js|hubspotemail\.net\b", "HubSpot portal"),
-    "bing_uet": (r"bat\.bing\.com/action/0\?ti=(\d{5,10})|[\"']ti[\"']\s*:\s*[\"'](\d{5,10})[\"']", "Microsoft Ads UET tag"),
+    # The tag's own request, or its standard snippet ({ti:"12345678", ...}); not any "ti" value in the page.
+    "bing_uet": (r"bat\.bing\.com/action/0\?(?:[^\"'\s]*&)?ti=(\d{5,10})|\{\s*ti\s*:\s*[\"'](\d{5,10})[\"']", "Microsoft Ads UET tag"),
     "hotjar": (r"hjid\s*[:=]\s*(\d{5,9})", "Hotjar site"),
     "clarity": (r"clarity\.ms/tag/([a-z0-9]{8,12})", "Microsoft Clarity project"),
     "segment": (r"cdn\.segment\.com/analytics\.js/v1/([A-Za-z0-9]{20,40})", "Segment write key"),

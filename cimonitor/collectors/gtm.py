@@ -140,17 +140,34 @@ def funnel_reading(conversions: dict) -> str:
     return ("They optimise for " + ", ".join(bits) + ".") if bits else "No explicit conversion events found."
 
 
+# What each tracking ID is, in words: "{who} added a Microsoft (Bing) ads account to their site".
+ID_WORDS = {"ga4": "a Google Analytics property", "gtm": "a Google Tag Manager container", "google_ads": "a Google Ads account",
+            "ua": "an old-style Google Analytics property", "meta_pixel": "a Meta (Facebook/Instagram) ads pixel",
+            "linkedin_partner": "a LinkedIn ads account", "hubspot_portal": "a HubSpot account", "bing_uet": "a Microsoft (Bing) ads account",
+            "hotjar": "a Hotjar account (records visitor sessions)", "clarity": "a Microsoft Clarity project (records visitor sessions)",
+            "segment": "a Segment account (customer data)", "sixsense": "a 6sense account (identifies companies visiting the site)"}
+AD_IDS = {"google_ads", "meta_pixel", "linkedin_partner", "bing_uet"}
+GOAL_RX = re.compile(r"trial|sign_?up|register|demo|purchase|checkout|subscri|contact|lead", re.I)
+
 RULES = {
     "container": Rule(severity="low", on_change=True),
-    "tracking_id": Rule(severity="high", title_add=lambda f: f"New tracking ID: {f.label}",
-                        so_what=lambda f: "A new ad/analytics account usually means a new channel or campaign."),
-    "conversion": Rule(severity="high", title_add=lambda f: f"New conversion event tracked: {f.key}",
-                       title_remove=lambda r: f"Conversion event no longer tracked: {r['key']}",
-                       so_what=lambda f: "Shows what they're now optimising campaigns for."),
-    "gtm_tag": Rule(severity="medium", title_add=lambda f: f"GTM tag added: {f.label}", title_remove=lambda r: f"GTM tag removed: {r['label']}"),
-    "sgtm": Rule(severity="high", title_add=lambda f: f"Server-side tagging detected on {f.key}",
-                 so_what=lambda f: "First-party server-side tracking: their measurement is more robust than client-side tags suggest (ad-blocker resistant)."),
-    "funnel": Rule(on_add=False, on_remove=False, on_change=True, severity="medium"),
+    # An ID is account plumbing, not news: whether they are actually advertising is the ads module's alert ("started
+    # running Microsoft (Bing) search ads"), which checks the ad libraries too.
+    "tracking_id": Rule(severity="low",
+                        title_add=lambda f: f"{{who}} added {ID_WORDS.get(f.value.get('type'), 'a tracking account')} to their site ({f.value.get('id')})",
+                        title_remove=lambda r: f"{{who}} removed {ID_WORDS.get((r.get('value') or {}).get('type'), 'a tracking account')} from their site",
+                        so_what=lambda f: ("Account-level detail. If they are running these ads, that shows up as its own alert from the ads check."
+                                           if f.value.get("type") in AD_IDS else "Housekeeping in their analytics setup. Rarely news on its own.")),
+    "conversion": Rule(severity="low", severity_fn=lambda f: "medium" if GOAL_RX.search(f.key) else "low",
+                       title_add=lambda f: f"{{who}} now measures “{f.key}” as a goal on their site",
+                       title_remove=lambda r: f"{{who}} stopped measuring “{r['key']}” on their site",
+                       so_what=lambda f: "What a site measures is what its ads are tuned to win. A sign-up, trial or demo goal shows which step they are pushing."),
+    "gtm_tag": Rule(severity="low", title_add=lambda f: f"{{who}} added a Tag Manager tag: {f.label}",
+                    title_remove=lambda r: f"{{who}} removed a Tag Manager tag: {r['label']}"),
+    "sgtm": Rule(severity="low", title_add=lambda f: f"{{who}} moved their website tracking onto their own server ({f.key})",
+                 so_what=lambda f: "Server-side tracking: ad blockers hide less of their traffic, so their ad measurement is more complete than it looks."),
+    "funnel": Rule(on_add=False, on_remove=False, on_change=True, severity="medium",
+                   title_change=lambda cur, f: f"{{who}}'s sign-up funnel changed: {f.label}"),
 }
 
 
