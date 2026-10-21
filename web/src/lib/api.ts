@@ -21,6 +21,12 @@ export function setToken(t: string) {
   invalidate();
 }
 
+/** Query string for URLs the browser loads itself (images, frames, downloads): those can't send the headers api() does. */
+export function authQuery() {
+  const t = getToken();
+  return new URLSearchParams({ ws: workspace(), ...(t ? { token: t } : {}) }).toString();
+}
+
 export class AuthError extends Error {}
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {

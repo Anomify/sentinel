@@ -41,6 +41,15 @@ def test_spa_never_serves_files_outside_the_build(tmp_path):
         assert spa_file(dist, p) == (dist / "index.html").resolve(), p
 
 
+def test_access_log_hides_tokens():
+    import logging
+    from cimonitor.cli import HideTokens
+    r = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+                          ("10.0.0.5:5000", "GET", "/api/evidence/a.png?ws=default&token=s3cret", "1.1", 200), None)
+    assert HideTokens().filter(r)
+    assert "s3cret" not in r.getMessage() and "?ws=default&token=***" in r.getMessage()
+
+
 def test_workspace_requires_its_token():
     from cimonitor import tenancy
     tok = tenancy.create("acme", "Acme")

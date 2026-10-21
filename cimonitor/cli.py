@@ -5,6 +5,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import threading
 
 from . import config, jobs, tenancy
@@ -26,6 +27,17 @@ MODULE_HELP = {
     "digest": "Build & deliver the weekly digest",
     "cleanup": "Repair stored data so it matches today's rules (runs automatically on serve)",
 }
+TOKEN_RX = re.compile(r"([?&]token=)[^&\s]+")
+
+
+class HideTokens(logging.Filter):
+    """Screenshots, the digest frame and PDF downloads carry the access token in their URL (a browser can't add a
+    header to them); keep it out of the access log, which a system service sends to the journal."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(TOKEN_RX.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args)
+        return True
 
 
 def main(argv=None):
@@ -112,6 +124,7 @@ def main(argv=None):
                                 "read the dashboard and start paid AI runs. Set SENTINEL_TOKEN in .env.", a.host, a.port)
             if not a.no_scheduler:
                 threading.Thread(target=jobs.daemon, daemon=True).start()
+            logging.getLogger("uvicorn.access").addFilter(HideTokens())
             uvicorn.run("cimonitor.api:app", host=a.host, port=a.port, log_level="info")
             return
     print(json.dumps(out, indent=2, default=str))

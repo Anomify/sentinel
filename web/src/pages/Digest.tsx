@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Download, Monitor, Smartphone } from "lucide-react";
-import { api, getToken, invalidate, useApi, workspace } from "../lib/api";
+import { api, authQuery, invalidate, useApi } from "../lib/api";
 import { ago, day } from "../lib/format";
 import { Button, Card, CardHeader, cx, Empty, PageHeader, Segmented, useMeta } from "../components/ui";
 import { useToast } from "../components/shell";
@@ -12,14 +12,12 @@ export default function Digest() {
   const { data } = useApi<DigestRow[]>("/api/digests");
   const [sel, setSel] = useState<number | "live">("live");
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
-  const t = getToken();
-  const src = sel === "live" ? `/api/digests/preview${t ? `?token=${t}` : ""}` : `/api/digests/${sel}/html${t ? `?token=${t}` : ""}`;
+  const src = `${sel === "live" ? "/api/digests/preview" : `/api/digests/${sel}/html`}?${authQuery()}`;
   const sched = meta.schedule.find((s) => s.job === "digest");
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const download = (id: number) => {
-    const q = new URLSearchParams({ ws: workspace(), ...(t ? { token: t } : {}) });
-    window.location.href = `/api/digests/${id}/pdf?${q}`;
+    window.location.href = `/api/digests/${id}/pdf?${authQuery()}`;
   };
   const exportPdf = async () => {
     setBusy(true);

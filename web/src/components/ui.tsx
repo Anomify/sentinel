@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowDownRight, ArrowUpRight, ExternalLink, Image as ImageIcon, Minus, X } from "lucide-react";
 import type { Entity, Evidence, Meta, Severity } from "../lib/types";
 import { ago, host } from "../lib/format";
-import { workspace } from "../lib/api";
+import { authQuery } from "../lib/api";
 
 /* ── meta context ───────────────────────────────────────────────────────────── */
 export const MetaCtx = createContext<Meta | null>(null);
@@ -229,7 +229,7 @@ export function Kbd({ children }: { children: ReactNode }) {
 }
 
 /* ── Evidence trail ─────────────────────────────────────────────────────────── */
-export const shotUrl = (name: string) => `/api/evidence/${name}?ws=${encodeURIComponent(workspace())}`;
+export const shotUrl = (name: string) => `/api/evidence/${name}?${authQuery()}`;
 
 export function EvidenceList({ items, compact }: { items: Evidence[]; compact?: boolean }) {
   const [shot, setShot] = useState<string | null>(null);
