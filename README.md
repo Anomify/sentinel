@@ -68,6 +68,7 @@ With **no keys at all**, Modules 1–7 and 9 run on free public sources. Keys ad
 - **Docker (recommended):** `docker compose up -d` starts Sentinel and Postgres 16, with the built-in scheduler, evidence screenshots on a volume, and the config mounted.
 - **Zero infrastructure:** `.github/workflows/monitor.yml` runs every module on GitHub Actions and keeps the database on a `sentinel-data` branch.
 - **Cron:** `sentinel run && sentinel digest`.
+- **systemd:** `deploy/` holds a unit file, a secrets template and install and update scripts. [deploy/README.md](deploy/README.md) is the runbook.
 
 ### Storage and multi-tenancy
 
@@ -123,7 +124,7 @@ web/                       React 19 · Vite · Tailwind v4 · Motion · cmdk, Hy
 
 ```bash
 make dev                                             # API :8000 + hot-reload UI :5173
-pytest -q                                            # 30 tests
+pytest -q
 TEST_DATABASE_URL=postgresql://… pytest -q           # also exercises the Postgres backend
 ```
 

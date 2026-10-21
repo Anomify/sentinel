@@ -1,0 +1,41 @@
+# sentinel.service: Sentinel's dashboard, API and scheduler as one system service on hpz2g9.
+# On another machine, change the checkout, venv and user below. deploy/README.md is the runbook.
+#
+#   sudo sh deploy/install.sh       install (or reinstall) this file and the secrets file, then start
+#   sh deploy/update.sh             after a git pull: dependencies, dashboard build, restart
+#   journalctl -u sentinel -f       logs
+#   sudo systemctl status|restart|stop sentinel
+
+[Unit]
+Description=Sentinel competitive intelligence (dashboard, API and scheduler)
+Wants=network-online.target
+After=network-online.target
+# The checkout is on the CIFS share mounted at /mnt/home/si.
+RequiresMountsFor=/mnt/home/si/repos/sentinel
+
+[Service]
+Type=exec
+User=si
+Group=si
+WorkingDirectory=/mnt/home/si/repos/sentinel
+# Data on local disk: SQLite in WAL mode is not safe on a network filesystem. systemd creates /var/lib/sentinel for si.
+StateDirectory=sentinel
+StateDirectoryMode=0750
+Environment=SENTINEL_DATA_DIR=/var/lib/sentinel
+Environment=HOST=0.0.0.0
+Environment=PORT=1115
+# Secrets live off the share, which shows every file as mode 0666. systemd reads this as root before switching to si.
+EnvironmentFile=/etc/sentinel/sentinel.env
+ExecStartPre=/bin/sh -c 'test -n "$$SENTINEL_TOKEN" || { echo "SENTINEL_TOKEN is empty in /etc/sentinel/sentinel.env: refusing to listen on the network without it" >&2; exit 1; }'
+# One process, no uvicorn workers: the scheduler and the running-job registry live in memory, so each extra worker
+# would run every scheduled job again.
+ExecStart=/home/si/venvs/sentinel/bin/sentinel serve
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

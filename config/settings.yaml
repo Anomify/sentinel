@@ -38,4 +38,4 @@ digest:
   to: "keith@hyperfence.io"   # comma-separate for more; DIGEST_TO in .env overrides
   lookback_days: 7
   channels: [slack, email] # each only fires when its env vars are set
-  app_url: "http://localhost:8000"
+  app_url: "https://hpz2g9.tail548525.ts.net:8443"   # the server's tailnet address (deploy/README.md)
