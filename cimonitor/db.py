@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS digests (
 );
 
 CREATE TABLE IF NOT EXISTS runs (
-  id INTEGER PRIMARY KEY, job TEXT, started_at TEXT, finished_at TEXT, status TEXT, stats TEXT, error TEXT
+  id INTEGER PRIMARY KEY, job TEXT, started_at TEXT, finished_at TEXT, status TEXT, stats TEXT, error TEXT,
+  pid INTEGER  -- the process running it, so a restart can tell its own dead runs from a live CLI run (jobs.recover_interrupted)
 );
 
 -- Generic observation store: every module writes facts; adds/removals become events.
@@ -98,6 +99,7 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 MIGRATIONS = [  # additive columns for databases created by earlier versions
     ("snapshots", "screenshot", "TEXT"), ("posts", "ctype", "TEXT"), ("ai_results", "accuracy", "TEXT"),
     ("facts", "missing", "INTEGER DEFAULT 0"), ("events", "occurred_at", "TEXT"), ("events", "story", "TEXT"), ("events", "rating", "INTEGER"), ("ai_results", "sample", "INTEGER DEFAULT 0"),
+    ("runs", "pid", "INTEGER"),
 ]
 
 JSON_COLS = {"signals", "added", "removed", "citations", "mentions", "topics", "payload", "stats", "delivered",

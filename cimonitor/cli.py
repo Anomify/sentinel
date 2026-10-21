@@ -94,6 +94,7 @@ def main(argv=None):
             order = ["dns", "subdomains", "stack", "pages", "feeds", "radar", "product", "social", "hiring", "money", "ads", "ai", "deepdive"]
             out = [jobs.run_job(j) for j in order]
         elif a.cmd == "daemon":
+            jobs.recover_interrupted()
             return jobs.daemon()
         elif a.cmd == "evaluate":
             from . import db, insights
@@ -119,6 +120,7 @@ def main(argv=None):
             for w in [x["slug"] for x in tenancy.list_workspaces()] or [tenancy.current()]:
                 with tenancy.use(w):
                     cleanup.run()
+            jobs.recover_interrupted()
             if not os.environ.get("SENTINEL_TOKEN") and a.host not in ("127.0.0.1", "localhost", "::1"):
                 logging.warning("SENTINEL_TOKEN is not set and Sentinel listens on %s: anyone who can reach port %s can "
                                 "read the dashboard and start paid AI runs. Set SENTINEL_TOKEN in .env.", a.host, a.port)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import threading
 import time
@@ -89,7 +90,7 @@ def run_job(name: str, **kw) -> dict:
         guard.reset_caches()  # the server is long-lived: every run must see today's DNS and robots.txt
         cfg = config.load()
         with db.connect() as con:
-            rid = db.insert(con, "runs", {"job": tag, "started_at": db.now(), "status": "running"})
+            rid = db.insert(con, "runs", {"job": tag, "started_at": db.now(), "status": "running", "pid": os.getpid()})
         try:
             stats = full_scan(cfg, kw["competitor"]) if name == "scan" else JOBS[name](cfg, **kw)
             status, err = "ok", None
@@ -113,7 +114,7 @@ def full_scan(cfg, competitor: str) -> dict:
     for i, step in enumerate(FULL_SCAN):
         with db.connect() as con:
             db.set_meta(con, f"scan:{competitor}", {"step": step, "label": LABELS[step], "index": i, "total": len(FULL_SCAN),
-                                                     "started": out.get("_started") or db.now(), "done": False})
+                                                     "started": out.get("_started") or db.now(), "done": False, "pid": os.getpid()})
         out.setdefault("_started", db.now())
         try:
             r = JOBS[step](config.load(), competitor=competitor)
@@ -135,6 +136,45 @@ def run_async(name: str, **kw) -> None:
         with tenancy.use(ws):
             run_job(name, **kw)
     threading.Thread(target=go, daemon=True).start()
+
+
+INTERRUPTED = "interrupted: Sentinel stopped before this run finished"
+
+
+def _alive(pid) -> bool:
+    if not pid:
+        return False  # recorded before runs carried a pid
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:  # exists, but belongs to another user
+        return True
+    return True
+
+
+def recover_interrupted() -> int:
+    """Close what a stopped process left open, in every workspace; call before this process starts any job.
+
+    Jobs run in daemon threads, so a restart kills them outright: their run stays "running" for ever and a full scan
+    never reaches done, which hides that company's deep dive behind "Scanning…" and disables Rescan. Records whose
+    process is still alive (a `sentinel` command run beside the server) are left alone."""
+    n = 0
+    for w in tenancy.list_workspaces():
+        with tenancy.use(w["slug"]), db.connect() as con:
+            for r in db.rows(con.execute("SELECT id, pid FROM runs WHERE status='running'")):
+                if not _alive(r["pid"]):
+                    con.execute("UPDATE runs SET status='error', finished_at=?, error=? WHERE id=?", (db.now(), INTERRUPTED, r["id"]))
+                    n += 1
+            for r in con.execute("SELECT key, value FROM meta WHERE key LIKE ?", ("scan:%",)).fetchall():
+                s = json.loads(r[1])
+                if not s.get("done") and not _alive(s.get("pid")):
+                    db.set_meta(con, r[0], {**s, "step": "interrupted", "label": "Interrupted", "done": True,
+                                            "finished": db.now(), "error": INTERRUPTED})
+                    n += 1
+    if n:
+        log.info("closed %d runs and scans left open by a stopped process", n)
+    return n
 
 
 # ── schedule parsing: "every 6h" | "every 30m" | "daily 07:00" | "weekly mon 08:00" ──

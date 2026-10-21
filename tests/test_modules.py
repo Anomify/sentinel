@@ -315,6 +315,32 @@ def test_each_job_sees_fresh_dns(monkeypatch):
     assert dnsq.query("rival.example", "MX") == ["10 aspmx.l.google.com"]
 
 
+def test_a_restart_closes_what_a_stopped_process_left_running():
+    import subprocess
+    import sys
+    from cimonitor import db, jobs
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    with db.connect() as con:
+        stale = db.insert(con, "runs", {"job": "scan:acme", "started_at": db.now(), "status": "running", "pid": gone.pid})
+        legacy = db.insert(con, "runs", {"job": "dns", "started_at": db.now(), "status": "running"})  # stored before runs had a pid
+        live = db.insert(con, "runs", {"job": "pages", "started_at": db.now(), "status": "running", "pid": os.getpid()})
+        db.set_meta(con, "scan:acme", {"step": "stack", "index": 2, "total": 12, "done": False, "pid": gone.pid})
+        db.set_meta(con, "scan:rival", {"step": "dns", "index": 0, "total": 12, "done": False, "pid": os.getpid()})
+    assert jobs.recover_interrupted() == 3
+    with db.connect() as con:
+        runs = {r["id"]: r for r in db.rows(con.execute("SELECT * FROM runs"))}
+        assert runs[stale]["status"] == runs[legacy]["status"] == "error"
+        assert runs[stale]["finished_at"] and runs[stale]["error"].startswith("interrupted")
+        assert runs[live]["status"] == "running"
+        assert db.get_meta(con, "scan:acme")["done"] and db.get_meta(con, "scan:acme")["step"] == "interrupted"
+        assert not db.get_meta(con, "scan:rival")["done"]
+    assert jobs.recover_interrupted() == 0  # idempotent
+    jobs.run_job("cleanup")
+    with db.connect() as con:
+        assert con.execute("SELECT pid FROM runs ORDER BY id DESC LIMIT 1").fetchone()[0] == os.getpid()
+
+
 # ── Collection failures never become signals ────────────────────────────────
 def _events(con, competitor=None):
     from cimonitor import db
