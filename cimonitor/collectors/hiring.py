@@ -227,8 +227,8 @@ def _sev(f: Fact) -> str:
 
 
 RULES = {
-    "job": Rule(severity="medium", severity_fn=_sev, title_add=lambda f: f"New role: {f.label} · {f.value['location'] or f.value['region']}",
-                title_remove=lambda r: f"Role closed: {r['label']}"),
+    "job": Rule(severity="medium", severity_fn=_sev, title_add=lambda f: f"{{who}} is hiring: {f.label} · {f.value['location'] or f.value['region']}",
+                title_remove=lambda r: f"{{who}} closed a job: {r['label']}"),
     "board": Rule(on_add=False, on_remove=False),
 }
 

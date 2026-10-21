@@ -113,20 +113,42 @@ def classify_motion(tools: set[str], conv: dict[str, str]) -> dict:
     return {"label": label, "score": round(score, 1), "reasons": reasons}
 
 
+# What adding a tool of each kind says about the company, as a sentence: "{who} {verb}".
+TOOL_VERB = {
+    "ads": "added the {name} tag to their site", "abm": "started using {name} to spot which companies visit their site",
+    "map": "started using {name} for marketing automation", "analytics": "added {name} (web analytics)",
+    "product": "added {name} (product analytics)", "replay": "started recording visitor sessions with {name}",
+    "chat": "added {name} live chat to their site", "scheduling": "now lets visitors book a meeting straight from the site ({name})",
+    "demo": "added interactive product demos ({name})", "testing": "started A/B testing their site ({name})",
+    "consent": "added a {name} cookie banner", "cms": "now runs their site on {name}", "video": "added {name} video",
+    "support": "added {name} for support and docs", "tag": "added {name} (tag management)",
+    "partner": "started running a partner or referral programme ({name})", "events": "started running events or webinars with {name}",
+    "reviews": "added {name} reviews to their site", "calltracking": "started tracking calls from their marketing ({name})",
+    "monitoring": "added {name} (site monitoring)", "payments": "now takes payments on their site ({name})",
+    "hiring": "added {name} to their careers pages",
+}
+# Buying online is a real change in how they sell; ad tags are the ads module's call (it checks the ad libraries).
+TOOL_SEV = {"payments": "high", "abm": "medium", "partner": "medium", "scheduling": "medium", "demo": "medium", "map": "medium",
+            "chat": "medium", "testing": "medium", "events": "medium", "calltracking": "medium", "product": "medium"}
 TOOL_RULE = Rule(
-    severity="medium",
-    severity_fn=lambda f: "high" if f.value.get("category") in ("ads", "abm", "partner", "scheduling", "demo", "payments") else
-    "low" if f.value.get("category") in ("consent", "monitoring", "cms", "video") else "medium",
-    title_add=lambda f: f"{f.label} added",
-    title_remove=lambda r: f"{r['label']} removed",
+    severity="low",
+    severity_fn=lambda f: TOOL_SEV.get(f.value.get("category"), "low"),
+    title_add=lambda f: "{who} " + TOOL_VERB.get(f.value.get("category"), "added {name} to their site").format(name=f.label),
+    title_remove=lambda r: f"{{who}} stopped using {r['label']}",
     so_what=lambda f: BY_ID[f.key].means if f.key in BY_ID else None,
 )
 RULES = {
     "tool": TOOL_RULE,
-    "conversion_path": Rule(severity="high", title_add=lambda f: f"New conversion path: {f.label}",
-                            title_remove=lambda r: f"Conversion path removed: {r['label']}",
-                            so_what=lambda f: "Watch for a shift in GTM motion." if f.key in ("free_trial", "signup") else None),
-    "motion": Rule(severity="high", on_add=False, on_remove=False, on_change=True),
+    "conversion_path": Rule(severity="medium",
+                            # A free trial, self-serve sign-up or public prices is a shift towards selling without a salesperson.
+                            severity_fn=lambda f: "high" if f.key in ("free_trial", "signup", "pricing_public") else "medium",
+                            title_add=lambda f: f"{{who}} added a new way to get started: {f.label}",
+                            title_remove=lambda r: f"{{who}} no longer offers: {r['label']}",
+                            so_what=lambda f: "A shift towards letting buyers start without talking to sales." if f.key in ("free_trial", "signup", "pricing_public") else None),
+    # Only a change of label is news; the score behind it moves with every tool added or removed.
+    "motion": Rule(severity="high", on_add=False, on_remove=False, on_change=True,
+                   alert_change=lambda cur, f: (cur.get("value") or {}).get("label") != f.value.get("label"),
+                   title_change=lambda cur, f: f"{{who}}'s sales approach changed: {(cur.get('value') or {}).get('label', '?')} → {f.label}"),
     "third_party": Rule(on_add=False, on_remove=False),
 }
 

@@ -126,16 +126,19 @@ def spf_includes(spf: str, depth=0) -> list[str]:
 
 
 RULES = {
-    "verification": Rule(severity="high", title_add=lambda f: f"New domain verification: {f.label}",
-                         title_remove=lambda r: f"Verification removed: {r['label']}",
+    # Most verifications are office tools (Google, Microsoft 365, Atlassian): only ones with a known meaning are worth a look.
+    "verification": Rule(severity="low", severity_fn=lambda f: "medium" if f.value.get("means") else "low",
+                         title_add=lambda f: f"{{who}} connected their domain to {f.label}",
+                         title_remove=lambda r: f"{{who}} disconnected {r['label']} from their domain",
                          so_what=lambda f: f.value.get("means") or "New TXT verifications typically precede a tool going live by weeks."),
     "txt": Rule(on_add=False, on_remove=False),
-    "email_sender": Rule(severity="medium", title_add=lambda f: f"New email sender authorised: {f.label}",
+    "email_sender": Rule(severity="medium", title_add=lambda f: f"{{who}} started sending email through {f.label}",
                          so_what=lambda f: "A new SPF include means a new system sending email as them (marketing, support, sales engagement)."),
-    "mx": Rule(severity="medium", on_change=True, title_add=lambda f: f"Mail routing via {f.label}"),
-    "dmarc": Rule(severity="low", on_change=True, on_add=False),
-    "dkim": Rule(severity="low", title_add=lambda f: f"DKIM selector live: {f.key} ({f.label})"),
-    "ns": Rule(severity="medium", on_change=True, on_add=False),
+    "mx": Rule(severity="medium", on_change=True, title_add=lambda f: f"{{who}} handles their email with {f.label}",
+               title_change=lambda cur, f: f"{{who}} moved their email to {f.label}"),
+    "dmarc": Rule(severity="low", on_change=True, on_add=False, title_change=lambda cur, f: f"{{who}} changed their email security policy: {f.label}"),
+    "dkim": Rule(severity="low", title_add=lambda f: f"{{who}} set up signed email for {f.label} ({f.key})"),
+    "ns": Rule(severity="medium", on_change=True, on_add=False, title_change=lambda cur, f: f"{{who}} moved their DNS to {f.label}"),
 }
 
 

@@ -214,7 +214,7 @@ def test_subdomain_alerts_only_for_recent_certificates_and_never_removed():
             facts.Fact("subdomain", "old.x.com", "old.x.com", {"first_cert": "2023-05-01", "kind": "campaign / product"}),
             facts.Fact("subdomain", "launch.x.com", "launch.x.com", {"first_cert": recent, "kind": "campaign / product"})], ["subdomain"], RULES)
         titles = [r["title"] for r in db.rows(con.execute("SELECT title FROM events"))]
-    assert titles == ["New subdomain: launch.x.com"]  # old host recorded silently; www absence not a removal alert
+    assert titles == ["x set up a new web address: launch.x.com"]  # old host recorded silently; www absence not a removal alert
 
 
 
@@ -880,3 +880,60 @@ def test_old_page_change_interpretations_are_labelled_as_ai():
         cleanup.page_change_provenance(con)
         d = db.row(con.execute("SELECT data FROM events WHERE id=?", (eid,)).fetchone())["data"]
     assert d["analysed_by"] == "ai" and d["category"] == "messaging"
+
+
+def test_alert_titles_name_the_company_in_plain_words():
+    from cimonitor import db, facts
+    from cimonitor.collectors import gtm
+    with db.connect() as con:
+        eid = facts.emit(con, "lakera", "ads", "ad_channel_added", "medium", "{who} started running Microsoft (Bing) search ads",
+                         so_what="{who} now buys search traffic on Bing.")
+        e = db.row(con.execute("SELECT title, so_what FROM events WHERE id=?", (eid,)).fetchone())
+        assert e["title"] == "Lakera started running Microsoft (Bing) search ads" and e["so_what"] == "Lakera now buys search traffic on Bing."
+        assert facts.display_name("aws-bedrock") == "AWS Bedrock Guardrails" and facts.display_name("nobody") == "nobody"
+        # A tracking ID is account plumbing: low, and says what it is.
+        ga = facts.Fact("tracking_id", "ga4:G-AAAA1111", "Google Analytics 4 G-AAAA1111", {"type": "ga4", "id": "G-AAAA1111"})
+        facts.sync(con, "lakera", "gtm", [ga], ["tracking_id"], gtm.RULES)  # first run: recorded quietly
+        facts.sync(con, "lakera", "gtm", [ga, facts.Fact("tracking_id", "bing_uet:1234567", "Microsoft Ads UET tag 1234567",
+                                                         {"type": "bing_uet", "id": "1234567"})], ["tracking_id"], gtm.RULES)
+        e = db.row(con.execute("SELECT title, severity FROM events WHERE kind='tracking_id_added'").fetchone())
+    assert e == {"title": "Lakera added a Microsoft (Bing) ads account to their site (1234567)", "severity": "low"}
+
+
+def test_ad_channel_alerts_on_state_changes_not_creative_counts():
+    from cimonitor import db, facts
+    from cimonitor.collectors.ads import RULES
+    ch = lambda st, n=None: [facts.Fact("ad_channel", "microsoft", "Microsoft Ads", {"status": st, "pixel": True, "library_ads": n})]  # noqa: E731
+    with db.connect() as con:
+        facts.sync(con, "lakera", "ads", [facts.Fact("ad_channel", "google", "Google Ads", {"status": "active · 3 creatives"})], ["ad_channel"], RULES)
+        for snap in (ch("pixel only (library not checked)"), ch("active · 4 creatives", 4), ch("active · 9 creatives", 9), ch("no ads in library", 0)):
+            facts.sync(con, "lakera", "ads", snap + [facts.Fact("ad_channel", "google", "Google Ads", {"status": "active · 3 creatives"})],
+                       ["ad_channel"], RULES)
+        ev = [(e["title"], e["severity"]) for e in db.rows(con.execute("SELECT title, severity FROM events ORDER BY id"))]
+    assert ev == [("Lakera is setting up Microsoft (Bing) search ads: the tracking tag is on their site", "medium"),
+                  ("Lakera started running Microsoft (Bing) search ads (4 ads live)", "medium"),
+                  ("Lakera paused their Microsoft (Bing) search ads", "low")]
+
+
+def test_tool_and_motion_alerts_read_as_sentences():
+    from cimonitor import db, facts
+    from cimonitor.collectors.stack import RULES
+    tool = lambda k, n, cat: facts.Fact("tool", k, n, {"category": cat})  # noqa: E731
+    motion = lambda label, score: facts.Fact("motion", "motion", label, {"label": label, "score": score})  # noqa: E731
+    with db.connect() as con:
+        facts.sync(con, "lakera", "stack", [motion("Hybrid", 0)], ["tool", "motion"], RULES)
+        facts.sync(con, "lakera", "stack", [tool("bing-uet", "Microsoft Advertising (UET)", "ads"), tool("stripe", "Stripe", "payments"),
+                                            motion("Hybrid", 1)], ["tool", "motion"], RULES)
+        facts.sync(con, "lakera", "stack", [tool("bing-uet", "Microsoft Advertising (UET)", "ads"), tool("stripe", "Stripe", "payments"),
+                                            motion("Product-led", -2)], ["tool", "motion"], RULES)
+        ev = [(e["title"], e["severity"]) for e in db.rows(con.execute("SELECT title, severity FROM events ORDER BY id"))]
+    assert ev == [("Lakera added the Microsoft Advertising (UET) tag to their site", "low"),
+                  ("Lakera now takes payments on their site (Stripe)", "high"),
+                  ("Lakera's sales approach changed: Hybrid → Product-led", "high")]
+
+
+def test_bing_tag_id_needs_the_real_tag():
+    from cimonitor.signatures import extract_ids
+    assert extract_ids('<script>var o={ti:"12345678", enableAutoSpaTracking: true}</script>')["bing_uet"] == {"12345678"}
+    assert extract_ids("https://bat.bing.com/action/0?evt=pageLoad&ti=5555555&Ver=2")["bing_uet"] == {"5555555"}
+    assert "bing_uet" not in extract_ids('{"ti":"1234567","widget":true}')

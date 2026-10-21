@@ -142,9 +142,9 @@ def _recent(f: Fact, days: int = 30) -> bool:
 
 
 RULES = {
-    "profile": Rule(severity="low", on_remove=False, title_add=lambda f: f"New {f.label} account linked from their site"),
+    "profile": Rule(severity="low", on_remove=False, title_add=lambda f: f"{{who}} added a {f.label} account to their site"),
     "post": Rule(severity="low", on_remove=False, append_only=True, alert_if=_recent,
-                 title_add=lambda f: f"New {PLATFORM_LABEL.get(f.value.get('platform'), 'social')} post: {f.label[:120]}",
+                 title_add=lambda f: f"{{who}} posted on {PLATFORM_LABEL.get(f.value.get('platform'), 'social media')}: {f.label[:120]}",
                  severity_fn=lambda f: "medium" if re.search(r"launch|introduc|announc|now available|new feature|webinar|report|research",
                                                              f.label, re.I) else "low"),
     "mention": Rule(severity="low", on_remove=False, append_only=True, alert_if=_recent,

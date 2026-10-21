@@ -274,7 +274,8 @@ def _due(host: str, prev: dict, old: dict) -> bool:
 
 def _sub_sev(f: Fact) -> str:
     k = f.value.get("kind")
-    return "high" if k in ("campaign / product", "tracking") else "medium" if k == "environment" else "low"
+    # A server-side tagging host ("tracking") is measurement plumbing, not a launch.
+    return "high" if k == "campaign / product" else "medium" if k == "environment" else "low"
 
 
 def _sub_so_what(f: Fact) -> str | None:
@@ -303,9 +304,9 @@ def _recent_cert(f: Fact, days: int = 30) -> bool:
 
 RULES = {
     "subdomain": Rule(severity="medium", severity_fn=_sub_sev, so_what=_sub_so_what, alert_if=_recent_cert, on_remove=False,
-                      title_add=lambda f: f"New subdomain: {f.key}" + (f" ({f.value.get('hosting')})" if f.value.get("hosting") not in (None, "Unknown") else ""),
-                      title_remove=lambda r: f"Subdomain gone from CT/DNS: {r['key']}"),
-    "wildcard": Rule(severity="medium", alert_if=_recent_cert, on_remove=False, title_add=lambda f: f"New wildcard certificate: {f.key}",
+                      title_add=lambda f: f"{{who}} set up a new web address: {f.key}" + (f" (hosted on {f.value.get('hosting')})" if f.value.get("hosting") not in (None, "Unknown") else ""),
+                      title_remove=lambda r: f"{{who}} retired a web address: {r['key']}"),
+    "wildcard": Rule(severity="medium", alert_if=_recent_cert, on_remove=False, title_add=lambda f: f"{{who}} got a certificate covering every address under {f.key}",
                      so_what=lambda f: "Wildcard certs usually mean a new environment or multi-tenant service."),
     "page_id": Rule(on_add=False, on_remove=False),
 }

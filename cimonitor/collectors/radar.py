@@ -99,15 +99,16 @@ def github_orgs(con, comp: Entity) -> list[str]:
 
 
 RULES = {
-    "staging_site": Rule(severity="medium", title_add=lambda f: f"Public staging site found: {f.key}",
+    "staging_site": Rule(severity="medium", title_add=lambda f: f"{{who}} has a public test copy of their website: {f.key}",
                          so_what=lambda f: "Staging mirrors upcoming site releases; pages here usually go live within days or weeks."),
-    "staging_page": Rule(severity="high", title_add=lambda f: f"Pre-launch page on staging: {f.label}",
-                         title_remove=lambda r: f"Staging page published or removed: {r['label']}",
+    "staging_page": Rule(severity="high", title_add=lambda f: f"Unreleased page on {{who}}'s test site: {f.label}",
+                         title_remove=lambda r: f"Page gone from {{who}}'s test site (published or dropped): {r['label']}",
                          so_what=lambda f: "This page exists on their staging site but not on production, an upcoming launch, campaign or pricing change."),
-    "site_page": Rule(severity="low", on_remove=True, title_add=lambda f: f"New page live: {f.label}",
+    "site_page": Rule(severity="low", on_remove=True, title_add=lambda f: f"{{who}} published a new page: {f.label}",
                       severity_fn=lambda f: "medium" if not NOISE_PATH.search(f.key) else "low"),
-    "publish": Rule(severity="low", on_remove=False, append_only=True, title_add=lambda f: f"Site republished ({f.value.get('site')})"),
-    "repo": Rule(severity="high", title_add=lambda f: f"New public GitHub repo: {f.label}",
+    "publish": Rule(severity="low", on_remove=False, append_only=True, title_add=lambda f: f"{{who}} updated their {f.value.get('site')} site"),
+    # Most new repos are samples, forks and experiments: worth a look, not a takeover.
+    "repo": Rule(severity="medium", title_add=lambda f: f"{{who}} published a new open-source project on GitHub: {f.label}",
                  so_what=lambda f: "New open-source repos often precede product or developer-facing launches."),
 }
 

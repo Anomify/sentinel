@@ -278,9 +278,9 @@ RULES = {
     # partners are recorded and counted, but adding or dropping one is not a signal until precision is proven.
     "partner": Rule(severity="medium", on_add=False, on_remove=False, title_add=lambda f: f"New partner listed: {f.label}",
                     title_remove=lambda r: f"Partner removed: {r['label']}"),
-    "marketplace": Rule(severity="high", title_add=lambda f: f"New marketplace listing: {f.label}",
+    "marketplace": Rule(severity="high", title_add=lambda f: f"{{who}} is now listed on {f.label}",
                         so_what=lambda f: "Marketplace listings let buyers burn committed cloud spend, a big enterprise procurement accelerator."),
-    "partner_program": Rule(severity="high", title_add=lambda f: f"Partner programme signal: {f.label}",
+    "partner_program": Rule(severity="high", title_add=lambda f: f"{{who}} is building a partner programme: {f.label}",
                             so_what=lambda f: "A formal channel/reseller motion is being built."),
     # News search returns a moving window: a story dropping out of it is not a removal, and coming back is not new.
     "press": Rule(severity="low", on_remove=False, append_only=True, title_add=lambda f: f"In the news: {f.label}"),

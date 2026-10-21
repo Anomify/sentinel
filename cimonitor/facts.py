@@ -50,6 +50,8 @@ class Rule:
     title_add: Callable[[Fact], str] | None = None
     title_remove: Callable[[dict], str] | None = None
     so_what: Callable[[Fact], str | None] | None = None
+    title_change: Callable[[dict, Fact], str] | None = None   # (stored fact, new fact) -> title
+    alert_change: Callable[[dict, Fact], bool] | None = None  # gate on "changed" alerts: only some changes are news
     severity_fn: Callable[[Fact], str] | None = None
     alert_if: Callable[[Fact], bool] | None = None   # extra gate on "added" alerts (fact is still recorded)
     # History-like sources (news, release notes, posts): an item dropping out of a feed or search is not a removal.
@@ -61,8 +63,8 @@ class Rule:
 REAPPEAR_QUIET_DAYS = 30
 
 
-KIND_TITLE = {"mx": "Mail routing", "dmarc": "DMARC policy", "ns": "Nameservers", "motion": "GTM motion", "funnel": "Funnel",
-              "container": "GTM container", "ad_channel": "Ad channel"}
+KIND_TITLE = {"mx": "Email provider", "dmarc": "Email security policy (DMARC)", "ns": "DNS provider", "motion": "Sales approach",
+              "funnel": "Sign-up funnel", "container": "Tag Manager setup", "ad_channel": "Ad channel"}
 
 
 def active(con, competitor: str, module: str | None = None, kind: str | None = None) -> list[dict]:
@@ -89,6 +91,10 @@ def emit(con, competitor: str, module: str, kind: str, severity: str, title: str
     # Two dates: detected_at is when Sentinel found it (drives "this week"), occurred_at is when it happened
     # (article / post / release date) when we know it. Anything that happened more than 30 days ago is history,
     # not news: never Critical or High.
+    # Titles and so-whats read as sentences about the company: "{who} started running Microsoft (Bing) search ads".
+    if "{who}" in title or "{who}" in (so_what or ""):
+        who = display_name(competitor)
+        title, so_what = title.replace("{who}", who), so_what and so_what.replace("{who}", who)
     happened = _happened(data or {})
     if happened and happened < (datetime.now(timezone.utc) - timedelta(days=30)).isoformat() and severity in ("critical", "high"):
         severity = "low"
@@ -99,6 +105,13 @@ def emit(con, competitor: str, module: str, kind: str, severity: str, title: str
         "data": data or {}, "detected_at": now, "occurred_at": happened, "change_id": change_id,
         "story": story_key(kind, title, happened or now),
     })
+
+
+def display_name(competitor: str) -> str:
+    """The company's name as people say it: "AWS Bedrock Guardrails (Amazon)" reads as "AWS Bedrock Guardrails"."""
+    from . import config
+    e = config.load().competitor(competitor)
+    return re.sub(r"\s*\(.*?\)", "", e.name).strip() if e else competitor
 
 
 # ── Stories: many reports of one real-world move are shown as one signal ─────
@@ -192,9 +205,10 @@ def sync(con, competitor: str, module: str, observed: list[Fact], kinds: list[st
             if json.dumps(cur["value"], sort_keys=True, default=str) != json.dumps(f.value, sort_keys=True, default=str):
                 upd["value"] = f.value
                 upd["evidence"] = f.evidence
-                if rule.on_change and not first_run:
+                if rule.on_change and not first_run and (rule.alert_change is None or rule.alert_change(cur, f)):
                     changed += 1
-                    emit(con, competitor, module, f"{kind}_changed", rule.severity, f"{KIND_TITLE.get(kind, kind.replace('_', ' ').capitalize())} changed: {f.label}",
+                    emit(con, competitor, module, f"{kind}_changed", rule.severity_fn(f) if rule.severity_fn else rule.severity,
+                         rule.title_change(cur, f) if rule.title_change else f"{KIND_TITLE.get(kind, kind.replace('_', ' ').capitalize())} changed: {f.label}",
                          confidence=f.confidence, evidence=f.evidence, data={"kind": kind, "key": key, "from": _slim(cur["value"]), "to": _slim(f.value)})
             db.update(con, "facts", cur["id"], upd)
     for (kind, key), cur in existing.items():
