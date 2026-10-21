@@ -21,6 +21,17 @@ export function setToken(t: string) {
   invalidate();
 }
 
+/** A screen set up once and left alone (the office TV) can be given its token in the address: `/tv?token=…`.
+ *  It is saved like a typed-in token and removed from the address bar at once, so it isn't left on screen or in history. */
+export function captureTokenFromUrl() {
+  const url = new URL(window.location.href);
+  const t = url.searchParams.get("token");
+  if (!t) return;
+  write(tokenKey(workspace()), t);
+  url.searchParams.delete("token");
+  window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+}
+
 /** Query string for URLs the browser loads itself (images, frames, downloads): those can't send the headers api() does. */
 export function authQuery() {
   const t = getToken();

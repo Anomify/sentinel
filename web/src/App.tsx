@@ -16,6 +16,7 @@ import Coverage from "./pages/Coverage";
 import AiVisibility from "./pages/AiVisibility";
 import Digest from "./pages/Digest";
 import Settings from "./pages/Settings";
+import Kiosk from "./pages/Kiosk";
 
 export default function App() {
   const { data: meta, error } = useApi<Meta>("/api/meta");
@@ -28,7 +29,11 @@ export default function App() {
       <BrowserRouter>
         <ToastProvider>
           <JobProvider>
-            <Layout meta={meta} />
+            {/* The office TV view: same data and live updates, none of the dashboard chrome. */}
+            <Routes>
+              <Route path="/tv" element={<Kiosk />} />
+              <Route path="*" element={<Layout meta={meta} />} />
+            </Routes>
           </JobProvider>
         </ToastProvider>
       </BrowserRouter>

@@ -53,6 +53,18 @@ Each AI-search key is spent on a schedule: the visibility run is daily at 04:30,
 - **Backups:** `/var/lib/sentinel`. For a consistent copy of the database while the service is running, use `sqlite3 /var/lib/sentinel/sentinel.db ".backup /path/to/copy.db"`.
 - **GitHub Actions:** `.github/workflows/monitor.yml` collects separately into its own database on the `sentinel-data` branch. The server doesn't need it, so disable it on GitHub unless you want both.
 
+## Office TV
+
+`/tv` is a read-only screen for the office TV: one fixed 16:9 page with no scrolling, always dark, updating live. It shows the latest moves, this week's counts, AI share of voice, who's moving and recent posts. A new critical or high move fills the screen for 12 seconds with a chime, and a new medium move shows a smaller card in the corner with a softer tick.
+
+- **Launch** on the laptop driving the TV over HDMI, using Chrome full screen on the TV and with sound allowed to start without a click:
+  `google-chrome --kiosk --autoplay-policy=no-user-gesture-required --window-position=<TV x offset>,0 "http://hpz2g9:1115/tv?token=<SENTINEL_TOKEN>"`
+  The page stores the token on that browser and removes it from the address, so later launches can use plain `/tv`. Without `--kiosk`, press **F** or the on-screen button to go full screen. The cursor and buttons hide after 3 seconds without mouse movement.
+- **Quiet hours:** no sound from 10:00 to 10:45 on Tuesdays and Wednesdays, by the laptop's clock. Change this with `?quiet=tue,wed@10:00-10:45;fri@16:00-17:00`, or turn it off with `?quiet=off`. Use `?sound=off` to silence the screen entirely.
+- **Custom sounds:** put `critical.mp3`, `high.mp3` and/or `medium.mp3` in `web/public/kiosk-sounds/` and rebuild with `sh deploy/update.sh`. Any cue without a file uses the built-in tone.
+- **What it announces:** only moves this screen hasn't shown before. It remembers them across reloads, and the first time it runs it treats everything already there as seen. The status at the top right shows "Live" with the age of the data, amber when collection has gaps, and red when the server stops answering.
+- **Left running:** it keeps the display awake, reloads itself at 04:00 each day, and picks up new builds on its own.
+
 ## Removing it
 
 ```
