@@ -67,7 +67,10 @@ const JOB_HELP: Record<string, string> = {
 // Count new findings in a run's stats, wherever the collector reported them.
 const countAdded = (s: any): number => !s || typeof s !== "object" ? 0
   : Object.entries(s).reduce((n, [k, v]) => n + (k === "added" && typeof v === "number" ? v : countAdded(v)), 0);
-const JobCtx = createContext<{ running: string[]; start: (job: string, opts?: { deliver?: boolean }) => void; poll: () => void }>({ running: [], start: () => {}, poll: () => {} });
+/** Whether this page can still reach the server: when the pulse last answered, and how many polls in a row have failed. */
+export type Connection = { lastOk: number | null; failures: number };
+const JobCtx = createContext<{ running: string[]; start: (job: string, opts?: { deliver?: boolean }) => void; poll: () => void; connection: Connection }>(
+  { running: [], start: () => {}, poll: () => {}, connection: { lastOk: null, failures: 0 } });
 export const useJobs = () => useContext(JobCtx);
 
 // Polled for as long as the page is open, quickly while a job runs and slowly otherwise, so jobs the server's scheduler
@@ -77,6 +80,7 @@ type Pulse = { running: Record<string, string>; finished: number; build: string 
 
 export function JobProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<string[]>([]);
+  const [connection, setConnection] = useState<Connection>({ lastOk: null, failures: 0 });
   const toast = useToast();
   const timer = useRef<number | undefined>(undefined);
   const alive = useRef(false);
@@ -89,6 +93,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
     api<Pulse>("/api/pulse").then(async (p) => {
       const prev = last.current;
       last.current = p;
+      setConnection({ lastOk: Date.now(), failures: 0 });
       if (prev?.build && p.build && p.build !== prev.build) return window.location.reload(); // a new dashboard was deployed
       const now = Object.keys(p.running);
       busy = now.length > 0;
@@ -113,7 +118,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
         refreshed.current = Date.now();
         invalidate();
       }
-    }).catch(() => {}).finally(() => { if (alive.current) timer.current = window.setTimeout(poll, busy ? BUSY_MS : IDLE_MS); });
+    }).catch(() => setConnection((c) => ({ ...c, failures: c.failures + 1 }))).finally(() => { if (alive.current) timer.current = window.setTimeout(poll, busy ? BUSY_MS : IDLE_MS); });
   }, [toast]);
   useEffect(() => {
     alive.current = true;
@@ -128,7 +133,7 @@ export function JobProvider({ children }: { children: ReactNode }) {
       window.setTimeout(poll, 1200);
     }).catch((e) => toast({ title: "Couldn't start job", body: String(e), tone: "err" }));
   }, [poll, toast]);
-  return <JobCtx.Provider value={{ running, start, poll }}>{children}</JobCtx.Provider>;
+  return <JobCtx.Provider value={{ running, start, poll, connection }}>{children}</JobCtx.Provider>;
 }
 
 /* ── Navigation ─────────────────────────────────────────────────────────────── */

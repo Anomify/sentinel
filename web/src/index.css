@@ -184,6 +184,20 @@ svg.lucide { stroke-width: 1.75; }
 [cmdk-item][data-selected="true"] { background: var(--hover); }
 [cmdk-group-heading] { padding: 10px 12px 4px; font-size: 11px; color: var(--text-muted); letter-spacing: .14em; text-transform: uppercase; }
 
+/* Office TV view (/tv): one fixed screen, no scrolling; a glow when a value changes, a soft wash on new moves. */
+html.kiosk, html.kiosk body { overflow: hidden; height: 100%; }
+.kiosk-flash { animation: kiosk-flash 1.6s var(--ease); }
+@keyframes kiosk-flash {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--blue) 70%, transparent); }
+  30% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--blue) 45%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.kiosk-new { position: relative; animation: kiosk-new 2.4s var(--ease) 3; }
+.kiosk-new::before {
+  content: ""; position: absolute; inset: 8px auto 8px -20px; width: 4px; border-radius: 999px; background: var(--blue);
+}
+@keyframes kiosk-new { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
 }
