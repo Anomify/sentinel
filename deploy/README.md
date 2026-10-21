@@ -46,6 +46,7 @@ Each AI-search key is spent on a schedule: the visibility run is daily at 04:30,
 
 - **Status and logs:** `systemctl status sentinel` and `journalctl -u sentinel -f`. Access-log lines show `token=***` in place of the token.
 - **Won't start?** If `systemctl status` shows `ExecStartPre` exiting with status 1, `SENTINEL_TOKEN` is empty. That process exits too quickly for journald to file its message under the unit, so find it with `journalctl -b -t sh | grep SENTINEL_TOKEN`.
+- **An open dashboard keeps itself current**, which suits a kiosk. It polls `/api/pulse` every 15 seconds (every 2.5 while a job runs), refreshes its views when any run finishes, and refreshes them anyway every 5 minutes. After a deploy it reloads itself once the restarted service is serving the new build. A dashboard loaded before this behaviour existed needs one manual reload.
 - **Restarting is safe.** A job cut off by a restart is marked failed ("interrupted: Sentinel stopped before this run finished"), and a cut-off full scan stops blocking its deep dive. Run it again from the dashboard. A scheduled job that was cut off waits for its next slot.
 - **Run a module by hand** from the dashboard's Run menu, or with `curl -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:1115/api/jobs/dns`. Either way it runs inside the service, with its secrets and data directory. A bare `sentinel dns` in a shell would use `./data` and no keys.
 - **Schedule times** in `config/settings.yaml` are machine time, which here is UTC. Config edits apply without a restart.

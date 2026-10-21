@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -21,6 +22,8 @@ app = FastAPI(title="Sentinel CI", docs_url="/api/docs", openapi_url="/api/opena
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "web" / "dist"
 FONTS = DIST / "fonts" if (DIST / "fonts").exists() else ROOT / "web" / "public" / "fonts"
+# The dashboard build this process serves: index.html names the hashed bundles, so it changes with every new build.
+BUILD = hashlib.sha256((DIST / "index.html").read_bytes()).hexdigest()[:12] if (DIST / "index.html").exists() else None
 TOKEN = os.environ.get("SENTINEL_TOKEN")
 OPEN = {"/api/health"}
 
@@ -466,6 +469,15 @@ def runs(limit: int = 30):
     with db.connect() as con:
         r = db.rows(con.execute("SELECT * FROM runs ORDER BY id DESC LIMIT ?", (limit,)))
     return {"runs": r, "running": jobs.running()}
+
+
+@app.get("/api/pulse")
+def pulse():
+    """What an open dashboard polls to stay current: the running jobs, a count that moves whenever any run finishes
+    (scheduled ones included), and the build being served (when it changes, the open page is out of date)."""
+    with db.connect() as con:
+        finished = con.execute("SELECT COUNT(finished_at) FROM runs").fetchone()[0]
+    return {"running": jobs.running(), "finished": finished, "build": BUILD}
 
 
 # ── workspaces ───────────────────────────────────────────────────────────────

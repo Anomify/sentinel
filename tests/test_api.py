@@ -10,11 +10,20 @@ def test_every_read_endpoint_works_on_an_empty_workspace():
     c = client()
     comp = c.get("/api/meta").json()["entities"][1]["id"]
     for url in ["/api/meta", "/api/overview", "/api/events", "/api/stack", "/api/hiring", "/api/radar", "/api/positioning",
-                "/api/visibility", "/api/coverage", "/api/guard", "/api/runs", "/api/digests", "/api/digests/preview",
+                "/api/visibility", "/api/coverage", "/api/guard", "/api/runs", "/api/pulse", "/api/digests", "/api/digests/preview",
                 f"/api/competitors/{comp}", f"/api/facts?competitor={comp}", f"/api/deepdive/{comp}", f"/api/deepdive/{comp}/markdown",
                 f"/api/scan/{comp}"]:
         r = c.get(url)
         assert r.status_code == 200, (url, r.text[:200])
+
+
+def test_pulse_moves_when_any_run_finishes():
+    from cimonitor import jobs
+    c = client()
+    before = c.get("/api/pulse").json()
+    assert before["running"] == {} and set(before) == {"running", "finished", "build"}
+    jobs.run_job("cleanup")  # as the scheduler would, with no request from the dashboard
+    assert c.get("/api/pulse").json()["finished"] == before["finished"] + 1
 
 
 def test_add_target_validates_and_registers(monkeypatch):

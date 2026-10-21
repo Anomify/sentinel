@@ -70,34 +70,60 @@ const countAdded = (s: any): number => !s || typeof s !== "object" ? 0
 const JobCtx = createContext<{ running: string[]; start: (job: string, opts?: { deliver?: boolean }) => void; poll: () => void }>({ running: [], start: () => {}, poll: () => {} });
 export const useJobs = () => useContext(JobCtx);
 
+// Polled for as long as the page is open, quickly while a job runs and slowly otherwise, so jobs the server's scheduler
+// starts are seen too and a page left open (a kiosk) keeps itself current without a reload.
+const BUSY_MS = 2500, IDLE_MS = 15_000, REFRESH_MS = 5 * 60_000;
+type Pulse = { running: Record<string, string>; finished: number; build: string | null };
+
 export function JobProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState<string[]>([]);
   const toast = useToast();
   const timer = useRef<number | undefined>(undefined);
+  const alive = useRef(false);
+  const mine = useRef(new Set<string>()); // started from this tab: only these get a "finished" toast
+  const last = useRef<Pulse | null>(null);
+  const refreshed = useRef(Date.now());
   const poll = useCallback(() => {
     window.clearTimeout(timer.current);
-    api<{ runs: Run[]; running: Record<string, string> }>("/api/runs?limit=15").then((r) => {
-      const now = Object.keys(r.running);
-      setRunning((prev) => {
-        for (const job of prev.filter((j) => !now.includes(j))) {
-          const last = r.runs.find((x) => x.job === job);
+    let busy = false;
+    api<Pulse>("/api/pulse").then(async (p) => {
+      const prev = last.current;
+      last.current = p;
+      if (prev?.build && p.build && p.build !== prev.build) return window.location.reload(); // a new dashboard was deployed
+      const now = Object.keys(p.running);
+      busy = now.length > 0;
+      setRunning(now);
+      const done = [...mine.current].filter((j) => !now.includes(j));
+      if (done.length) {
+        const { runs } = await api<{ runs: Run[] }>("/api/runs?limit=15");
+        for (const job of done) {
+          mine.current.delete(job);
+          const run = runs.find((x) => x.job === job);
           const label = JOB_LABEL[job] ?? (job.startsWith("scan:") ? "Full scan" : job);
-          if (last?.status === "error") toast({ title: `${label} failed`, body: last.error ?? undefined, tone: "err" });
+          if (run?.status === "error") toast({ title: `${label} failed`, body: run.error ?? undefined, tone: "err" });
           else {
-            const n = countAdded(last?.stats);
+            const n = countAdded(run?.stats);
             toast({ title: `${label} finished`, body: n ? `${n} new finding${n === 1 ? "" : "s"}. The pages have been refreshed; new items are in Signals.` : "Nothing new since the last run. The pages are up to date." });
           }
-          invalidate();
         }
-        return now;
-      });
-      if (now.length) timer.current = window.setTimeout(poll, 2500);
-    }).catch(() => {});
+      }
+      // Any finished run refreshes every view, however it was started; the slow refresh catches what isn't a run
+      // (another viewer's ratings, config edits, "5 minutes ago").
+      if ((prev && p.finished !== prev.finished) || Date.now() - refreshed.current > REFRESH_MS) {
+        refreshed.current = Date.now();
+        invalidate();
+      }
+    }).catch(() => {}).finally(() => { if (alive.current) timer.current = window.setTimeout(poll, busy ? BUSY_MS : IDLE_MS); });
   }, [toast]);
-  useEffect(() => { poll(); return () => window.clearTimeout(timer.current); }, [poll]);
+  useEffect(() => {
+    alive.current = true;
+    poll();
+    return () => { alive.current = false; window.clearTimeout(timer.current); };
+  }, [poll]);
   const start = useCallback((job: string, opts?: { deliver?: boolean }) => {
     runJob(job, opts).then((r) => {
       toast({ title: r.status === "already_running" ? `${JOB_LABEL[job]} is already running` : `${JOB_LABEL[job]} started`, body: r.status === "already_running" ? undefined : "Collecting fresh data in the background. This usually takes 1 to 5 minutes; you'll get a message here when it's done.", tone: "info" });
+      mine.current.add(job);
       setRunning((p) => Array.from(new Set([...p, job])));
       window.setTimeout(poll, 1200);
     }).catch((e) => toast({ title: "Couldn't start job", body: String(e), tone: "err" }));
